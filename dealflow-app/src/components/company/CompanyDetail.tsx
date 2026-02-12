@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ChevronRight, Calendar, Mail, ExternalLink, Clock, AlertTriangle, MessageSquare, Sparkles, Send } from 'lucide-react';
+import { X, ChevronRight, Calendar, Mail, ExternalLink, Clock, AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
     getUserById, getIndustryById, getStageById, getDealSourceNameById,
@@ -15,6 +15,8 @@ export default function CompanyDetail() {
         setShowRejectionFlow, setShowEmailCompose, setShowCalendarInvite
     } = useAppContext();
     const [activeTab, setActiveTab] = useState('overview');
+    const [editingField, setEditingField] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState('');
 
     if (!selectedCompany) return null;
 
@@ -33,6 +35,60 @@ export default function CompanyDetail() {
         { id: 'calls', label: 'Calls' },
         { id: 'activity', label: 'Activity' },
     ];
+
+    const startEdit = (field: string, currentValue: string) => {
+        setEditingField(field);
+        setEditValue(currentValue);
+    };
+
+    const saveEdit = () => {
+        // In a real app, this would update the company data via API
+        setEditingField(null);
+        setEditValue('');
+    };
+
+    const cancelEdit = () => {
+        setEditingField(null);
+        setEditValue('');
+    };
+
+    const EditableField = ({ fieldKey, value, style }: { fieldKey: string; value: string; style?: React.CSSProperties }) => {
+        if (editingField === fieldKey) {
+            return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                        className="form-input"
+                        value={editValue}
+                        onChange={e => setEditValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                        autoFocus
+                        style={{ fontSize: 14, padding: '4px 8px', height: 30 }}
+                    />
+                    <button className="btn btn-ghost btn-sm" onClick={saveEdit} style={{ padding: 4, minWidth: 'auto' }}>
+                        <Check size={14} style={{ color: 'var(--success)' }} />
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={cancelEdit} style={{ padding: 4, minWidth: 'auto' }}>
+                        <X size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                </div>
+            );
+        }
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={style}>{value}</div>
+                <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => startEdit(fieldKey, value)}
+                    style={{ padding: 4, minWidth: 'auto', opacity: 0.4, transition: 'opacity 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                    title={`Edit ${fieldKey}`}
+                >
+                    <Pencil size={12} />
+                </button>
+            </div>
+        );
+    };
 
     return (
         <>
@@ -113,56 +169,87 @@ export default function CompanyDetail() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                                 <div className="form-group">
                                     <label className="form-label">Founder Name</label>
-                                    <div style={{ fontSize: 14, fontWeight: 500 }}>{c.founderName}</div>
+                                    <EditableField fieldKey="founderName" value={c.founderName} style={{ fontSize: 14, fontWeight: 500 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Founder Email</label>
-                                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--primary)' }}>{c.founderEmail}</div>
+                                    <EditableField fieldKey="founderEmail" value={c.founderEmail} style={{ fontSize: 14, fontWeight: 500, color: 'var(--primary)' }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Analyst</label>
-                                    <div style={{ fontSize: 14, fontWeight: 500 }}>{analyst?.name || 'Unassigned'}</div>
+                                    <EditableField fieldKey="analyst" value={analyst?.name || 'Unassigned'} style={{ fontSize: 14, fontWeight: 500 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Company Round</label>
-                                    <span className="badge badge-primary">{c.companyRound}</span>
+                                    <EditableField fieldKey="companyRound" value={c.companyRound} style={{ fontSize: 14, fontWeight: 500 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Industry</label>
-                                    <span className="badge badge-primary">{industry?.name}</span>
+                                    <EditableField fieldKey="industry" value={industry?.name || ''} style={{ fontSize: 14, fontWeight: 500 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Sub-Industry</label>
-                                    <div style={{ fontSize: 14 }}>{c.subIndustry}</div>
+                                    <EditableField fieldKey="subIndustry" value={c.subIndustry} style={{ fontSize: 14 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Deal Source Type</label>
-                                    <div style={{ fontSize: 14 }}>{c.dealSourceType}</div>
+                                    <EditableField fieldKey="dealSourceType" value={c.dealSourceType} style={{ fontSize: 14 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Deal Source Name</label>
-                                    <div style={{ fontSize: 14 }}>{source?.name}</div>
+                                    <EditableField fieldKey="dealSourceName" value={source?.name || ''} style={{ fontSize: 14 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Total Fund Raise</label>
-                                    <div style={{ fontSize: 18, fontWeight: 700 }}>{c.totalFundRaise ? formatCurrency(c.totalFundRaise) : '—'}</div>
+                                    <EditableField fieldKey="totalFundRaise" value={c.totalFundRaise ? formatCurrency(c.totalFundRaise) : '—'} style={{ fontSize: 18, fontWeight: 700 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Valuation</label>
-                                    <div style={{ fontSize: 18, fontWeight: 700 }}>{c.valuation ? formatCurrency(c.valuation) : '—'}</div>
+                                    <EditableField fieldKey="valuation" value={c.valuation ? formatCurrency(c.valuation) : '—'} style={{ fontSize: 18, fontWeight: 700 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Share Type</label>
-                                    <div style={{ fontSize: 14 }}>{c.shareType}</div>
+                                    <EditableField fieldKey="shareType" value={c.shareType} style={{ fontSize: 14 }} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Google Drive</label>
-                                    {c.googleDriveLink ? (
-                                        <a href={c.googleDriveLink} target="_blank" rel="noopener" style={{ fontSize: 14, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                            Open Data Room <ExternalLink size={12} />
-                                        </a>
-                                    ) : (
-                                        <span style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>Not linked</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {c.googleDriveLink ? (
+                                            <a href={c.googleDriveLink} target="_blank" rel="noopener" style={{ fontSize: 14, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                Open Data Room <ExternalLink size={12} />
+                                            </a>
+                                        ) : (
+                                            <span style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>Not linked</span>
+                                        )}
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => startEdit('googleDriveLink', c.googleDriveLink || '')}
+                                            style={{ padding: 4, minWidth: 'auto', opacity: 0.4, transition: 'opacity 0.15s' }}
+                                            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                                            onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                                            title="Edit Google Drive Link"
+                                        >
+                                            <Pencil size={12} />
+                                        </button>
+                                    </div>
+                                    {editingField === 'googleDriveLink' && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                                            <input
+                                                className="form-input"
+                                                value={editValue}
+                                                onChange={e => setEditValue(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                                                autoFocus
+                                                placeholder="https://drive.google.com/..."
+                                                style={{ fontSize: 14, padding: '4px 8px', height: 30 }}
+                                            />
+                                            <button className="btn btn-ghost btn-sm" onClick={saveEdit} style={{ padding: 4, minWidth: 'auto' }}>
+                                                <Check size={14} style={{ color: 'var(--success)' }} />
+                                            </button>
+                                            <button className="btn btn-ghost btn-sm" onClick={cancelEdit} style={{ padding: 4, minWidth: 'auto' }}>
+                                                <X size={14} style={{ color: 'var(--text-tertiary)' }} />
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             </div>
