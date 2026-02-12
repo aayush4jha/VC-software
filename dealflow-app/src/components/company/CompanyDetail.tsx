@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ChevronRight, Calendar, Mail, ExternalLink, Clock, AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check } from 'lucide-react';
+import { X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock, AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, FileSearch, Phone, XCircle, ArrowRight } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
     getUserById, getIndustryById, getStageById, getDealSourceNameById,
@@ -17,6 +17,8 @@ export default function CompanyDetail() {
     const [activeTab, setActiveTab] = useState('overview');
     const [editingField, setEditingField] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
+    const [showMoveStageDropdown, setShowMoveStageDropdown] = useState(false);
+    const [analyzingDeck, setAnalyzingDeck] = useState(false);
 
     if (!selectedCompany) return null;
 
@@ -50,6 +52,23 @@ export default function CompanyDetail() {
     const cancelEdit = () => {
         setEditingField(null);
         setEditValue('');
+    };
+
+    const nextStage = pipelineStages.find(s => s.order === (stage?.order || 0) + 1);
+    const availableStages = pipelineStages.filter(s => s.order !== (stage?.order || 0));
+
+    const handleMoveStage = (targetStageId: string) => {
+        const targetStage = getStageById(targetStageId);
+        setShowMoveStageDropdown(false);
+        // In a real app this would call API to move the company
+        alert(`Moving ${c.companyName} to "${targetStage?.name}"`);
+    };
+
+    const handleAnalyzeDeck = () => {
+        setAnalyzingDeck(true);
+        setActiveTab('ai');
+        // Simulate AI analysis
+        setTimeout(() => setAnalyzingDeck(false), 1500);
     };
 
     const EditableField = ({ fieldKey, value, style }: { fieldKey: string; value: string; style?: React.CSSProperties }) => {
@@ -522,6 +541,148 @@ export default function CompanyDetail() {
                             </div>
                         </div>
                     )}
+                </div>
+
+                {/* ─── Sticky Action Bar ─── */}
+                <div style={{
+                    padding: '14px 24px',
+                    borderTop: '1px solid var(--border)',
+                    background: 'var(--bg-secondary)',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                }}>
+                    {/* Analyze Deck */}
+                    <button
+                        className="btn btn-sm"
+                        onClick={handleAnalyzeDeck}
+                        disabled={analyzingDeck}
+                        style={{
+                            background: 'var(--primary)',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            opacity: analyzingDeck ? 0.7 : 1,
+                        }}
+                    >
+                        <Sparkles size={14} />
+                        {analyzingDeck ? 'Analyzing...' : 'Analyze Deck'}
+                    </button>
+
+                    {/* Schedule Call */}
+                    <button
+                        className="btn btn-sm"
+                        onClick={() => setShowCalendarInvite(true)}
+                        style={{
+                            background: '#06b6d4',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                        }}
+                    >
+                        <Phone size={14} />
+                        Schedule Call
+                    </button>
+
+                    {/* Send Email */}
+                    <button
+                        className="btn btn-sm"
+                        onClick={() => setShowEmailCompose(true)}
+                        style={{
+                            background: '#10b981',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                        }}
+                    >
+                        <Mail size={14} />
+                        Send Email
+                    </button>
+
+                    {/* Reject */}
+                    <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => setShowRejectionFlow(true)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                        }}
+                    >
+                        <XCircle size={14} />
+                        Reject
+                    </button>
+
+                    {/* Move Stage */}
+                    <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                        <button
+                            className="btn btn-sm"
+                            onClick={() => setShowMoveStageDropdown(!showMoveStageDropdown)}
+                            style={{
+                                background: nextStage?.color || 'var(--primary)',
+                                color: '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                            }}
+                        >
+                            <ArrowRight size={14} />
+                            Move Stage
+                            <ChevronDown size={12} />
+                        </button>
+                        {showMoveStageDropdown && (
+                            <div style={{
+                                position: 'absolute',
+                                bottom: '100%',
+                                right: 0,
+                                marginBottom: 6,
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-md)',
+                                boxShadow: 'var(--shadow-lg)',
+                                minWidth: 220,
+                                padding: '6px 0',
+                                zIndex: 10,
+                            }}>
+                                <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                    Move to stage
+                                </div>
+                                {availableStages.map(s => (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => handleMoveStage(s.id)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 10,
+                                            width: '100%',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontSize: 13,
+                                            color: 'var(--text-primary)',
+                                            textAlign: 'left',
+                                            transition: 'background 0.1s',
+                                        }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                                    >
+                                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                                        <span style={{ flex: 1 }}>{s.name}</span>
+                                        {s.order === (stage?.order || 0) + 1 && (
+                                            <span style={{ fontSize: 10, color: s.color, fontWeight: 600, background: `${s.color}15`, padding: '2px 6px', borderRadius: 4 }}>Next</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </>

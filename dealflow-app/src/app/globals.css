@@ -1134,7 +1134,7 @@ html, body {
   inset: 0;
   background: rgba(15, 18, 37, 0.5);
   backdrop-filter: blur(4px);
-  z-index: var(--z-modal);
+  z-index: calc(var(--z-modal) + 10);
   display: flex;
   align-items: center;
   justify-content: center;
