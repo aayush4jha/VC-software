@@ -33,11 +33,11 @@
   --text-inverse: #ffffff;
   
   /* Sidebar */
-  --sidebar-bg: #0f1225;
-  --sidebar-hover: rgba(255, 255, 255, 0.06);
-  --sidebar-active: rgba(99, 102, 241, 0.15);
-  --sidebar-text: #94a3b8;
-  --sidebar-text-active: #ffffff;
+  --sidebar-bg: #ffffff;
+  --sidebar-hover: rgba(99, 102, 241, 0.06);
+  --sidebar-active: rgba(99, 102, 241, 0.1);
+  --sidebar-text: #64748b;
+  --sidebar-text-active: #1e293b;
   --sidebar-width: 240px;
   
   /* Shadows */
@@ -109,11 +109,70 @@ html, body {
 .sidebar {
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  transition: width var(--transition-normal);
+  overflow: hidden;
+}
+
+.sidebar-collapsed {
+  width: 68px;
+}
+
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin: 0 10px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--sidebar-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-active);
+}
+
+.sidebar-collapse-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.sidebar-collapsed .sidebar-brand {
+  justify-content: center;
+  padding: 24px 10px;
+}
+
+.sidebar-collapsed .sidebar-nav {
+  padding: 12px 6px;
+  align-items: center;
+}
+
+.sidebar-collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: 10px;
+  width: 44px;
+}
+
+.sidebar-collapsed .sidebar-collapse-btn {
+  justify-content: center;
+  margin: 0 6px 4px;
+  padding: 10px;
+}
+
+.sidebar-collapsed .sidebar-user {
+  justify-content: center;
+  padding: 16px 10px;
 }
 
 .sidebar-brand {
@@ -121,7 +180,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .sidebar-brand-icon {
@@ -138,7 +197,7 @@ html, body {
 }
 
 .sidebar-brand-text {
-  color: white;
+  color: #1e293b;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.3px;
@@ -225,7 +284,7 @@ html, body {
 
 .sidebar-user {
   padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -250,7 +309,7 @@ html, body {
 }
 
 .sidebar-user-name {
-  color: white;
+  color: #1e293b;
   font-size: 13px;
   font-weight: 600;
 }
