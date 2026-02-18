@@ -130,15 +130,6 @@ export default function CompanyDetail() {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setShowCalendarInvite(true)}>
-                            <Calendar size={14} /> Schedule
-                        </button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setShowEmailCompose(true)}>
-                            <Mail size={14} /> Email
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => setShowRejectionFlow(true)}>
-                            Reject
-                        </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCompany(null)}>
                             <X size={18} />
                         </button>
