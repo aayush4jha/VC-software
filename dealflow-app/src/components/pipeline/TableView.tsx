@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, Video } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
     companies, getUserById, getIndustryById, getStageById,
@@ -9,7 +9,7 @@ import {
 } from '@/lib/mock-data';
 
 export default function TableView() {
-    const { setSelectedCompany, searchQuery, activeFilters } = useAppContext();
+    const { setSelectedCompany, setShowCalendarInvite, searchQuery, activeFilters } = useAppContext();
     const [sortField, setSortField] = useState<string>('companyName');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -76,6 +76,7 @@ export default function TableView() {
                         <SortHeader field="days" label="Days" />
                         <SortHeader field="raise" label="Raise" />
                         <th>SLA</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -116,6 +117,20 @@ export default function TableView() {
                                     <span className={`sla-indicator ${slaStatus}`}>
                                         {slaStatus === 'on-track' ? '✓ On Track' : slaStatus === 'at-risk' ? '⚠ At Risk' : '✕ Overdue'}
                                     </span>
+                                </td>
+                                <td>
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedCompany(c);
+                                            setShowCalendarInvite(true);
+                                        }}
+                                        title="Schedule Google Meet call"
+                                        style={{ padding: '4px 8px', color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                                    >
+                                        <Video size={13} /> Meet
+                                    </button>
                                 </td>
                             </tr>
                         );
