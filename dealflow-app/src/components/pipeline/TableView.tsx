@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowUpDown, Video } from 'lucide-react';
+import { ArrowUpDown, Video, Mail } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
     companies, getUserById, getIndustryById, getStageById,
@@ -9,7 +9,7 @@ import {
 } from '@/lib/mock-data';
 
 export default function TableView() {
-    const { setSelectedCompany, setShowCalendarInvite, searchQuery, activeFilters } = useAppContext();
+    const { setSelectedCompany, setShowCalendarInvite, setShowEmailCompose, searchQuery, activeFilters } = useAppContext();
     const [sortField, setSortField] = useState<string>('companyName');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -119,18 +119,32 @@ export default function TableView() {
                                     </span>
                                 </td>
                                 <td>
-                                    <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedCompany(c);
-                                            setShowCalendarInvite(true);
-                                        }}
-                                        title="Schedule Google Meet call"
-                                        style={{ padding: '4px 8px', color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
-                                    >
-                                        <Video size={13} /> Meet
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedCompany(c);
+                                                setShowEmailCompose(true);
+                                            }}
+                                            title="Send email"
+                                            style={{ padding: '4px 8px', color: '#10b981', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                                        >
+                                            <Mail size={13} /> Email
+                                        </button>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedCompany(c);
+                                                setShowCalendarInvite(true);
+                                            }}
+                                            title="Schedule Google Meet call"
+                                            style={{ padding: '4px 8px', color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                                        >
+                                            <Video size={13} /> Meet
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         );

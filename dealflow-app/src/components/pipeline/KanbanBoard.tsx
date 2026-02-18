@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Pencil, Video } from 'lucide-react';
+import { Pencil, Video, Mail } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
     companies, pipelineStages, getCompaniesByStage, getUserById,
@@ -10,7 +10,7 @@ import {
 import { Company, PipelineStage } from '@/types/database';
 
 function CompanyKanbanCard({ company }: { company: Company }) {
-    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite } = useAppContext();
+    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose } = useAppContext();
     const analyst = company.analystId ? getUserById(company.analystId) : null;
     const industry = getIndustryById(company.industryId);
     const days = getDaysInPipeline(company.createdAt);
@@ -25,6 +25,12 @@ function CompanyKanbanCard({ company }: { company: Company }) {
         e.stopPropagation();
         setSelectedCompany(company);
         setShowCalendarInvite(true);
+    };
+
+    const handleSendEmail = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSelectedCompany(company);
+        setShowEmailCompose(true);
     };
 
     return (
@@ -62,6 +68,14 @@ function CompanyKanbanCard({ company }: { company: Company }) {
                     <span className="kanban-card-days">{days}d</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                        className="kanban-card-edit-btn"
+                        onClick={handleSendEmail}
+                        title="Send email"
+                        style={{ color: '#10b981' }}
+                    >
+                        <Mail size={12} />
+                    </button>
                     <button
                         className="kanban-card-edit-btn"
                         onClick={handleScheduleCall}
