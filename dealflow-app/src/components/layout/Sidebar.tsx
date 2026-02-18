@@ -28,7 +28,6 @@ export default function Sidebar() {
     return (
         <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
             <div className="sidebar-brand">
-                <div className="sidebar-brand-icon">DV</div>
                 {!collapsed && (
                     <div>
                         <div className="sidebar-brand-text">Dholakia Ventures</div>
@@ -86,9 +85,6 @@ export default function Sidebar() {
             </div>
 
             <div className="sidebar-user">
-                <div className="sidebar-user-avatar">
-                    {currentUser.name.split(' ').map(n => n[0]).join('')}
-                </div>
                 {!collapsed && (
                     <div className="sidebar-user-info">
                         <div className="sidebar-user-name">{currentUser.name}</div>

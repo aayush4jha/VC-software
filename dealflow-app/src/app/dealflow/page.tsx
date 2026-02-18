@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { LayoutGrid, List, Plus, Download } from 'lucide-react';
+import { LayoutGrid, List, Plus } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import KanbanBoard from '@/components/pipeline/KanbanBoard';
@@ -42,9 +42,6 @@ function DealflowContent() {
                         </div>
                     </div>
                     <div className="toolbar-right">
-                        <button className="btn btn-secondary btn-sm">
-                            <Download size={14} /> Export
-                        </button>
                         <button className="btn btn-primary" onClick={() => setShowCompanyForm(true)}>
                             <Plus size={16} /> Add Company
                         </button>
