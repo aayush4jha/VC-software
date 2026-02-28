@@ -1,24 +1,33 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock, AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, FileSearch, Phone, XCircle, ArrowRight } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import {
-    getUserById, getIndustryById, getStageById, getDealSourceNameById,
-    formatCurrency, getDaysInPipeline, getCommentsByCompany, getActivityByCompany,
-    pipelineStages, currentUser
-} from '@/lib/mock-data';
+import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 
 export default function CompanyDetail() {
     const {
         selectedCompany, setSelectedCompany,
-        setShowRejectionFlow, setShowEmailCompose, setShowCalendarInvite
+        setShowRejectionFlow, setShowEmailCompose, setShowCalendarInvite,
+        getUserById, getIndustryById, getStageById, getDealSourceNameById,
+        pipelineStages, user, updateCompany, moveCompanyStage, addComment,
+        fetchComments, fetchActivity,
     } = useAppContext();
     const [activeTab, setActiveTab] = useState('overview');
     const [editingField, setEditingField] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [showMoveStageDropdown, setShowMoveStageDropdown] = useState(false);
     const [analyzingDeck, setAnalyzingDeck] = useState(false);
+    const [comments, setComments] = useState<import('@/types/database').Comment[]>([]);
+    const [activities, setActivities] = useState<import('@/types/database').ActivityLog[]>([]);
+    const [newComment, setNewComment] = useState('');
+
+    useEffect(() => {
+        if (selectedCompany) {
+            fetchComments(selectedCompany.id).then(setComments);
+            fetchActivity(selectedCompany.id).then(setActivities);
+        }
+    }, [selectedCompany, fetchComments, fetchActivity]);
 
     if (!selectedCompany) return null;
 
@@ -28,8 +37,6 @@ export default function CompanyDetail() {
     const stage = getStageById(c.pipelineStageId);
     const source = getDealSourceNameById(c.dealSourceNameId);
     const days = getDaysInPipeline(c.createdAt);
-    const comments = getCommentsByCompany(c.id);
-    const activities = getActivityByCompany(c.id);
 
     const tabs = [
         { id: 'overview', label: 'Overview' },
@@ -43,8 +50,20 @@ export default function CompanyDetail() {
         setEditValue(currentValue);
     };
 
-    const saveEdit = () => {
-        // In a real app, this would update the company data via API
+    const saveEdit = async () => {
+        if (!editingField || !selectedCompany) return;
+        const fieldMap: Record<string, string> = {
+            founderName: 'founder_name', founderEmail: 'founder_email',
+            companyRound: 'company_round', subIndustry: 'sub_industry',
+            dealSourceType: 'deal_source_type', shareType: 'share_type',
+            googleDriveLink: 'google_drive_link',
+            totalFundRaise: 'total_fund_raise', valuation: 'valuation',
+        };
+        const dbField = fieldMap[editingField];
+        if (dbField) {
+            const val = ['total_fund_raise', 'valuation'].includes(dbField) ? parseFloat(editValue) || null : editValue;
+            await updateCompany(selectedCompany.id, { [dbField]: val });
+        }
         setEditingField(null);
         setEditValue('');
     };
@@ -57,11 +76,9 @@ export default function CompanyDetail() {
     const nextStage = pipelineStages.find(s => s.order === (stage?.order || 0) + 1);
     const availableStages = pipelineStages.filter(s => s.order !== (stage?.order || 0));
 
-    const handleMoveStage = (targetStageId: string) => {
-        const targetStage = getStageById(targetStageId);
+    const handleMoveStage = async (targetStageId: string) => {
         setShowMoveStageDropdown(false);
-        // In a real app this would call API to move the company
-        alert(`Moving ${c.companyName} to "${targetStage?.name}"`);
+        await moveCompanyStage(c.id, targetStageId);
     };
 
     const handleAnalyzeDeck = () => {
@@ -312,8 +329,8 @@ export default function CompanyDetail() {
                                     );
                                 })}
                                 <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                                    <input className="form-input" placeholder="Add a comment..." style={{ flex: 1 }} />
-                                    <button className="btn btn-primary btn-sm"><Send size={14} /></button>
+                                    <input className="form-input" placeholder="Add a comment..." style={{ flex: 1 }} value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newComment.trim()) { addComment(c.id, newComment.trim()).then(cm => { if (cm) setComments(prev => [...prev, cm]); }); setNewComment(''); } }} />
+                                    <button className="btn btn-primary btn-sm" onClick={() => { if (newComment.trim()) { addComment(c.id, newComment.trim()).then(cm => { if (cm) setComments(prev => [...prev, cm]); }); setNewComment(''); } }}><Send size={14} /></button>
                                 </div>
                             </div>
                         </div>
@@ -510,11 +527,11 @@ export default function CompanyDetail() {
                         <div>
                             <div className="timeline">
                                 {activities.map(act => {
-                                    const user = getUserById(act.userId);
+                                    const actUser = getUserById(act.userId);
                                     return (
                                         <div key={act.id} className="timeline-item">
                                             <div className="timeline-item-header">
-                                                <span className="timeline-item-user">{user?.name}</span>
+                                                <span className="timeline-item-user">{actUser?.name}</span>
                                                 <span className="timeline-item-time">
                                                     {new Date(act.createdAt).toLocaleDateString('en-IN')}
                                                 </span>

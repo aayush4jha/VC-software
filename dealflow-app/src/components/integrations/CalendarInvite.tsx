@@ -3,13 +3,12 @@
 import React, { useState } from 'react';
 import { X, Calendar, Video, Clock, Send, ExternalLink, CheckCircle, AlertCircle, Loader2, LogIn, Link2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { currentUser } from '@/lib/mock-data';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 
 type SendStatus = 'idle' | 'creating' | 'success' | 'error' | 'auth-required';
 
 export default function CalendarInvite() {
-    const { showCalendarInvite, setShowCalendarInvite, selectedCompany } = useAppContext();
+    const { showCalendarInvite, setShowCalendarInvite, selectedCompany, user } = useAppContext();
     const { isConnected, isChecking, connect } = useGoogleAuth();
     const [date, setDate] = useState('2026-02-20');
     const [time, setTime] = useState('14:00');
@@ -47,8 +46,8 @@ export default function CalendarInvite() {
                     durationMinutes: parseInt(duration),
                     attendeeEmail: selectedCompany.founderEmail,
                     attendeeName: selectedCompany.founderName,
-                    hostEmail: currentUser.email,
-                    notes: notes || `Meeting with ${selectedCompany.founderName} from ${selectedCompany.companyName}.\n\nHost: ${currentUser.name} (${currentUser.email})`,
+                    hostEmail: user?.email || '',
+                    notes: notes || `Meeting with ${selectedCompany.founderName} from ${selectedCompany.companyName}.\n\nHost: ${user?.name || ''} (${user?.email || ''})`,
                 }),
             });
 
@@ -145,7 +144,7 @@ export default function CalendarInvite() {
                         </div>
                         <div className="calendar-preview-row">
                             <span className="calendar-preview-label">Host</span>
-                            <span className="calendar-preview-value">{currentUser.name} ({currentUser.email})</span>
+                            <span className="calendar-preview-value">{user?.name || ''} ({user?.email || ''})</span>
                         </div>
                         <div className="calendar-preview-row">
                             <span className="calendar-preview-label">Attendee</span>

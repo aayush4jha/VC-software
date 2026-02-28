@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle, Send, Sparkles } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { rejectionReasonCategories, getStageById } from '@/lib/mock-data';
 import { CommunicationMethod } from '@/types/database';
 
 const communicationMethods: CommunicationMethod[] = [
@@ -11,7 +10,7 @@ const communicationMethods: CommunicationMethod[] = [
 ];
 
 export default function RejectionFlow() {
-    const { showRejectionFlow, setShowRejectionFlow, selectedCompany } = useAppContext();
+    const { showRejectionFlow, setShowRejectionFlow, selectedCompany, rejectionReasonCategories, getStageById, rejectCompany } = useAppContext();
     const [step, setStep] = useState(1);
     const [selectedReasons, setSelectedReasons] = useState<Record<string, string[]>>({});
     const [commMethod, setCommMethod] = useState<CommunicationMethod>('Not Yet Communicated');
@@ -178,10 +177,12 @@ Dholakia Ventures`
                         </button>
                     )}
                     {step === 2 && (
-                        <button className="btn btn-primary" onClick={() => {
+                        <button className="btn btn-primary" onClick={async () => {
                             if (commMethod === 'Email') {
                                 generateEmailDraft();
                             } else {
+                                const reasons = Object.entries(selectedReasons).filter(([, subs]) => subs.length > 0).map(([catId, subIds]) => ({ categoryId: catId, subReasonIds: subIds }));
+                                await rejectCompany(selectedCompany.id, reasons, commMethod);
                                 setShowRejectionFlow(false);
                             }
                         }}>
@@ -189,7 +190,9 @@ Dholakia Ventures`
                         </button>
                     )}
                     {step === 3 && (
-                        <button className="btn btn-danger" onClick={() => {
+                        <button className="btn btn-danger" onClick={async () => {
+                            const reasons = Object.entries(selectedReasons).filter(([, subs]) => subs.length > 0).map(([catId, subIds]) => ({ categoryId: catId, subReasonIds: subIds }));
+                            await rejectCompany(selectedCompany.id, reasons, commMethod, emailDraft, recipientEmail);
                             setEmailSent(true);
                             setShowRejectionFlow(false);
                         }}>

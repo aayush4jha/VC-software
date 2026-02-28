@@ -3,14 +3,11 @@
 import React from 'react';
 import { Pencil, Video, Mail } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import {
-    companies, pipelineStages, getCompaniesByStage, getUserById,
-    getIndustryById, formatCurrency, getDaysInPipeline,
-} from '@/lib/mock-data';
+import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { Company, PipelineStage } from '@/types/database';
 
 function CompanyKanbanCard({ company }: { company: Company }) {
-    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose } = useAppContext();
+    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById } = useAppContext();
     const analyst = company.analystId ? getUserById(company.analystId) : null;
     const industry = getIndustryById(company.industryId);
     const days = getDaysInPipeline(company.createdAt);
@@ -94,7 +91,7 @@ function CompanyKanbanCard({ company }: { company: Company }) {
 }
 
 export default function KanbanBoard() {
-    const { searchQuery, activeFilters } = useAppContext();
+    const { searchQuery, activeFilters, companies, pipelineStages, getIndustryById } = useAppContext();
 
     const filteredCompanies = companies.filter(c => {
         if (c.terminalStatus) return false;

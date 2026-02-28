@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { users, industries, pipelineStages } from '@/lib/mock-data';
 import { CompanyRound, PriorityLevel } from '@/types/database';
 
 const priorities: PriorityLevel[] = ['High', 'Medium', 'Low'];
@@ -60,7 +59,7 @@ function FilterDropdown({ label, filterKey, options }: FilterDropdownProps) {
 }
 
 export default function FilterBar() {
-    const { activeFilters, setActiveFilters } = useAppContext();
+    const { activeFilters, setActiveFilters, users, industries, pipelineStages } = useAppContext();
     const totalFilters = Object.values(activeFilters).reduce((sum, arr) => sum + arr.length, 0);
 
     return (

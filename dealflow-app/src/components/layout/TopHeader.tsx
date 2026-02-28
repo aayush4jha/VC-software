@@ -3,7 +3,6 @@
 import React from 'react';
 import { Search, Bell } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { getUnreadNotifications, currentUser } from '@/lib/mock-data';
 import NotificationPanel from '@/components/notifications/NotificationPanel';
 
 interface TopHeaderProps {
@@ -12,8 +11,8 @@ interface TopHeaderProps {
 }
 
 export default function TopHeader({ title, subtitle }: TopHeaderProps) {
-    const { searchQuery, setSearchQuery, showNotifications, setShowNotifications } = useAppContext();
-    const unreadCount = getUnreadNotifications(currentUser.id).length;
+    const { searchQuery, setSearchQuery, showNotifications, setShowNotifications, getUnreadNotifications } = useAppContext();
+    const unreadCount = getUnreadNotifications().length;
 
     return (
         <header className="top-header">

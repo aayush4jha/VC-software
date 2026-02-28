@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React from 'react';
 import { LayoutGrid, List, Plus } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
@@ -12,18 +14,16 @@ import RejectionFlow from '@/components/company/RejectionFlow';
 import EmailCompose from '@/components/integrations/EmailCompose';
 import CalendarInvite from '@/components/integrations/CalendarInvite';
 import CompanyForm from '@/components/company/CompanyForm';
-import { AppProvider, useAppContext } from '@/lib/context';
-import { companies } from '@/lib/mock-data';
+import { useAppContext } from '@/lib/context';
 
 function DealflowContent() {
-    const { viewMode, setViewMode, setShowCompanyForm } = useAppContext();
+    const { viewMode, setViewMode, setShowCompanyForm, companies } = useAppContext();
     const activeCount = companies.filter(c => !c.terminalStatus).length;
 
     return (
         <>
             <TopHeader title="Deal Flow Pipeline" subtitle={`${activeCount} active companies`} />
             <div className="page-content">
-                {/* Toolbar */}
                 <div className="toolbar">
                     <div className="toolbar-left">
                         <div className="view-toggle">
@@ -58,18 +58,16 @@ function DealflowContent() {
 
 export default function DealflowPage() {
     return (
-        <AppProvider>
-            <div className="app-layout">
-                <Sidebar />
-                <main className="main-content">
-                    <DealflowContent />
-                </main>
-                <CompanyDetail />
-                <RejectionFlow />
-                <EmailCompose />
-                <CalendarInvite />
-                <CompanyForm />
-            </div>
-        </AppProvider>
+        <div className="app-layout">
+            <Sidebar />
+            <main className="main-content">
+                <DealflowContent />
+            </main>
+            <CompanyDetail />
+            <RejectionFlow />
+            <EmailCompose />
+            <CalendarInvite />
+            <CompanyForm />
+        </div>
     );
 }

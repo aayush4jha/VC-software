@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    Home, LayoutGrid, Briefcase, Users, Mail, Sparkles, Settings, LogOut, UserCircle, ChevronsLeft, ChevronsRight
+    Home, LayoutGrid, Briefcase, Users, Mail, Sparkles, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield
 } from 'lucide-react';
-import { currentUser } from '@/lib/mock-data';
+import { useAppContext } from '@/lib/context';
 
 const navItems = [
     { label: 'Dashboard', href: '/', icon: Home },
@@ -24,6 +24,7 @@ const bottomNav = [
 export default function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
+    const { user, signOut } = useAppContext();
 
     return (
         <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -55,10 +56,21 @@ export default function Sidebar() {
                     );
                 })}
 
+                {user?.role === 'admin' && (
+                    <Link
+                        href="/admin"
+                        className={`sidebar-nav-item ${pathname.startsWith('/admin') ? 'active' : ''}`}
+                        title={collapsed ? 'Admin' : undefined}
+                    >
+                        <Shield />
+                        {!collapsed && 'Admin'}
+                    </Link>
+                )}
+
                 <div style={{ flex: 1 }} />
 
-                {!collapsed && <div className="sidebar-section-label">System</div>}
-                {bottomNav.map((item) => {
+                {!collapsed && user?.role === 'admin' && <div className="sidebar-section-label">System</div>}
+                {user?.role === 'admin' && bottomNav.map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href;
                     return (
@@ -73,7 +85,7 @@ export default function Sidebar() {
                         </Link>
                     );
                 })}
-                <div className="sidebar-nav-item" style={{ cursor: 'pointer' }} title={collapsed ? 'Log Out' : undefined}>
+                <div className="sidebar-nav-item" style={{ cursor: 'pointer' }} title={collapsed ? 'Log Out' : undefined} onClick={() => signOut()}>
                     <LogOut />
                     {!collapsed && 'Log Out'}
                 </div>
@@ -85,10 +97,10 @@ export default function Sidebar() {
             </div>
 
             <div className="sidebar-user">
-                {!collapsed && (
+                {!collapsed && user && (
                     <div className="sidebar-user-info">
-                        <div className="sidebar-user-name">{currentUser.name}</div>
-                        <div className="sidebar-user-role">{currentUser.role}</div>
+                        <div className="sidebar-user-name">{user.email}</div>
+                        <div className="sidebar-user-role">{user.role}</div>
                     </div>
                 )}
             </div>

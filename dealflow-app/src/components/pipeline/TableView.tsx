@@ -3,13 +3,10 @@
 import React, { useState } from 'react';
 import { ArrowUpDown, Video, Mail } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import {
-    companies, getUserById, getIndustryById, getStageById,
-    getDealSourceNameById, formatCurrency, getDaysInPipeline
-} from '@/lib/mock-data';
+import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 
 export default function TableView() {
-    const { setSelectedCompany, setShowCalendarInvite, setShowEmailCompose, searchQuery, activeFilters } = useAppContext();
+    const { setSelectedCompany, setShowCalendarInvite, setShowEmailCompose, searchQuery, activeFilters, companies, getUserById, getIndustryById, getStageById, getDealSourceNameById } = useAppContext();
     const [sortField, setSortField] = useState<string>('companyName');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 

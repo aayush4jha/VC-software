@@ -3,15 +3,12 @@
 import React from 'react';
 import { BarChart3, TrendingUp, Clock, AlertTriangle, Calendar, ArrowRight, Users, Sparkles } from 'lucide-react';
 import TopHeader from '@/components/layout/TopHeader';
-import {
-    companies, pipelineStages, currentUser, getUserById, getIndustryById,
-    getStageById, formatCurrency, getDaysInPipeline, getUnassignedCompanies
-} from '@/lib/mock-data';
+import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { useAppContext } from '@/lib/context';
 
 export default function DashboardPage() {
-    const { setSelectedCompany } = useAppContext();
-    const myCompanies = companies.filter(c => c.analystId === currentUser.id && !c.terminalStatus);
+    const { setSelectedCompany, companies, pipelineStages, user, getUserById, getIndustryById, getStageById, getUnassignedCompanies, users, assignAnalyst } = useAppContext();
+    const myCompanies = companies.filter(c => c.analystId === user?.id && !c.terminalStatus);
     const overdueCompanies = myCompanies.filter(c => c.isOverdue || getDaysInPipeline(c.createdAt) > 25);
     const unassigned = getUnassignedCompanies();
     const totalPipeline = companies.filter(c => !c.terminalStatus).length;
@@ -30,7 +27,7 @@ export default function DashboardPage() {
 
     return (
         <>
-            <TopHeader title="Dashboard" subtitle={`Good ${new Date().getHours() < 12 ? 'morning' : 'afternoon'}, ${currentUser.name.split(' ')[0]}`} />
+            <TopHeader title="Dashboard" subtitle={`Good ${new Date().getHours() < 12 ? 'morning' : 'afternoon'}, ${user?.name?.split(' ')[0] || 'there'}`} />
             <div className="page-content page-enter">
                 {/* Stats */}
                 <div className="dashboard-grid">
@@ -166,12 +163,11 @@ export default function DashboardPage() {
                                             <span className="badge badge-primary">{industry?.name}</span>
                                             <span className="badge badge-neutral">{c.companyRound}</span>
                                         </div>
-                                        <select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: 12 }}>
+                                        <select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: 12 }} onChange={e => { if (e.target.value) assignAnalyst(c.id, e.target.value); }}>
                                             <option value="">Assign to...</option>
-                                            {['u1', 'u2', 'u3'].map(uid => {
-                                                const u = getUserById(uid);
-                                                return <option key={uid} value={uid}>{u?.name}</option>;
-                                            })}
+                                            {users.filter(u => u.role === 'analyst').map(u => (
+                                                <option key={u.id} value={u.id}>{u.name}</option>
+                                            ))}
                                         </select>
                                     </div>
                                 );

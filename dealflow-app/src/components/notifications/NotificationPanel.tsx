@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Bell, UserPlus, AlertTriangle, ArrowRightCircle, MessageSquare, Package } from 'lucide-react';
-import { notifications, currentUser } from '@/lib/mock-data';
 import { useAppContext } from '@/lib/context';
 import { formatDistanceToNow } from 'date-fns';
 import { NotificationType } from '@/types/database';
@@ -16,8 +15,8 @@ const iconMap: Record<NotificationType, { icon: React.ElementType; bg: string; c
 };
 
 export default function NotificationPanel() {
-    const { setShowNotifications } = useAppContext();
-    const userNotifs = notifications.filter(n => n.userId === currentUser.id);
+    const { setShowNotifications, notifications, markNotificationsRead } = useAppContext();
+    const userNotifs = notifications;
 
     return (
         <>
@@ -25,7 +24,7 @@ export default function NotificationPanel() {
             <div className="notification-panel" style={{ animation: 'slideDown 0.2s ease' }}>
                 <div className="notification-panel-header">
                     <span className="notification-panel-title">Notifications</span>
-                    <button className="btn btn-ghost btn-sm">Mark all read</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => markNotificationsRead()}>Mark all read</button>
                 </div>
                 <div className="notification-list">
                     {userNotifs.map((notif) => {

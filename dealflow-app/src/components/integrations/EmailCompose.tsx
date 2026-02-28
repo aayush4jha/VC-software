@@ -3,13 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, Send, Mail, CheckCircle, AlertCircle, Loader2, LogIn } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { currentUser } from '@/lib/mock-data';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error' | 'auth-required';
 
 export default function EmailCompose() {
-    const { showEmailCompose, setShowEmailCompose, selectedCompany } = useAppContext();
+    const { showEmailCompose, setShowEmailCompose, selectedCompany, user } = useAppContext();
     const { isConnected, isChecking, connect } = useGoogleAuth();
     const [to, setTo] = useState('');
     const [subject, setSubject] = useState('');
@@ -25,7 +24,7 @@ export default function EmailCompose() {
                 `Hi ${selectedCompany.founderName},\n\nI hope this message finds you well.\n\n` +
                 `I'd love to learn more about ${selectedCompany.companyName} and discuss a potential opportunity.\n\n` +
                 `Would you be available for a quick call this week?\n\n` +
-                `Best regards,\n${currentUser.name}`
+                `Best regards,\n${user?.name || ''}`
             );
             setSendStatus('idle');
             setStatusMessage('');
@@ -58,7 +57,7 @@ export default function EmailCompose() {
                     to,
                     subject,
                     body,
-                    from: currentUser.email,
+                    from: user?.email || '',
                 }),
             });
 
@@ -145,7 +144,7 @@ export default function EmailCompose() {
                             <span className="email-field-label">From</span>
                             <input
                                 className="email-field-input"
-                                value={currentUser.email}
+                                value={user?.email || ''}
                                 disabled
                                 style={{ opacity: 0.6 }}
                             />

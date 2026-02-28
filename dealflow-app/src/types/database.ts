@@ -1,6 +1,6 @@
 // Dholakia Ventures — Deal Flow Management Types
 
-export type UserRole = 'analyst' | 'partner';
+export type UserRole = 'analyst' | 'partner' | 'admin';
 
 export interface User {
   id: string;
@@ -8,6 +8,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  organizationId?: string | null;
 }
 
 export type CompanyRound =
