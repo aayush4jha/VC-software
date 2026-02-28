@@ -456,7 +456,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (error) { console.error('Create company error:', error); return null; }
         const company = mapCompany(row);
 
-        await supabase.from('activity_logs').insert({
+        if (user) await supabase.from('activity_logs').insert({
             company_id: company.id, user_id: user.id,
             action: 'created', details: `Added ${company.companyName} to pipeline`,
         });
