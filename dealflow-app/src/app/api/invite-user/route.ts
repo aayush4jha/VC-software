@@ -7,6 +7,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
 export async function POST(req: NextRequest) {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Registration link (actual domain and path)
-    const registrationUrl = `http://localhost:3000/login?email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}`;
+    const registrationUrl = `${SITE_URL}/login?email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}`;
 
     await transporter.sendMail({
       from: `"VC-SAAS" <${GMAIL_USER}>`,
