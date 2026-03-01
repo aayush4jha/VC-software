@@ -231,14 +231,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // ─── Fetch All Org Data ─────────────────────────
     const fetchAllData = useCallback(async (userId: string) => {
         const [
-            { data: companiesData },
-            { data: stagesData },
-            { data: industriesData },
-            { data: sourcesData },
-            { data: categoriesData },
-            { data: subReasonsData },
-            { data: notifsData },
-            { data: profilesData },
+            { data: companiesData, error: e1 },
+            { data: stagesData, error: e2 },
+            { data: industriesData, error: e3 },
+            { data: sourcesData, error: e4 },
+            { data: categoriesData, error: e5 },
+            { data: subReasonsData, error: e6 },
+            { data: notifsData, error: e7 },
+            { data: profilesData, error: e8 },
         ] = await Promise.all([
             supabase.from('companies').select('*').order('created_at', { ascending: false }),
             supabase.from('pipeline_stages').select('*').order('order'),
@@ -249,6 +249,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
             supabase.from('profiles').select('*'),
         ]);
+
+        const errors = { companies: e1, stages: e2, industries: e3, sources: e4, categories: e5, subReasons: e6, notifications: e7, profiles: e8 };
+        const anyError = Object.entries(errors).find(([, e]) => e);
+        if (anyError) console.error('[fetchAllData] Supabase errors:', errors);
 
         setCompanies((companiesData || []).map(mapCompany));
         setPipelineStages((stagesData || []).map(mapStage));
