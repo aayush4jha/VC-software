@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, AlertTriangle, Send, Sparkles } from 'lucide-react';
+import { X, Send, Sparkles, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { CommunicationMethod } from '@/types/database';
 
@@ -10,17 +10,21 @@ const communicationMethods: CommunicationMethod[] = [
 ];
 
 export default function RejectionFlow() {
-    const { showRejectionFlow, setShowRejectionFlow, selectedCompany, rejectionReasonCategories, getStageById, rejectCompany } = useAppContext();
+    const { showRejectionFlow, setShowRejectionFlow, selectedCompany, rejectionReasonCategories, getStageById, getIndustryById, rejectCompany, user } = useAppContext();
     const [step, setStep] = useState(1);
     const [selectedReasons, setSelectedReasons] = useState<Record<string, string[]>>({});
     const [commMethod, setCommMethod] = useState<CommunicationMethod>('Not Yet Communicated');
     const [recipientEmail, setRecipientEmail] = useState('');
     const [emailDraft, setEmailDraft] = useState('');
-    const [emailSent, setEmailSent] = useState(false);
+    const [generatingDraft, setGeneratingDraft] = useState(false);
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [sendStatus, setSendStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [statusMessage, setStatusMessage] = useState('');
 
     if (!showRejectionFlow || !selectedCompany) return null;
 
     const stage = getStageById(selectedCompany.pipelineStageId);
+    const industry = getIndustryById(selectedCompany.industryId);
 
     const toggleSubReason = (categoryId: string, subReasonId: string) => {
         const current = selectedReasons[categoryId] || [];
@@ -32,37 +36,112 @@ export default function RejectionFlow() {
 
     const totalSelected = Object.values(selectedReasons).reduce((sum, arr) => sum + arr.length, 0);
 
-    const generateEmailDraft = () => {
-        const reasons = Object.entries(selectedReasons)
+    const getReasonNames = () => {
+        return Object.entries(selectedReasons)
             .filter(([, subs]) => subs.length > 0)
             .map(([catId]) => {
                 const cat = rejectionReasonCategories.find(c => c.id === catId);
                 return cat?.name;
             })
-            .join(', ');
+            .filter(Boolean) as string[];
+    };
 
-        setEmailDraft(
-            `Dear ${selectedCompany.founderName},
-
-Thank you for sharing ${selectedCompany.companyName}'s journey with us at Dholakia Ventures. We truly appreciate you taking the time to walk us through your vision and progress.
-
-After careful consideration by our investment team, we've decided not to proceed with an investment at this time. Our assessment highlighted areas related to ${reasons.toLowerCase()} that don't align with our current investment thesis and criteria.
-
-This decision does not diminish the value of what you're building. We recognize the hard work and dedication behind ${selectedCompany.companyName}, and we encourage you to continue pursuing your vision.
-
-We'd love to stay connected and revisit this conversation as your company reaches new milestones. Please don't hesitate to reach out if there are significant developments or if you're raising a future round.
-
-Wishing you and the ${selectedCompany.companyName} team all the best.
-
-Warm regards,
-Dholakia Ventures`
-        );
+    const generateEmailDraft = async () => {
+        setGeneratingDraft(true);
         setRecipientEmail(selectedCompany.founderEmail);
+
+        try {
+            const res = await fetch('/api/ai/rejection-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyName: selectedCompany.companyName,
+                    founderName: selectedCompany.founderName,
+                    rejectionReasons: getReasonNames(),
+                    rejectionStage: stage?.name,
+                    industry: industry?.name,
+                }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setEmailDraft(data.emailDraft);
+            } else {
+                // Fallback to template if AI fails
+                const reasons = getReasonNames().join(', ');
+                setEmailDraft(
+                    `Dear ${selectedCompany.founderName},\n\nThank you for sharing ${selectedCompany.companyName}'s journey with us at Dholakia Ventures. We truly appreciate you taking the time to walk us through your vision and progress.\n\nAfter careful consideration by our investment team, we've decided not to proceed with an investment at this time. Our assessment highlighted areas related to ${reasons.toLowerCase()} that don't align with our current investment thesis and criteria.\n\nThis decision does not diminish the value of what you're building. We recognize the hard work and dedication behind ${selectedCompany.companyName}, and we encourage you to continue pursuing your vision.\n\nWe'd love to stay connected and revisit this conversation as your company reaches new milestones. Please don't hesitate to reach out if there are significant developments or if you're raising a future round.\n\nWishing you and the ${selectedCompany.companyName} team all the best.\n\nWarm regards,\nDholakia Ventures`
+                );
+            }
+        } catch {
+            // Fallback to template
+            const reasons = getReasonNames().join(', ');
+            setEmailDraft(
+                `Dear ${selectedCompany.founderName},\n\nThank you for sharing ${selectedCompany.companyName}'s journey with us at Dholakia Ventures. We truly appreciate you taking the time to walk us through your vision and progress.\n\nAfter careful consideration by our investment team, we've decided not to proceed with an investment at this time. Our assessment highlighted areas related to ${reasons.toLowerCase()} that don't align with our current investment thesis and criteria.\n\nWe'd love to stay connected and revisit this conversation as your company reaches new milestones.\n\nWarm regards,\nDholakia Ventures`
+            );
+        }
+
+        setGeneratingDraft(false);
         setStep(3);
     };
 
+    const handleSendAndReject = async () => {
+        setSendingEmail(true);
+        setSendStatus('idle');
+        setStatusMessage('');
+
+        const reasons = Object.entries(selectedReasons)
+            .filter(([, subs]) => subs.length > 0)
+            .map(([catId, subIds]) => ({ categoryId: catId, subReasonIds: subIds }));
+
+        // Send the rejection email via Gmail API
+        try {
+            const emailRes = await fetch('/api/gmail/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: recipientEmail,
+                    subject: `Re: ${selectedCompany.companyName} — Dholakia Ventures`,
+                    body: emailDraft,
+                    from: user?.email || '',
+                }),
+            });
+
+            if (emailRes.ok) {
+                // Email sent successfully — record rejection with email sent flag
+                await rejectCompany(selectedCompany.id, reasons, commMethod, emailDraft, recipientEmail);
+                setSendStatus('success');
+                setStatusMessage('Rejection email sent successfully.');
+                setTimeout(() => setShowRejectionFlow(false), 1500);
+            } else {
+                // Email failed but still record rejection
+                await rejectCompany(selectedCompany.id, reasons, commMethod, emailDraft, recipientEmail);
+                setSendStatus('error');
+                setStatusMessage('Company rejected but email could not be sent. You may need to connect your Google account or send manually.');
+            }
+        } catch {
+            // Network error — still record rejection
+            await rejectCompany(selectedCompany.id, reasons, commMethod, emailDraft, recipientEmail);
+            setSendStatus('error');
+            setStatusMessage('Company rejected but email sending failed. Send manually.');
+        }
+
+        setSendingEmail(false);
+    };
+
+    const handleClose = () => {
+        setShowRejectionFlow(false);
+        setStep(1);
+        setSelectedReasons({});
+        setCommMethod('Not Yet Communicated');
+        setRecipientEmail('');
+        setEmailDraft('');
+        setSendStatus('idle');
+        setStatusMessage('');
+    };
+
     return (
-        <div className="modal-overlay" onClick={() => setShowRejectionFlow(false)}>
+        <div className="modal-overlay" onClick={handleClose}>
             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 650 }}>
                 <div className="modal-header">
                     <div>
@@ -73,7 +152,7 @@ Dholakia Ventures`
                             Rejection at: {stage?.name} • Step {step} of 3
                         </div>
                     </div>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setShowRejectionFlow(false)}>
+                    <button className="btn btn-ghost btn-sm" onClick={handleClose}>
                         <X size={18} />
                     </button>
                 </div>
@@ -157,6 +236,20 @@ Dholakia Ventures`
                                     style={{ minHeight: 280 }}
                                 />
                             </div>
+
+                            {/* Status message */}
+                            {statusMessage && (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                                    marginTop: 12,
+                                    background: sendStatus === 'success' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                                    border: `1px solid ${sendStatus === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                                }}>
+                                    {sendStatus === 'success' ? <CheckCircle size={16} style={{ color: '#10b981', flexShrink: 0 }} /> : <AlertCircle size={16} style={{ color: '#ef4444', flexShrink: 0 }} />}
+                                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{statusMessage}</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -177,26 +270,35 @@ Dholakia Ventures`
                         </button>
                     )}
                     {step === 2 && (
-                        <button className="btn btn-primary" onClick={async () => {
+                        <button className="btn btn-primary" disabled={generatingDraft} onClick={async () => {
                             if (commMethod === 'Email') {
-                                generateEmailDraft();
+                                await generateEmailDraft();
                             } else {
                                 const reasons = Object.entries(selectedReasons).filter(([, subs]) => subs.length > 0).map(([catId, subIds]) => ({ categoryId: catId, subReasonIds: subIds }));
                                 await rejectCompany(selectedCompany.id, reasons, commMethod);
-                                setShowRejectionFlow(false);
+                                handleClose();
                             }
                         }}>
-                            {commMethod === 'Email' ? 'Generate Email Draft' : 'Confirm Rejection'}
+                            {generatingDraft ? (
+                                <><Loader2 size={14} className="spin" /> Generating Draft...</>
+                            ) : commMethod === 'Email' ? (
+                                <><Sparkles size={14} /> Generate AI Draft</>
+                            ) : 'Confirm Rejection'}
                         </button>
                     )}
                     {step === 3 && (
-                        <button className="btn btn-danger" onClick={async () => {
-                            const reasons = Object.entries(selectedReasons).filter(([, subs]) => subs.length > 0).map(([catId, subIds]) => ({ categoryId: catId, subReasonIds: subIds }));
-                            await rejectCompany(selectedCompany.id, reasons, commMethod, emailDraft, recipientEmail);
-                            setEmailSent(true);
-                            setShowRejectionFlow(false);
-                        }}>
-                            <Send size={14} /> Send Rejection Email
+                        <button
+                            className="btn btn-danger"
+                            disabled={sendingEmail || sendStatus === 'success'}
+                            onClick={handleSendAndReject}
+                        >
+                            {sendingEmail ? (
+                                <><Loader2 size={14} className="spin" /> Sending...</>
+                            ) : sendStatus === 'success' ? (
+                                <><CheckCircle size={14} /> Sent!</>
+                            ) : (
+                                <><Send size={14} /> Send Rejection Email</>
+                            )}
                         </button>
                     )}
                 </div>

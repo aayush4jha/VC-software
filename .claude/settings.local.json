@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config --global credential.helper osxkeychain)",
+      "Bash(gh run list --repo aayush4jha/VC-software --limit 5)",
+      "Bash(gh auth status)",
+      "Bash(npm run build)",
+      "Bash(git add src/lib/context.tsx)",
+      "Bash(git commit -m \"Fix TypeScript null check on user in activity_logs insert\")",
+      "Bash(git push)",
+      "Bash(git add src/lib/supabase/client.ts src/lib/supabase/server.ts src/lib/context.tsx)",
+      "Bash(git commit -m \"Remove placeholder fallbacks, add fetchAllData error logging\")"
+    ]
+  }
+}

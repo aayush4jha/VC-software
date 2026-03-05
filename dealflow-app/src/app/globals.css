@@ -649,6 +649,10 @@ html, body {
   border-left: 3px solid var(--danger);
 }
 
+.kanban-card.needs-review {
+  border-left: 3px solid #8b5cf6;
+}
+
 .kanban-card-header {
   display: flex;
   align-items: flex-start;

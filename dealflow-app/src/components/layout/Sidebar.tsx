@@ -10,7 +10,7 @@ import { useAppContext } from '@/lib/context';
 
 const navItems = [
     { label: 'Dashboard', href: '/', icon: Home },
-    { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid, badge: 3 },
+    { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid },
     { label: 'Portfolio', href: '/portfolio', icon: Briefcase },
     { label: 'Contacts', href: '/contacts', icon: Users },
     { label: 'Emails', href: '/emails', icon: Mail },
@@ -51,7 +51,7 @@ export default function Sidebar() {
                         >
                             <Icon />
                             {!collapsed && item.label}
-                            {!collapsed && item.badge && <span className="sidebar-nav-badge">{item.badge}</span>}
+
                         </Link>
                     );
                 })}

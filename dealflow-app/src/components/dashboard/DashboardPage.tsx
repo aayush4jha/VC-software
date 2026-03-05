@@ -1,45 +1,130 @@
 'use client';
 
-import React from 'react';
-import { BarChart3, TrendingUp, Clock, AlertTriangle, Calendar, ArrowRight, Users, Sparkles } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { BarChart3, AlertTriangle, ArrowRight, Users, Sparkles, PhoneCall, UserPlus } from 'lucide-react';
 import TopHeader from '@/components/layout/TopHeader';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { useAppContext } from '@/lib/context';
 
 export default function DashboardPage() {
-    const { setSelectedCompany, companies, pipelineStages, user, getUserById, getIndustryById, getStageById, getUnassignedCompanies, users, assignAnalyst } = useAppContext();
-    const myCompanies = companies.filter(c => c.analystId === user?.id && !c.terminalStatus);
-    const overdueCompanies = myCompanies.filter(c => c.isOverdue || getDaysInPipeline(c.createdAt) > 25);
+    const {
+        setSelectedCompany, companies, pipelineStages, user, getUserById,
+        getIndustryById, getStageById, getUnassignedCompanies, users, assignAnalyst,
+    } = useAppContext();
+
+    const isPartnerOrAdmin = user?.role === 'partner' || user?.role === 'admin';
+
+    // ── Derived data ─────────────────────────────────────────────
+
+    const activeCompanies = useMemo(
+        () => companies.filter(c => !c.terminalStatus),
+        [companies],
+    );
+
+    const myCompanies = useMemo(
+        () => activeCompanies.filter(c => c.analystId === user?.id),
+        [activeCompanies, user],
+    );
+
     const unassigned = getUnassignedCompanies();
-    const totalPipeline = companies.filter(c => !c.terminalStatus).length;
+    const pendingReview = useMemo(() => activeCompanies.filter(c => c.needsReview), [activeCompanies]);
+    const totalPipeline = activeCompanies.length;
 
-    const stageDistribution = pipelineStages.map(s => ({
-        stage: s,
-        count: companies.filter(c => c.pipelineStageId === s.id && !c.terminalStatus).length,
-    }));
+    // Time helpers
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    // Mock today's calls
-    const todaysCalls = [
-        { time: '10:30 AM', company: 'NovaPay', founder: 'Amit Sharma', type: 'Intro Call' },
-        { time: '2:00 PM', company: 'DevForge', founder: 'Karthik Nair', type: 'Follow-up' },
-        { time: '4:30 PM', company: 'ShieldNet', founder: 'Ravi Kumar', type: 'Deep Dive' },
-    ];
+    // ── 1. Intro Call companies (replaces mock "Today's Calls") ──
+    // Find the 3rd pipeline stage (Intro Call) and its neighbors (2nd and 4th)
+    const sortedStages = useMemo(
+        () => [...pipelineStages].sort((a, b) => a.order - b.order),
+        [pipelineStages],
+    );
+
+    const introCallStageIds = useMemo(() => {
+        // Pick stages at order positions 2, 3, 4 (0-indexed: index 1, 2, 3)
+        // The 3rd stage is the primary "Intro Call" stage
+        const ids = new Set<string>();
+        if (sortedStages.length >= 3) ids.add(sortedStages[2].id); // 3rd stage
+        // Also include adjacent stages for "nearby"
+        if (sortedStages.length >= 2) ids.add(sortedStages[1].id); // 2nd stage
+        if (sortedStages.length >= 4) ids.add(sortedStages[3].id); // 4th stage
+        return ids;
+    }, [sortedStages]);
+
+    const introCallCompanies = useMemo(
+        () => activeCompanies.filter(c =>
+            c.analystId === user?.id && introCallStageIds.has(c.pipelineStageId)
+        ),
+        [activeCompanies, user, introCallStageIds],
+    );
+
+    // ── 2. New Assignments (assigned to me, created in last 7 days) ──
+    const newAssignments = useMemo(
+        () => activeCompanies.filter(c =>
+            c.analystId === user?.id && new Date(c.createdAt) >= sevenDaysAgo
+        ),
+        [activeCompanies, user, sevenDaysAgo],
+    );
+
+    // ── 3. Pipeline stage distribution ──
+    const stageDistribution = useMemo(
+        () => pipelineStages.map(s => ({
+            stage: s,
+            count: activeCompanies.filter(c => c.pipelineStageId === s.id).length,
+        })),
+        [pipelineStages, activeCompanies],
+    );
+
+    // ── 4. Overdue: analyst sees own, partner/admin sees all ──
+    const overdueCompanies = useMemo(() => {
+        const pool = isPartnerOrAdmin ? activeCompanies : myCompanies;
+        return pool.filter(c => c.isOverdue || getDaysInPipeline(c.createdAt) > 25);
+    }, [activeCompanies, myCompanies, isPartnerOrAdmin]);
+
+    // ── 6. AI Insights: only companies with actual quickSummary ──
+    const companiesWithInsights = useMemo(
+        () => companies.filter(c => c.quickSummary && c.quickSummary.trim().length > 0).slice(0, 3),
+        [companies],
+    );
+
+    // ── 7. Computed stats (replace hardcoded) ──
+    // Active pipeline change: compare current total with how many existed > 30 days ago
+    const oldCompaniesCount = useMemo(
+        () => activeCompanies.filter(c => new Date(c.createdAt) < thirtyDaysAgo).length,
+        [activeCompanies, thirtyDaysAgo],
+    );
+    const newLastMonth = totalPipeline - oldCompaniesCount;
+    const pipelineChangePct = oldCompaniesCount > 0
+        ? Math.round((newLastMonth / oldCompaniesCount) * 100)
+        : totalPipeline > 0 ? 100 : 0;
+
+    // My companies: how many new this week
+    const myNewThisWeek = useMemo(
+        () => myCompanies.filter(c => new Date(c.createdAt) >= sevenDaysAgo).length,
+        [myCompanies, sevenDaysAgo],
+    );
 
     return (
         <>
             <TopHeader title="Dashboard" subtitle={`Good ${new Date().getHours() < 12 ? 'morning' : 'afternoon'}, ${user?.name?.split(' ')[0] || 'there'}`} />
             <div className="page-content page-enter">
-                {/* Stats */}
+                {/* ── Stats ─────────────────────────────────────── */}
                 <div className="dashboard-grid">
                     <div className="stat-card purple">
                         <div className="stat-label">Active Pipeline</div>
                         <div className="stat-value">{totalPipeline}</div>
-                        <div className="stat-change up">↑ 12% from last month</div>
+                        <div className={`stat-change ${pipelineChangePct >= 0 ? 'up' : 'down'}`}>
+                            {pipelineChangePct >= 0 ? '\u2191' : '\u2193'} {Math.abs(pipelineChangePct)}% vs 30d ago
+                        </div>
                     </div>
                     <div className="stat-card blue">
                         <div className="stat-label">My Companies</div>
                         <div className="stat-value">{myCompanies.length}</div>
-                        <div className="stat-change up">3 new this week</div>
+                        <div className="stat-change up">
+                            {myNewThisWeek} new this week
+                        </div>
                     </div>
                     <div className="stat-card amber">
                         <div className="stat-label">Unassigned</div>
@@ -49,33 +134,54 @@ export default function DashboardPage() {
                     <div className="stat-card red">
                         <div className="stat-label">At Risk / Overdue</div>
                         <div className="stat-value">{overdueCompanies.length}</div>
-                        <div className="stat-change down">Action required</div>
+                        <div className="stat-change down">
+                            {overdueCompanies.length > 0 ? 'Action required' : 'All clear'}
+                        </div>
                     </div>
+                    {pendingReview.length > 0 && (
+                        <div className="stat-card purple">
+                            <div className="stat-label">Needs Review</div>
+                            <div className="stat-value">{pendingReview.length}</div>
+                            <div className="stat-change">From email ingestion</div>
+                        </div>
+                    )}
                 </div>
 
+                {/* ── Main grid: Intro Call + Pipeline Distribution ── */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                    {/* Today's Calls */}
+                    {/* 1. Intro Call / Nearby Stage Companies */}
                     <div className="dashboard-section">
                         <div className="dashboard-section-title">
-                            <Calendar size={18} style={{ color: 'var(--primary)' }} /> Today&apos;s Calls
+                            <PhoneCall size={18} style={{ color: 'var(--primary)' }} /> Intro Call Companies
                         </div>
                         <div className="calls-strip" style={{ flexDirection: 'column' }}>
-                            {todaysCalls.map((call, i) => (
-                                <div key={i} className="call-card" style={{ minWidth: 'auto' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <div className="call-card-time">{call.time}</div>
-                                            <div className="call-card-company">{call.company}</div>
-                                            <div className="call-card-founder">{call.founder} — {call.type}</div>
-                                        </div>
-                                        <button className="btn btn-secondary btn-sm">Join</button>
-                                    </div>
+                            {introCallCompanies.length === 0 ? (
+                                <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+                                    No scheduled calls today
                                 </div>
-                            ))}
+                            ) : (
+                                introCallCompanies.map(c => {
+                                    const stage = getStageById(c.pipelineStageId);
+                                    return (
+                                        <div key={c.id} className="call-card" style={{ minWidth: 'auto' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <div className="call-card-company">{c.companyName}</div>
+                                                    <div className="call-card-founder">{c.founderName}</div>
+                                                    <div style={{ marginTop: 4 }}>
+                                                        <span className="badge badge-primary" style={{ fontSize: 11 }}>{stage?.name}</span>
+                                                    </div>
+                                                </div>
+                                                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedCompany(c)}>View</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
                         </div>
                     </div>
 
-                    {/* Pipeline Distribution */}
+                    {/* 3. Pipeline Distribution */}
                     <div className="dashboard-section">
                         <div className="dashboard-section-title">
                             <BarChart3 size={18} style={{ color: 'var(--primary)' }} /> Pipeline Distribution
@@ -90,7 +196,7 @@ export default function DashboardPage() {
                                     <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{stage.name}</span>
                                     <div style={{ width: 120, height: 6, background: 'var(--bg-tertiary)', borderRadius: 3, overflow: 'hidden' }}>
                                         <div style={{
-                                            width: `${(count / totalPipeline) * 100}%`,
+                                            width: totalPipeline > 0 ? `${(count / totalPipeline) * 100}%` : '0%',
                                             height: '100%',
                                             background: stage.color,
                                             borderRadius: 3,
@@ -104,38 +210,40 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Overdue Items */}
-                {overdueCompanies.length > 0 && (
+                {/* ── 2. New Assignments ──────────────────────────── */}
+                {newAssignments.length > 0 && (
                     <div className="dashboard-section">
-                        <div className="dashboard-section-title" style={{ color: 'var(--danger)' }}>
-                            <AlertTriangle size={18} /> Overdue / At Risk
+                        <div className="dashboard-section-title">
+                            <UserPlus size={18} style={{ color: 'var(--primary)' }} /> New Assignments (Last 7 Days)
                         </div>
                         <div className="table-container">
                             <table className="data-table">
                                 <thead>
                                     <tr>
                                         <th>Company</th>
+                                        <th>Founder</th>
                                         <th>Stage</th>
-                                        <th>Days</th>
-                                        <th>Priority</th>
+                                        <th>Added</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {overdueCompanies.map(c => {
+                                    {newAssignments.map(c => {
                                         const stage = getStageById(c.pipelineStageId);
+                                        const daysAgo = getDaysInPipeline(c.createdAt);
                                         return (
-                                            <tr key={c.id} onClick={() => setSelectedCompany(c)}>
+                                            <tr key={c.id} onClick={() => setSelectedCompany(c)} style={{ cursor: 'pointer' }}>
                                                 <td><span className="table-company-name">{c.companyName}</span></td>
+                                                <td>{c.founderName}</td>
                                                 <td><span className="badge badge-primary">{stage?.name}</span></td>
-                                                <td style={{ color: 'var(--danger)', fontWeight: 600 }}>{getDaysInPipeline(c.createdAt)}d</td>
-                                                <td>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                        <span className={`priority-dot ${c.priorityLevel.toLowerCase()}`} />
-                                                        {c.priorityLevel}
-                                                    </span>
+                                                <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                                                    {daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`}
                                                 </td>
-                                                <td><button className="btn btn-primary btn-sm">Review <ArrowRight size={12} /></button></td>
+                                                <td>
+                                                    <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); setSelectedCompany(c); }}>
+                                                        View <ArrowRight size={12} />
+                                                    </button>
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -145,8 +253,60 @@ export default function DashboardPage() {
                     </div>
                 )}
 
-                {/* Unassigned Queue (for partners) */}
-                {unassigned.length > 0 && (
+                {/* ── 4. Overdue Items ──────────────────────────── */}
+                {overdueCompanies.length > 0 && (
+                    <div className="dashboard-section">
+                        <div className="dashboard-section-title" style={{ color: 'var(--danger)' }}>
+                            <AlertTriangle size={18} /> Overdue / At Risk {isPartnerOrAdmin ? '(All)' : '(My Companies)'}
+                        </div>
+                        <div className="table-container">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Company</th>
+                                        {isPartnerOrAdmin && <th>Analyst</th>}
+                                        <th>Stage</th>
+                                        <th>Days</th>
+                                        <th>Priority</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {overdueCompanies.map(c => {
+                                        const stage = getStageById(c.pipelineStageId);
+                                        const analyst = c.analystId ? getUserById(c.analystId) : null;
+                                        return (
+                                            <tr key={c.id} onClick={() => setSelectedCompany(c)} style={{ cursor: 'pointer' }}>
+                                                <td><span className="table-company-name">{c.companyName}</span></td>
+                                                {isPartnerOrAdmin && (
+                                                    <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                        {analyst?.name || 'Unassigned'}
+                                                    </td>
+                                                )}
+                                                <td><span className="badge badge-primary">{stage?.name}</span></td>
+                                                <td style={{ color: 'var(--danger)', fontWeight: 600 }}>{getDaysInPipeline(c.createdAt)}d</td>
+                                                <td>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                        <span className={`priority-dot ${c.priorityLevel.toLowerCase()}`} />
+                                                        {c.priorityLevel}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); setSelectedCompany(c); }}>
+                                                        Review <ArrowRight size={12} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── 5. Unassigned Queue ──────────────────────── */}
+                {isPartnerOrAdmin && unassigned.length > 0 && (
                     <div className="dashboard-section">
                         <div className="assignment-queue">
                             <div className="assignment-queue-header">
@@ -163,7 +323,12 @@ export default function DashboardPage() {
                                             <span className="badge badge-primary">{industry?.name}</span>
                                             <span className="badge badge-neutral">{c.companyRound}</span>
                                         </div>
-                                        <select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: 12 }} onChange={e => { if (e.target.value) assignAnalyst(c.id, e.target.value); }}>
+                                        <select
+                                            className="form-select"
+                                            style={{ width: 160, padding: '6px 10px', fontSize: 12 }}
+                                            onChange={e => { if (e.target.value) assignAnalyst(c.id, e.target.value); }}
+                                            defaultValue=""
+                                        >
                                             <option value="">Assign to...</option>
                                             {users.filter(u => u.role === 'analyst').map(u => (
                                                 <option key={u.id} value={u.id}>{u.name}</option>
@@ -176,22 +341,34 @@ export default function DashboardPage() {
                     </div>
                 )}
 
-                {/* Recent AI Insights */}
-                <div className="dashboard-section">
-                    <div className="dashboard-section-title">
-                        <Sparkles size={18} style={{ color: 'var(--primary)' }} /> Recent AI Insights
+                {/* For analysts: small unassigned indicator */}
+                {!isPartnerOrAdmin && unassigned.length > 0 && (
+                    <div className="dashboard-section">
+                        <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                            <Users size={16} style={{ color: 'var(--warning)' }} />
+                            <span>{unassigned.length} unassigned {unassigned.length === 1 ? 'company' : 'companies'} in the queue</span>
+                        </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                        {companies.filter(c => c.quickSummary).slice(0, 3).map(c => (
-                            <div key={c.id} className="ai-card" style={{ cursor: 'pointer' }} onClick={() => setSelectedCompany(c)}>
-                                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{c.companyName}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                    {c.quickSummary?.substring(0, 120)}...
+                )}
+
+                {/* ── 6. Recent AI Insights ───────────────────── */}
+                {companiesWithInsights.length > 0 && (
+                    <div className="dashboard-section">
+                        <div className="dashboard-section-title">
+                            <Sparkles size={18} style={{ color: 'var(--primary)' }} /> Recent AI Insights
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                            {companiesWithInsights.map(c => (
+                                <div key={c.id} className="ai-card" style={{ cursor: 'pointer' }} onClick={() => setSelectedCompany(c)}>
+                                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{c.companyName}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                        {c.quickSummary!.length > 120 ? `${c.quickSummary!.substring(0, 120)}...` : c.quickSummary}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </>
     );

@@ -106,6 +106,8 @@ export interface Company {
   updatedAt: string;
   slaDeadline: string | null;
   isOverdue: boolean;
+  needsReview: boolean;
+  ingestionSource: string | null;
   // AI fields
   quickSummary: string | null;
   deckAnalysis: DeckAnalysis | null;
@@ -190,5 +192,40 @@ export interface Notification {
   message: string;
   companyId: string;
   read: boolean;
+  createdAt: string;
+}
+
+export interface SavedView {
+  id: string;
+  name: string;
+  filters: Record<string, string[]>;
+  createdAt: string;
+}
+
+export interface IngestedEmail {
+  id: string;
+  organizationId: string;
+  gmailMessageId: string;
+  gmailThreadId: string | null;
+  senderName: string;
+  senderEmail: string;
+  subject: string;
+  receivedAt: string | null;
+  hasAttachments: boolean;
+  attachmentNames: string[];
+  companyId: string | null;
+  status: 'processed' | 'skipped' | 'error';
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface EmailLog {
+  id: string;
+  companyId: string | null;
+  senderId: string | null;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  emailType: string;
   createdAt: string;
 }

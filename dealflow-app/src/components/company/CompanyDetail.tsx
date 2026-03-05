@@ -1,26 +1,54 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock, AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, FileSearch, Phone, XCircle, ArrowRight } from 'lucide-react';
+import {
+    X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock,
+    AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
+    XCircle, ArrowRight, Loader2, Link2, Shield, Pause, RotateCcw,
+    FileText, BarChart3, FileSearch, Briefcase,
+} from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
+import type { TerminalStatus, CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
+
+const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
+const priorities: PriorityLevel[] = ['Low', 'Medium', 'High'];
+const dealSourceTypes: DealSourceType[] = ['Founder Network', 'Investment Banker', 'Friends & Family', 'VC & PE'];
+const shareTypes: ShareType[] = ['Primary', 'Secondary'];
 
 export default function CompanyDetail() {
     const {
         selectedCompany, setSelectedCompany,
         setShowRejectionFlow, setShowEmailCompose, setShowCalendarInvite,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
-        pipelineStages, user, updateCompany, moveCompanyStage, addComment,
+        pipelineStages, user, users, companies, industries, dealSourceNames,
+        updateCompany, moveCompanyStage, assignAnalyst, addComment,
         fetchComments, fetchActivity,
+        setTerminalStatus, resolveTerminalStatus,
+        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
+        approveCompany,
     } = useAppContext();
+
     const [activeTab, setActiveTab] = useState('overview');
     const [editingField, setEditingField] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [showMoveStageDropdown, setShowMoveStageDropdown] = useState(false);
-    const [analyzingDeck, setAnalyzingDeck] = useState(false);
     const [comments, setComments] = useState<import('@/types/database').Comment[]>([]);
     const [activities, setActivities] = useState<import('@/types/database').ActivityLog[]>([]);
     const [newComment, setNewComment] = useState('');
+
+    // Terminal status state
+    const [showTerminalMenu, setShowTerminalMenu] = useState(false);
+    const [showResolveModal, setShowResolveModal] = useState(false);
+    const [resolveTargetStageId, setResolveTargetStageId] = useState('');
+    const [settingTerminal, setSettingTerminal] = useState(false);
+    const [reminderDate, setReminderDate] = useState('');
+
+    // AI loading states
+    const [generatingSummary, setGeneratingSummary] = useState(false);
+    const [analyzingDeck, setAnalyzingDeck] = useState(false);
+    const [generatingBrief, setGeneratingBrief] = useState(false);
+    const [generatingMemo, setGeneratingMemo] = useState(false);
 
     useEffect(() => {
         if (selectedCompany) {
@@ -37,6 +65,7 @@ export default function CompanyDetail() {
     const stage = getStageById(c.pipelineStageId);
     const source = getDealSourceNameById(c.dealSourceNameId);
     const days = getDaysInPipeline(c.createdAt);
+    const linkedCompany = c.linkedPreviousEntryId ? companies.find(co => co.id === c.linkedPreviousEntryId) : null;
 
     const tabs = [
         { id: 'overview', label: 'Overview' },
@@ -52,12 +81,23 @@ export default function CompanyDetail() {
 
     const saveEdit = async () => {
         if (!editingField || !selectedCompany) return;
+
+        // Handle analyst assignment separately
+        if (editingField === 'analystId') {
+            await assignAnalyst(selectedCompany.id, editValue || null);
+            setEditingField(null);
+            setEditValue('');
+            return;
+        }
+
         const fieldMap: Record<string, string> = {
             founderName: 'founder_name', founderEmail: 'founder_email',
             companyRound: 'company_round', subIndustry: 'sub_industry',
             dealSourceType: 'deal_source_type', shareType: 'share_type',
             googleDriveLink: 'google_drive_link',
             totalFundRaise: 'total_fund_raise', valuation: 'valuation',
+            industryId: 'industry_id', dealSourceNameId: 'deal_source_name_id',
+            priorityLevel: 'priority_level',
         };
         const dbField = fieldMap[editingField];
         if (dbField) {
@@ -81,11 +121,46 @@ export default function CompanyDetail() {
         await moveCompanyStage(c.id, targetStageId);
     };
 
-    const handleAnalyzeDeck = () => {
+    // Terminal status handlers
+    const handleSetTerminal = async (status: TerminalStatus) => {
+        setSettingTerminal(true);
+        setShowTerminalMenu(false);
+        await setTerminalStatus(c.id, status, reminderDate || undefined);
+        setReminderDate('');
+        setSettingTerminal(false);
+    };
+
+    const handleResolveTerminal = async () => {
+        if (!resolveTargetStageId) return;
+        await resolveTerminalStatus(c.id, resolveTargetStageId);
+        setShowResolveModal(false);
+        setResolveTargetStageId('');
+    };
+
+    // AI handlers
+    const handleGenerateSummary = async () => {
+        setGeneratingSummary(true);
+        await generateAISummary(c.id);
+        setGeneratingSummary(false);
+    };
+
+    const handleAnalyzeDeck = async () => {
         setAnalyzingDeck(true);
         setActiveTab('ai');
-        // Simulate AI analysis
-        setTimeout(() => setAnalyzingDeck(false), 1500);
+        await generateDeckAnalysis(c.id);
+        setAnalyzingDeck(false);
+    };
+
+    const handleGenerateBrief = async () => {
+        setGeneratingBrief(true);
+        await generateFilterBrief(c.id);
+        setGeneratingBrief(false);
+    };
+
+    const handleGenerateMemo = async () => {
+        setGeneratingMemo(true);
+        await generateICMemo(c.id);
+        setGeneratingMemo(false);
     };
 
     const EditableField = ({ fieldKey, value, style }: { fieldKey: string; value: string; style?: React.CSSProperties }) => {
@@ -126,6 +201,60 @@ export default function CompanyDetail() {
         );
     };
 
+    const DropdownField = ({ fieldKey, value, displayValue, options, placeholder }: {
+        fieldKey: string;
+        value: string;
+        displayValue: string;
+        options: { value: string; label: string }[];
+        placeholder?: string;
+    }) => {
+        if (editingField === fieldKey) {
+            return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <select
+                        className="form-select"
+                        value={editValue}
+                        onChange={e => setEditValue(e.target.value)}
+                        autoFocus
+                        style={{ fontSize: 14, padding: '4px 8px', height: 30 }}
+                    >
+                        {placeholder && <option value="">{placeholder}</option>}
+                        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <button className="btn btn-ghost btn-sm" onClick={saveEdit} style={{ padding: 4, minWidth: 'auto' }}>
+                        <Check size={14} style={{ color: 'var(--success)' }} />
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={cancelEdit} style={{ padding: 4, minWidth: 'auto' }}>
+                        <X size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                </div>
+            );
+        }
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{displayValue || '—'}</div>
+                <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => startEdit(fieldKey, value)}
+                    style={{ padding: 4, minWidth: 'auto', opacity: 0.4, transition: 'opacity 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                    title={`Edit ${fieldKey}`}
+                >
+                    <Pencil size={12} />
+                </button>
+            </div>
+        );
+    };
+
+    const terminalStatusColor: Record<string, string> = {
+        'Portfolio': '#10b981',
+        'Rejected': '#ef4444',
+        'Awaiting Response': '#f59e0b',
+        'Blocker': '#ef4444',
+        'Next Round Analysis': '#6366f1',
+    };
+
     return (
         <>
             <div className="detail-overlay" onClick={() => setSelectedCompany(null)} />
@@ -133,7 +262,7 @@ export default function CompanyDetail() {
                 <div className="detail-panel-header">
                     <div>
                         <div className="detail-panel-title">{c.companyName}</div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                             <span className="table-stage-badge" style={{
                                 background: `${stage?.color}15`, color: stage?.color,
                             }}>
@@ -153,18 +282,138 @@ export default function CompanyDetail() {
                     </div>
                 </div>
 
-                {/* Stage advancement */}
-                <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)' }}>MOVE TO:</span>
-                    {pipelineStages.filter(s => s.order > (stage?.order || 0)).slice(0, 1).map(s => (
-                        <button key={s.id} className="btn btn-success btn-sm">
-                            <ChevronRight size={14} /> {s.name}
+                {/* Terminal Status Banner */}
+                {c.terminalStatus && (
+                    <div style={{
+                        padding: '10px 24px',
+                        background: `${terminalStatusColor[c.terminalStatus]}10`,
+                        borderBottom: `2px solid ${terminalStatusColor[c.terminalStatus]}40`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{
+                                padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700,
+                                background: `${terminalStatusColor[c.terminalStatus]}20`,
+                                color: terminalStatusColor[c.terminalStatus],
+                            }}>
+                                {c.terminalStatus}
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                {c.terminalStatus === 'Awaiting Response' && 'Waiting for founder response'}
+                                {c.terminalStatus === 'Blocker' && 'Blocked — needs resolution'}
+                                {c.terminalStatus === 'Next Round Analysis' && 'Tracking for next round'}
+                                {c.terminalStatus === 'Portfolio' && 'Invested — portfolio company'}
+                                {c.terminalStatus === 'Rejected' && 'Deal rejected'}
+                            </span>
+                        </div>
+                        {c.terminalStatus !== 'Rejected' && c.terminalStatus !== 'Portfolio' && (
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => { setResolveTargetStageId(c.pipelineStageId); setShowResolveModal(true); }}
+                                style={{ fontSize: 12 }}
+                            >
+                                <RotateCcw size={12} /> Resolve
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Needs Review Banner (email-ingested drafts) */}
+                {c.needsReview && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 24px',
+                        background: 'rgba(139,92,246,0.08)',
+                        borderBottom: '2px solid rgba(139,92,246,0.2)',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#8b5cf6' }}>
+                            <Mail size={14} />
+                            <span>This company was auto-created from an inbound email and needs review.</span>
+                        </div>
+                        <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => approveCompany(c.id)}
+                            style={{ background: '#8b5cf6', borderColor: '#8b5cf6', fontSize: 12 }}
+                        >
+                            <Check size={14} /> Approve
                         </button>
-                    ))}
-                    <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }}>
-                        <Clock size={14} /> Awaiting Response
-                    </button>
-                </div>
+                    </div>
+                )}
+
+                {/* Stage advancement */}
+                {!c.terminalStatus && (
+                    <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)' }}>MOVE TO:</span>
+                        {nextStage && (
+                            <button
+                                key={nextStage.id}
+                                className="btn btn-success btn-sm"
+                                onClick={() => handleMoveStage(nextStage.id)}
+                            >
+                                <ChevronRight size={14} /> {nextStage.name}
+                            </button>
+                        )}
+                        <div style={{ position: 'relative', marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setShowTerminalMenu(!showTerminalMenu)}
+                                disabled={settingTerminal}
+                                style={{ fontSize: 12 }}
+                            >
+                                {settingTerminal ? <Loader2 size={12} className="spin" /> : <Pause size={12} />}
+                                Status
+                                <ChevronDown size={10} />
+                            </button>
+                            {showTerminalMenu && (
+                                <div style={{
+                                    position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                                    background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                                    borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
+                                    minWidth: 240, padding: '6px 0', zIndex: 10,
+                                }}>
+                                    <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                        Set Terminal Status
+                                    </div>
+                                    {[
+                                        { status: 'Awaiting Response' as TerminalStatus, icon: <Clock size={14} />, color: '#f59e0b', desc: 'Waiting for founder reply' },
+                                        { status: 'Blocker' as TerminalStatus, icon: <Shield size={14} />, color: '#ef4444', desc: 'Blocked by external factor' },
+                                        { status: 'Next Round Analysis' as TerminalStatus, icon: <BarChart3 size={14} />, color: '#6366f1', desc: 'Track for future round' },
+                                        { status: 'Portfolio' as TerminalStatus, icon: <Briefcase size={14} />, color: '#10b981', desc: 'Mark as invested' },
+                                    ].map(item => (
+                                        <button
+                                            key={item.status}
+                                            onClick={() => handleSetTerminal(item.status)}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                                                padding: '9px 14px', background: 'none', border: 'none',
+                                                cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left',
+                                            }}
+                                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                                            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                                        >
+                                            <span style={{ color: item.color }}>{item.icon}</span>
+                                            <div>
+                                                <div style={{ fontWeight: 500 }}>{item.status}</div>
+                                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{item.desc}</div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                    {/* Reminder date for Awaiting/Blocker */}
+                                    <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
+                                        <label style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'block', marginBottom: 4 }}>Reminder Date (optional)</label>
+                                        <input
+                                            type="date"
+                                            className="form-input"
+                                            value={reminderDate}
+                                            onChange={e => setReminderDate(e.target.value)}
+                                            style={{ fontSize: 12, padding: '4px 8px', height: 28 }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 <div className="detail-tabs">
                     {tabs.map(tab => (
@@ -182,13 +431,43 @@ export default function CompanyDetail() {
                     {activeTab === 'overview' && (
                         <div>
                             {/* Quick Summary */}
-                            {c.quickSummary && (
+                            {c.quickSummary ? (
                                 <div className="ai-card" style={{ marginBottom: 20 }}>
                                     <div className="ai-card-header">
                                         <div className="ai-card-icon"><Sparkles size={14} /></div>
                                         <span className="ai-card-title">AI Quick Summary</span>
                                     </div>
                                     <div className="ai-card-body">{c.quickSummary}</div>
+                                </div>
+                            ) : (
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}
+                                    onClick={handleGenerateSummary}
+                                    disabled={generatingSummary}
+                                >
+                                    {generatingSummary ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Sparkles size={14} /> Generate AI Summary</>}
+                                </button>
+                            )}
+
+                            {/* Linked Previous Entry */}
+                            {linkedCompany && (
+                                <div style={{
+                                    padding: '10px 14px', marginBottom: 16,
+                                    background: 'var(--primary-bg)', border: '1px solid var(--primary)',
+                                    borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 8,
+                                }}>
+                                    <Link2 size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                        Linked to previous entry:
+                                    </span>
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => setSelectedCompany(linkedCompany)}
+                                        style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)', padding: '2px 6px' }}
+                                    >
+                                        {linkedCompany.companyName} <ExternalLink size={12} />
+                                    </button>
                                 </div>
                             )}
 
@@ -204,15 +483,40 @@ export default function CompanyDetail() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Analyst</label>
-                                    <EditableField fieldKey="analyst" value={analyst?.name || 'Unassigned'} style={{ fontSize: 14, fontWeight: 500 }} />
+                                    <DropdownField
+                                        fieldKey="analystId"
+                                        value={c.analystId || ''}
+                                        displayValue={analyst?.name || 'Unassigned'}
+                                        placeholder="Unassigned"
+                                        options={users.map(u => ({ value: u.id, label: u.name }))}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Company Round</label>
-                                    <EditableField fieldKey="companyRound" value={c.companyRound} style={{ fontSize: 14, fontWeight: 500 }} />
+                                    <DropdownField
+                                        fieldKey="companyRound"
+                                        value={c.companyRound}
+                                        displayValue={c.companyRound}
+                                        options={rounds.map(r => ({ value: r, label: r }))}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Priority Level</label>
+                                    <DropdownField
+                                        fieldKey="priorityLevel"
+                                        value={c.priorityLevel}
+                                        displayValue={c.priorityLevel}
+                                        options={priorities.map(p => ({ value: p, label: p }))}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Industry</label>
-                                    <EditableField fieldKey="industry" value={industry?.name || ''} style={{ fontSize: 14, fontWeight: 500 }} />
+                                    <DropdownField
+                                        fieldKey="industryId"
+                                        value={c.industryId}
+                                        displayValue={industry?.name || '—'}
+                                        options={industries.map(i => ({ value: i.id, label: i.name }))}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Sub-Industry</label>
@@ -220,11 +524,21 @@ export default function CompanyDetail() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Deal Source Type</label>
-                                    <EditableField fieldKey="dealSourceType" value={c.dealSourceType} style={{ fontSize: 14 }} />
+                                    <DropdownField
+                                        fieldKey="dealSourceType"
+                                        value={c.dealSourceType}
+                                        displayValue={c.dealSourceType}
+                                        options={dealSourceTypes.map(d => ({ value: d, label: d }))}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Deal Source Name</label>
-                                    <EditableField fieldKey="dealSourceName" value={source?.name || ''} style={{ fontSize: 14 }} />
+                                    <DropdownField
+                                        fieldKey="dealSourceNameId"
+                                        value={c.dealSourceNameId}
+                                        displayValue={source?.name || '—'}
+                                        options={dealSourceNames.map(d => ({ value: d.id, label: d.name }))}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Total Fund Raise</label>
@@ -236,7 +550,12 @@ export default function CompanyDetail() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Share Type</label>
-                                    <EditableField fieldKey="shareType" value={c.shareType} style={{ fontSize: 14 }} />
+                                    <DropdownField
+                                        fieldKey="shareType"
+                                        value={c.shareType}
+                                        displayValue={c.shareType}
+                                        options={shareTypes.map(s => ({ value: s, label: s }))}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Google Drive</label>
@@ -288,6 +607,7 @@ export default function CompanyDetail() {
                                     {c.customTags.map(tag => (
                                         <span key={tag} className="badge badge-neutral">{tag}</span>
                                     ))}
+                                    {c.customTags.length === 0 && <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No tags</span>}
                                 </div>
                             </div>
 
@@ -329,8 +649,27 @@ export default function CompanyDetail() {
                                     );
                                 })}
                                 <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                                    <input className="form-input" placeholder="Add a comment..." style={{ flex: 1 }} value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newComment.trim()) { addComment(c.id, newComment.trim()).then(cm => { if (cm) setComments(prev => [...prev, cm]); }); setNewComment(''); } }} />
-                                    <button className="btn btn-primary btn-sm" onClick={() => { if (newComment.trim()) { addComment(c.id, newComment.trim()).then(cm => { if (cm) setComments(prev => [...prev, cm]); }); setNewComment(''); } }}><Send size={14} /></button>
+                                    <input
+                                        className="form-input"
+                                        placeholder="Add a comment..."
+                                        style={{ flex: 1 }}
+                                        value={newComment}
+                                        onChange={e => setNewComment(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && newComment.trim()) {
+                                                addComment(c.id, newComment.trim()).then(cm => { if (cm) setComments(prev => [...prev, cm]); });
+                                                setNewComment('');
+                                            }
+                                        }}
+                                    />
+                                    <button className="btn btn-primary btn-sm" onClick={() => {
+                                        if (newComment.trim()) {
+                                            addComment(c.id, newComment.trim()).then(cm => { if (cm) setComments(prev => [...prev, cm]); });
+                                            setNewComment('');
+                                        }
+                                    }}>
+                                        <Send size={14} />
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -338,9 +677,36 @@ export default function CompanyDetail() {
 
                     {activeTab === 'ai' && (
                         <div>
+                            {/* AI Actions Row */}
+                            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+                                <button className="btn btn-secondary btn-sm" onClick={handleGenerateSummary} disabled={generatingSummary}>
+                                    {generatingSummary ? <><Loader2 size={12} className="spin" /> Summary...</> : <><Sparkles size={12} /> Quick Summary</>}
+                                </button>
+                                <button className="btn btn-secondary btn-sm" onClick={handleAnalyzeDeck} disabled={analyzingDeck}>
+                                    {analyzingDeck ? <><Loader2 size={12} className="spin" /> Analyzing...</> : <><FileSearch size={12} /> Deck Analysis</>}
+                                </button>
+                                <button className="btn btn-secondary btn-sm" onClick={handleGenerateBrief} disabled={generatingBrief}>
+                                    {generatingBrief ? <><Loader2 size={12} className="spin" /> Brief...</> : <><FileText size={12} /> Filter Brief</>}
+                                </button>
+                                <button className="btn btn-secondary btn-sm" onClick={handleGenerateMemo} disabled={generatingMemo}>
+                                    {generatingMemo ? <><Loader2 size={12} className="spin" /> Memo...</> : <><FileText size={12} /> IC Memo</>}
+                                </button>
+                            </div>
+
+                            {/* Quick Summary */}
+                            {c.quickSummary && (
+                                <div className="ai-card" style={{ marginBottom: 16 }}>
+                                    <div className="ai-card-header">
+                                        <div className="ai-card-icon"><Sparkles size={14} /></div>
+                                        <span className="ai-card-title">AI Quick Summary</span>
+                                    </div>
+                                    <div className="ai-card-body">{c.quickSummary}</div>
+                                </div>
+                            )}
+
                             {/* Deck Analysis */}
                             {c.deckAnalysis ? (
-                                <div className="ai-card">
+                                <div className="ai-card" style={{ marginBottom: 16 }}>
                                     <div className="ai-card-header">
                                         <div className="ai-card-icon"><Sparkles size={14} /></div>
                                         <span className="ai-card-title">Full Deck Analysis</span>
@@ -394,22 +760,18 @@ export default function CompanyDetail() {
                                         </div>
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="empty-state">
-                                    <div className="empty-state-icon"><Sparkles size={24} /></div>
-                                    <div className="empty-state-title">No AI Analysis Yet</div>
-                                    <div className="empty-state-text">AI deck analysis will be generated at the Initial Screening stage</div>
-                                    <button className="btn btn-primary" style={{ marginTop: 16 }}>
-                                        <Sparkles size={14} /> Generate Analysis
-                                    </button>
+                            ) : analyzingDeck ? (
+                                <div className="ai-card" style={{ marginBottom: 16, textAlign: 'center', padding: 40 }}>
+                                    <Loader2 size={24} className="spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                                    <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Analyzing deck with AI...</div>
                                 </div>
-                            )}
+                            ) : null}
 
                             {/* KPI Benchmarks */}
                             {c.kpiData && (
-                                <div className="ai-card" style={{ marginTop: 16 }}>
+                                <div className="ai-card" style={{ marginBottom: 16 }}>
                                     <div className="ai-card-header">
-                                        <div className="ai-card-icon"><Sparkles size={14} /></div>
+                                        <div className="ai-card-icon"><BarChart3 size={14} /></div>
                                         <span className="ai-card-title">KPI Benchmarking — {c.kpiData.businessModel}</span>
                                     </div>
                                     <table className="kpi-table">
@@ -441,24 +803,32 @@ export default function CompanyDetail() {
 
                             {/* Filter Brief */}
                             {c.filterBrief && (
-                                <div className="ai-card" style={{ marginTop: 16 }}>
+                                <div className="ai-card" style={{ marginBottom: 16 }}>
                                     <div className="ai-card-header">
-                                        <div className="ai-card-icon"><Sparkles size={14} /></div>
+                                        <div className="ai-card-icon"><FileText size={14} /></div>
                                         <span className="ai-card-title">Filter Discussion Brief</span>
                                     </div>
-                                    <div className="ai-card-body">{c.filterBrief}</div>
+                                    <div className="ai-card-body" style={{ whiteSpace: 'pre-wrap' }}>{c.filterBrief}</div>
                                 </div>
                             )}
 
                             {/* IC Memo */}
                             {c.icMemo && (
-                                <div className="ai-card" style={{ marginTop: 16 }}>
+                                <div className="ai-card" style={{ marginBottom: 16 }}>
                                     <div className="ai-card-header">
-                                        <div className="ai-card-icon"><Sparkles size={14} /></div>
+                                        <div className="ai-card-icon"><FileText size={14} /></div>
                                         <span className="ai-card-title">IC Memo</span>
                                     </div>
                                     <div className="ai-card-body" style={{ whiteSpace: 'pre-wrap' }}>{c.icMemo}</div>
-                                    <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }}>Export PDF</button>
+                                </div>
+                            )}
+
+                            {/* Empty state when no AI data at all */}
+                            {!c.quickSummary && !c.deckAnalysis && !c.kpiData && !c.filterBrief && !c.icMemo && !analyzingDeck && (
+                                <div className="empty-state">
+                                    <div className="empty-state-icon"><Sparkles size={24} /></div>
+                                    <div className="empty-state-title">No AI Analysis Yet</div>
+                                    <div className="empty-state-text">Use the buttons above to generate AI-powered analysis</div>
                                 </div>
                             )}
                         </div>
@@ -476,7 +846,11 @@ export default function CompanyDetail() {
                                                     {c.callTranscript.date} • {c.callTranscript.duration} • {c.callTranscript.platform}
                                                 </div>
                                             </div>
-                                            <button className="btn btn-secondary btn-sm">Play Recording</button>
+                                            {c.callTranscript.recordingUrl && (
+                                                <a href={c.callTranscript.recordingUrl} target="_blank" rel="noopener" className="btn btn-secondary btn-sm">
+                                                    Play Recording
+                                                </a>
+                                            )}
                                         </div>
                                     </div>
 
@@ -551,7 +925,7 @@ export default function CompanyDetail() {
                     )}
                 </div>
 
-                {/* ─── Sticky Action Bar ─── */}
+                {/* Sticky Action Bar */}
                 <div style={{
                     padding: '14px 24px',
                     borderTop: '1px solid var(--border)',
@@ -568,15 +942,12 @@ export default function CompanyDetail() {
                         onClick={handleAnalyzeDeck}
                         disabled={analyzingDeck}
                         style={{
-                            background: 'var(--primary)',
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
+                            background: 'var(--primary)', color: '#fff',
+                            display: 'flex', alignItems: 'center', gap: 6,
                             opacity: analyzingDeck ? 0.7 : 1,
                         }}
                     >
-                        <Sparkles size={14} />
+                        {analyzingDeck ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
                         {analyzingDeck ? 'Analyzing...' : 'Analyze Deck'}
                     </button>
 
@@ -585,15 +956,11 @@ export default function CompanyDetail() {
                         className="btn btn-sm"
                         onClick={() => setShowCalendarInvite(true)}
                         style={{
-                            background: '#06b6d4',
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
+                            background: '#06b6d4', color: '#fff',
+                            display: 'flex', alignItems: 'center', gap: 6,
                         }}
                     >
-                        <Phone size={14} />
-                        Schedule Call
+                        <Phone size={14} /> Schedule Call
                     </button>
 
                     {/* Send Email */}
@@ -601,61 +968,40 @@ export default function CompanyDetail() {
                         className="btn btn-sm"
                         onClick={() => setShowEmailCompose(true)}
                         style={{
-                            background: '#10b981',
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
+                            background: '#10b981', color: '#fff',
+                            display: 'flex', alignItems: 'center', gap: 6,
                         }}
                     >
-                        <Mail size={14} />
-                        Send Email
+                        <Mail size={14} /> Send Email
                     </button>
 
                     {/* Reject */}
                     <button
                         className="btn btn-danger btn-sm"
                         onClick={() => setShowRejectionFlow(true)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                     >
-                        <XCircle size={14} />
-                        Reject
+                        <XCircle size={14} /> Reject
                     </button>
 
-                    {/* Move Stage */}
+                    {/* Move Stage Dropdown */}
                     <div style={{ position: 'relative', marginLeft: 'auto' }}>
                         <button
                             className="btn btn-sm"
                             onClick={() => setShowMoveStageDropdown(!showMoveStageDropdown)}
                             style={{
-                                background: nextStage?.color || 'var(--primary)',
-                                color: '#fff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
+                                background: nextStage?.color || 'var(--primary)', color: '#fff',
+                                display: 'flex', alignItems: 'center', gap: 6,
                             }}
                         >
-                            <ArrowRight size={14} />
-                            Move Stage
-                            <ChevronDown size={12} />
+                            <ArrowRight size={14} /> Move Stage <ChevronDown size={12} />
                         </button>
                         {showMoveStageDropdown && (
                             <div style={{
-                                position: 'absolute',
-                                bottom: '100%',
-                                right: 0,
-                                marginBottom: 6,
-                                background: 'var(--bg-secondary)',
-                                border: '1px solid var(--border)',
-                                borderRadius: 'var(--radius-md)',
-                                boxShadow: 'var(--shadow-lg)',
-                                minWidth: 220,
-                                padding: '6px 0',
-                                zIndex: 10,
+                                position: 'absolute', bottom: '100%', right: 0, marginBottom: 6,
+                                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
+                                minWidth: 220, padding: '6px 0', zIndex: 10,
                             }}>
                                 <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                     Move to stage
@@ -665,17 +1011,9 @@ export default function CompanyDetail() {
                                         key={s.id}
                                         onClick={() => handleMoveStage(s.id)}
                                         style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 10,
-                                            width: '100%',
-                                            padding: '9px 14px',
-                                            background: 'none',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            fontSize: 13,
-                                            color: 'var(--text-primary)',
-                                            textAlign: 'left',
+                                            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                                            padding: '9px 14px', background: 'none', border: 'none',
+                                            cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left',
                                             transition: 'background 0.1s',
                                         }}
                                         onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
@@ -693,6 +1031,57 @@ export default function CompanyDetail() {
                     </div>
                 </div>
             </div>
+
+            {/* Resolve Terminal Status Modal */}
+            {showResolveModal && (
+                <div className="modal-overlay" onClick={() => setShowResolveModal(false)} style={{ zIndex: 1000 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                        <div className="modal-header">
+                            <div className="modal-title">Resolve Terminal Status</div>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setShowResolveModal(false)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                                This will clear the &quot;{c.terminalStatus}&quot; status and return the company to the pipeline. Select which stage to place it in:
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {pipelineStages.map(s => (
+                                    <div
+                                        key={s.id}
+                                        onClick={() => setResolveTargetStageId(s.id)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 10,
+                                            padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                                            cursor: 'pointer',
+                                            background: resolveTargetStageId === s.id ? `${s.color}15` : 'transparent',
+                                            border: resolveTargetStageId === s.id ? `1px solid ${s.color}` : '1px solid transparent',
+                                        }}
+                                    >
+                                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                                        <span style={{ fontSize: 13, fontWeight: resolveTargetStageId === s.id ? 600 : 400 }}>{s.name}</span>
+                                        {s.id === c.pipelineStageId && (
+                                            <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>current</span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowResolveModal(false)}>Cancel</button>
+                            <div style={{ flex: 1 }} />
+                            <button
+                                className="btn btn-primary"
+                                disabled={!resolveTargetStageId}
+                                onClick={handleResolveTerminal}
+                            >
+                                <RotateCcw size={14} /> Resolve &amp; Return to Pipeline
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import type {
     User, Company, PipelineStage, Industry, DealSourceName,
     RejectionReasonCategory, RejectionSubReason, Notification,
-    Comment, ActivityLog, UserRole,
+    Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
 } from '@/types/database';
 
 // ──────────────────────────────────────────────────
@@ -55,6 +55,8 @@ function mapCompany(r: any): Company {
         updatedAt: r.updated_at ?? '',
         slaDeadline: r.sla_deadline ?? null,
         isOverdue: r.is_overdue ?? false,
+        needsReview: r.needs_review ?? false,
+        ingestionSource: r.ingestion_source ?? null,
         quickSummary: r.quick_summary ?? null,
         deckAnalysis: r.deck_analysis ?? null,
         kpiData: r.kpi_data ?? null,
@@ -125,6 +127,7 @@ interface AppContextType {
     dealSourceNames: DealSourceName[];
     rejectionReasonCategories: RejectionReasonCategory[];
     notifications: Notification[];
+    savedViews: SavedView[];
 
     // Lookups
     getUserById: (id: string) => User | undefined;
@@ -140,6 +143,7 @@ interface AppContextType {
     // Async data
     fetchComments: (companyId: string) => Promise<Comment[]>;
     fetchActivity: (companyId: string) => Promise<ActivityLog[]>;
+    fetchEmailLogs: (companyId: string) => Promise<EmailLog[]>;
 
     // Mutations
     createCompany: (data: Record<string, unknown>) => Promise<Company | null>;
@@ -150,6 +154,21 @@ interface AppContextType {
     addComment: (companyId: string, text: string) => Promise<Comment | null>;
     rejectCompany: (companyId: string, reasons: { categoryId: string; subReasonIds: string[] }[], commMethod: string, emailDraft?: string, recipientEmail?: string) => Promise<void>;
     markNotificationsRead: () => Promise<void>;
+
+    // Terminal status mutations
+    setTerminalStatus: (companyId: string, status: TerminalStatus, reminderDate?: string) => Promise<void>;
+    resolveTerminalStatus: (companyId: string, targetStageId: string) => Promise<void>;
+
+    // AI generation mutations
+    generateAISummary: (companyId: string) => Promise<void>;
+    generateDeckAnalysis: (companyId: string) => Promise<void>;
+    generateFilterBrief: (companyId: string) => Promise<void>;
+    generateICMemo: (companyId: string) => Promise<void>;
+
+    // Saved views CRUD
+    fetchSavedViews: () => Promise<void>;
+    saveSavedView: (name: string, filters: Record<string, string[]>) => Promise<void>;
+    deleteSavedView: (id: string) => Promise<void>;
 
     // Settings CRUD
     addPipelineStage: (name: string, color: string, description: string) => Promise<void>;
@@ -167,6 +186,10 @@ interface AppContextType {
     updateSubReason: (id: string, name: string) => Promise<void>;
     deleteSubReason: (id: string) => Promise<void>;
     inviteUser: (email: string, role: UserRole) => Promise<void>;
+
+    // Email ingestion
+    syncEmails: () => Promise<{ processed: number; skipped: number; created: { companyName: string; companyId: string }[]; errors?: string[] } | null>;
+    approveCompany: (companyId: string) => Promise<void>;
 
     // Refresh
     refreshData: () => Promise<void>;
@@ -215,6 +238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [dealSourceNames, setDealSourceNames] = useState<DealSourceName[]>([]);
     const [rejectionReasonCategories, setRejectionReasonCategories] = useState<RejectionReasonCategory[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [savedViews, setSavedViews] = useState<SavedView[]>([]);
 
     // UI state
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -228,53 +252,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
     const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
 
-    // ─── Fetch All Org Data ─────────────────────────
-    const fetchAllData = useCallback(async (userId: string) => {
-        const [
-            { data: companiesData, error: e1 },
-            { data: stagesData, error: e2 },
-            { data: industriesData, error: e3 },
-            { data: sourcesData, error: e4 },
-            { data: categoriesData, error: e5 },
-            { data: subReasonsData, error: e6 },
-            { data: notifsData, error: e7 },
-            { data: profilesData, error: e8 },
-        ] = await Promise.all([
-            supabase.from('companies').select('*').order('created_at', { ascending: false }),
-            supabase.from('pipeline_stages').select('*').order('order'),
-            supabase.from('industries').select('*').order('name'),
-            supabase.from('deal_source_names').select('*').order('name'),
-            supabase.from('rejection_reason_categories').select('*').order('name'),
-            supabase.from('rejection_sub_reasons').select('*'),
-            supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
-            supabase.from('profiles').select('*'),
-        ]);
-
-        const errors = { companies: e1, stages: e2, industries: e3, sources: e4, categories: e5, subReasons: e6, notifications: e7, profiles: e8 };
-        const anyError = Object.entries(errors).find(([, e]) => e);
-        if (anyError) console.error('[fetchAllData] Supabase errors:', errors);
-
-        setCompanies((companiesData || []).map(mapCompany));
-        setPipelineStages((stagesData || []).map(mapStage));
-        setIndustries((industriesData || []).map((r: any) => ({ id: r.id, name: r.name })));
-        setDealSourceNames((sourcesData || []).map((r: any) => ({ id: r.id, name: r.name })));
-        setNotifications((notifsData || []).map(mapNotification));
-        setUsers((profilesData || []).map(mapUser));
-
-        // Build rejection categories with sub-reasons
-        const cats: RejectionReasonCategory[] = (categoriesData || []).map((cat: any) => ({
-            id: cat.id,
-            name: cat.name,
-            subReasons: (subReasonsData || [])
-                .filter((sr: any) => sr.category_id === cat.id)
-                .map((sr: any): RejectionSubReason => ({
-                    id: sr.id,
-                    name: sr.name,
-                    categoryId: sr.category_id,
-                })),
-        }));
-        setRejectionReasonCategories(cats);
+    // ─── Helper: get access token ─────────────────
+    const getToken = useCallback(async (): Promise<string | null> => {
+        const { data: { session } } = await supabase.auth.getSession();
+        return session?.access_token ?? null;
     }, [supabase]);
+
+    // ─── Helper: call /api/db (service-role proxy) ──
+    const apiDb = useCallback(async (body: Record<string, unknown>): Promise<{ data: any; error: string | null }> => {
+        try {
+            const token = await getToken();
+            if (!token) return { data: null, error: 'No auth token' };
+            const res = await fetch('/api/db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify(body),
+            });
+            const json = await res.json();
+            if (!res.ok) return { data: null, error: json.error || `HTTP ${res.status}` };
+            return { data: json.data, error: null };
+        } catch (err) {
+            return { data: null, error: (err as Error).message };
+        }
+    }, [getToken]);
+
+    // ─── Fetch All Org Data ─────────────────────────
+    const fetchAllData = useCallback(async (_userId: string) => {
+        try {
+            const token = await getToken();
+            if (!token) { console.error('[fetchAllData] No auth token'); return; }
+
+            const res = await fetch('/api/data', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) { console.error('[fetchAllData] API error:', res.status); return; }
+            const json = await res.json();
+
+            setCompanies((json.companies || []).map(mapCompany));
+            setPipelineStages((json.stages || []).map(mapStage));
+            setIndustries((json.industries || []).map((r: any) => ({ id: r.id, name: r.name })));
+            setDealSourceNames((json.sources || []).map((r: any) => ({ id: r.id, name: r.name })));
+            setNotifications((json.notifications || []).map(mapNotification));
+            setUsers((json.profiles || []).map(mapUser));
+            setSavedViews((json.savedViews || []).map((r: any): SavedView => ({
+                id: r.id, name: r.name, filters: r.filters ?? {}, createdAt: r.created_at,
+            })));
+
+            // Build rejection categories with sub-reasons
+            const cats: RejectionReasonCategory[] = (json.categories || []).map((cat: any) => ({
+                id: cat.id,
+                name: cat.name,
+                subReasons: (json.subReasons || [])
+                    .filter((sr: any) => sr.category_id === cat.id)
+                    .map((sr: any): RejectionSubReason => ({
+                        id: sr.id,
+                        name: sr.name,
+                        categoryId: sr.category_id,
+                    })),
+            }));
+            setRejectionReasonCategories(cats);
+        } catch (err) {
+            console.error('[fetchAllData] error:', err);
+        }
+    }, [getToken]);
 
     // ─── Auth Init ──────────────────────────────────
     useEffect(() => {
@@ -340,6 +380,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         setRejectionReasonCategories([]);
                         setNotifications([]);
                         setUsers([]);
+                        setSavedViews([]);
                     }
                 } else if (event === 'SIGNED_IN' && session?.user) {
                     // Profile is created/updated server-side in the auth callback.
@@ -383,7 +424,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 }
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_stages' }, () => {
-                supabase.from('pipeline_stages').select('*').order('order').then(({ data }) => {
+                apiDb({
+                    table: 'pipeline_stages', operation: 'select',
+                    order: { column: 'order', ascending: true },
+                }).then(({ data }) => {
                     if (data) setPipelineStages(data.map(mapStage));
                 });
             })
@@ -392,7 +436,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [user, supabase]);
+    }, [user, supabase, apiDb]);
 
     // ─── Lookups ────────────────────────────────────
     const getUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
@@ -405,20 +449,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // ─── Async data fetchers ────────────────────────
     const fetchComments = useCallback(async (companyId: string): Promise<Comment[]> => {
-        const { data } = await supabase
-            .from('comments').select('*')
-            .eq('company_id', companyId)
-            .order('created_at');
+        const { data } = await apiDb({
+            table: 'comments', operation: 'select',
+            filter: [{ column: 'company_id', op: 'eq', value: companyId }],
+            order: { column: 'created_at', ascending: true },
+        });
         return (data || []).map(mapComment);
-    }, [supabase]);
+    }, [apiDb]);
 
     const fetchActivity = useCallback(async (companyId: string): Promise<ActivityLog[]> => {
-        const { data } = await supabase
-            .from('activity_logs').select('*')
-            .eq('company_id', companyId)
-            .order('created_at', { ascending: false });
+        const { data } = await apiDb({
+            table: 'activity_logs', operation: 'select',
+            filter: [{ column: 'company_id', op: 'eq', value: companyId }],
+            order: { column: 'created_at', ascending: false },
+        });
         return (data || []).map(mapActivity);
-    }, [supabase]);
+    }, [apiDb]);
+
+    const fetchEmailLogs = useCallback(async (companyId: string): Promise<EmailLog[]> => {
+        const { data } = await apiDb({
+            table: 'email_logs', operation: 'select',
+            filter: [{ column: 'company_id', op: 'eq', value: companyId }],
+            order: { column: 'created_at', ascending: false },
+        });
+        return (data || []).map((r: any): EmailLog => ({
+            id: r.id,
+            companyId: r.company_id ?? null,
+            senderId: r.sender_id ?? null,
+            recipientEmail: r.recipient_email ?? '',
+            subject: r.subject ?? '',
+            body: r.body ?? '',
+            emailType: r.email_type ?? '',
+            createdAt: r.created_at ?? '',
+        }));
+    }, [apiDb]);
 
     // ─── Sign Out ───────────────────────────────────
     const signOut = useCallback(async () => {
@@ -436,37 +500,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // ──────────────────────────────────────────────────
 
     const createCompany = useCallback(async (data: Record<string, unknown>): Promise<Company | null> => {
-        const { data: row, error } = await supabase.from('companies').insert({
-            organization_id: ORGANIZATION_ID,
-            company_name: data.companyName,
-            founder_name: data.founderName,
-            founder_email: data.founderEmail || '',
-            analyst_id: data.analystId || null,
-            company_round: data.companyRound || 'Seed',
-            pipeline_stage_id: data.pipelineStageId,
-            priority_level: data.priorityLevel || 'Medium',
-            deal_source_type: data.dealSourceType || 'Founder Network',
-            deal_source_name_id: data.dealSourceNameId || null,
-            industry_id: data.industryId || null,
-            sub_industry: data.subIndustry || '',
-            share_type: data.shareType || 'Primary',
-            total_fund_raise: data.totalFundRaise || null,
-            valuation: data.valuation || null,
-            google_drive_link: data.googleDriveLink || '',
-            custom_tags: data.customTags || [],
-            sla_deadline: data.slaDeadline || null,
-        }).select().single();
+        const { data: row, error } = await apiDb({
+            table: 'companies', operation: 'insert',
+            data: {
+                organization_id: ORGANIZATION_ID,
+                company_name: data.companyName,
+                founder_name: data.founderName,
+                founder_email: data.founderEmail || '',
+                analyst_id: data.analystId || null,
+                company_round: data.companyRound || 'Seed',
+                pipeline_stage_id: data.pipelineStageId,
+                priority_level: data.priorityLevel || 'Medium',
+                deal_source_type: data.dealSourceType || 'Founder Network',
+                deal_source_name_id: data.dealSourceNameId || null,
+                industry_id: data.industryId || null,
+                sub_industry: data.subIndustry || '',
+                share_type: data.shareType || 'Primary',
+                total_fund_raise: data.totalFundRaise || null,
+                valuation: data.valuation || null,
+                google_drive_link: data.googleDriveLink || '',
+                custom_tags: data.customTags || [],
+                sla_deadline: data.slaDeadline || null,
+                linked_previous_entry_id: data.linkedPreviousEntryId || null,
+            },
+        });
 
         if (error) { console.error('Create company error:', error); return null; }
         const company = mapCompany(row);
+        setCompanies(prev => [...prev, company]);
 
-        if (user) await supabase.from('activity_logs').insert({
-            company_id: company.id, user_id: user.id,
-            action: 'created', details: `Added ${company.companyName} to pipeline`,
-        });
+        if (user) {
+            await apiDb({
+                table: 'activity_logs', operation: 'insert',
+                data: {
+                    company_id: company.id, user_id: user.id,
+                    action: 'created', details: `Added ${company.companyName} to pipeline`,
+                },
+            });
+
+            // Notify all users about new company entering pipeline
+            const notifInserts = users
+                .filter(u => u.id !== user.id)
+                .map(u => ({
+                    user_id: u.id, type: 'new_company' as const,
+                    title: 'New Company',
+                    message: `${company.companyName} has been added to the pipeline`,
+                    company_id: company.id,
+                }));
+            if (notifInserts.length > 0) {
+                await apiDb({ table: 'notifications', operation: 'insert', data: notifInserts });
+            }
+        }
 
         return company;
-    }, [supabase, user]);
+    }, [apiDb, user, users]);
 
     const updateCompany = useCallback(async (id: string, data: Record<string, unknown>) => {
         const dbData: Record<string, unknown> = {};
@@ -480,19 +567,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
             terminalStatus: 'terminal_status', slaDeadline: 'sla_deadline', isOverdue: 'is_overdue',
             quickSummary: 'quick_summary', deckAnalysis: 'deck_analysis', kpiData: 'kpi_data',
             callTranscript: 'call_transcript', filterBrief: 'filter_brief', icMemo: 'ic_memo',
+            linkedPreviousEntryId: 'linked_previous_entry_id',
+            needsReview: 'needs_review', ingestionSource: 'ingestion_source',
         };
         for (const [key, val] of Object.entries(data)) {
             const dbKey = fieldMap[key] || key;
             dbData[dbKey] = val;
         }
-        const { error } = await supabase.from('companies').update(dbData).eq('id', id);
-        if (error) console.error('Update company error:', error);
-    }, [supabase]);
+        const { data: rows, error } = await apiDb({ table: 'companies', operation: 'update', data: dbData, match: { id } });
+        if (error) { console.error('Update company error:', error); return; }
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        if (row) {
+            const updated = mapCompany(row);
+            setCompanies(prev => prev.map(c => c.id === id ? updated : c));
+        } else {
+            // Fallback: apply changes locally from the input data
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
+        }
+    }, [apiDb]);
 
     const deleteCompany = useCallback(async (id: string) => {
-        const { error } = await supabase.from('companies').delete().eq('id', id);
-        if (error) console.error('Delete company error:', error);
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'companies', operation: 'delete', match: { id } });
+        if (error) { console.error('Delete company error:', error); return; }
+        setCompanies(prev => prev.filter(c => c.id !== id));
+    }, [apiDb]);
 
     const moveCompanyStage = useCallback(async (companyId: string, targetStageId: string) => {
         if (!user) return;
@@ -501,42 +599,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const fromStageId = company.pipelineStageId;
         const toStage = pipelineStages.find(s => s.id === targetStageId);
 
-        await supabase.from('companies').update({ pipeline_stage_id: targetStageId }).eq('id', companyId);
-        await supabase.from('activity_logs').insert({
-            company_id: companyId, user_id: user.id,
-            action: 'stage_change', details: `Moved to ${toStage?.name || 'unknown'}`,
-            from_stage_id: fromStageId, to_stage_id: targetStageId,
+        await apiDb({ table: 'companies', operation: 'update', data: { pipeline_stage_id: targetStageId }, match: { id: companyId } });
+        setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, pipelineStageId: targetStageId } : c));
+        await apiDb({
+            table: 'activity_logs', operation: 'insert',
+            data: {
+                company_id: companyId, user_id: user.id,
+                action: 'stage_change', details: `Moved to ${toStage?.name || 'unknown'}`,
+                from_stage_id: fromStageId, to_stage_id: targetStageId,
+            },
         });
-    }, [supabase, user, companies, pipelineStages]);
+
+        // Notify the assigned analyst about stage change
+        if (company.analystId && company.analystId !== user.id) {
+            await apiDb({
+                table: 'notifications', operation: 'insert',
+                data: {
+                    user_id: company.analystId, type: 'stage_change',
+                    title: 'Stage Changed',
+                    message: `${company.companyName} moved to ${toStage?.name || 'unknown'}`,
+                    company_id: companyId,
+                },
+            });
+        }
+    }, [apiDb, user, companies, pipelineStages]);
 
     const assignAnalyst = useCallback(async (companyId: string, analystId: string | null) => {
         if (!user) return;
-        await supabase.from('companies').update({ analyst_id: analystId }).eq('id', companyId);
+        await apiDb({ table: 'companies', operation: 'update', data: { analyst_id: analystId }, match: { id: companyId } });
         const analyst = users.find(u => u.id === analystId);
-        await supabase.from('activity_logs').insert({
-            company_id: companyId, user_id: user.id,
-            action: 'assigned',
-            details: analystId ? `Assigned to ${analyst?.name || 'analyst'}` : 'Unassigned',
+        await apiDb({
+            table: 'activity_logs', operation: 'insert',
+            data: {
+                company_id: companyId, user_id: user.id,
+                action: 'assigned',
+                details: analystId ? `Assigned to ${analyst?.name || 'analyst'}` : 'Unassigned',
+            },
         });
         if (analystId) {
             const company = companies.find(c => c.id === companyId);
-            await supabase.from('notifications').insert({
-                user_id: analystId, type: 'assignment',
-                title: 'New Assignment',
-                message: `${company?.companyName || 'A company'} has been assigned to you`,
-                company_id: companyId,
+            await apiDb({
+                table: 'notifications', operation: 'insert',
+                data: {
+                    user_id: analystId, type: 'assignment',
+                    title: 'New Assignment',
+                    message: `${company?.companyName || 'A company'} has been assigned to you`,
+                    company_id: companyId,
+                },
             });
         }
-    }, [supabase, user, users, companies]);
+    }, [apiDb, user, users, companies]);
 
     const addComment = useCallback(async (companyId: string, text: string): Promise<Comment | null> => {
         if (!user) return null;
-        const { data, error } = await supabase.from('comments').insert({
-            company_id: companyId, author_id: user.id, text,
-        }).select().single();
+        const { data, error } = await apiDb({
+            table: 'comments', operation: 'insert',
+            data: { company_id: companyId, author_id: user.id, text },
+        });
         if (error) { console.error('Add comment error:', error); return null; }
+
+        // Notify the assigned analyst about new comment
+        const company = companies.find(c => c.id === companyId);
+        if (company?.analystId && company.analystId !== user.id) {
+            await apiDb({
+                table: 'notifications', operation: 'insert',
+                data: {
+                    user_id: company.analystId, type: 'comment',
+                    title: 'New Comment',
+                    message: `New comment on ${company.companyName}`,
+                    company_id: companyId,
+                },
+            });
+        }
+
         return mapComment(data);
-    }, [supabase, user]);
+    }, [apiDb, user, companies]);
 
     const rejectCompany = useCallback(async (
         companyId: string,
@@ -547,127 +684,330 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const company = companies.find(c => c.id === companyId);
         if (!company) return;
 
-        await supabase.from('companies').update({ terminal_status: 'Rejected' }).eq('id', companyId);
-        await supabase.from('rejection_records').insert({
-            company_id: companyId, reasons,
-            rejection_stage_id: company.pipelineStageId,
-            communication_method: commMethod,
-            rejection_email_recipient: recipientEmail || '',
-            rejection_email_draft: emailDraft || '',
-            rejection_email_sent: commMethod === 'Email' && !!emailDraft,
+        await apiDb({ table: 'companies', operation: 'update', data: { terminal_status: 'Rejected' }, match: { id: companyId } });
+        await apiDb({
+            table: 'rejection_records', operation: 'insert',
+            data: {
+                company_id: companyId, reasons,
+                rejection_stage_id: company.pipelineStageId,
+                communication_method: commMethod,
+                rejection_email_recipient: recipientEmail || '',
+                rejection_email_draft: emailDraft || '',
+                rejection_email_sent: commMethod === 'Email' && !!emailDraft,
+            },
         });
-        await supabase.from('activity_logs').insert({
-            company_id: companyId, user_id: user.id,
-            action: 'rejected',
-            details: `Rejected at ${pipelineStages.find(s => s.id === company.pipelineStageId)?.name || 'current stage'}`,
+        await apiDb({
+            table: 'activity_logs', operation: 'insert',
+            data: {
+                company_id: companyId, user_id: user.id,
+                action: 'rejected',
+                details: `Rejected at ${pipelineStages.find(s => s.id === company.pipelineStageId)?.name || 'current stage'}`,
+            },
         });
-    }, [supabase, user, companies, pipelineStages]);
+    }, [apiDb, user, companies, pipelineStages]);
 
     const markNotificationsRead = useCallback(async () => {
         if (!user) return;
         const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
         if (unreadIds.length === 0) return;
-        await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
+        // Update each notification individually since apiDb doesn't support .in()
+        await Promise.all(unreadIds.map(id =>
+            apiDb({ table: 'notifications', operation: 'update', data: { read: true }, match: { id } })
+        ));
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    }, [supabase, user, notifications]);
+    }, [apiDb, user, notifications]);
+
+    // ─── Terminal Status Mutations ──────────────────
+
+    const setTerminalStatus = useCallback(async (companyId: string, status: TerminalStatus, reminderDate?: string) => {
+        if (!user) return;
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+
+        const updatePayload: Record<string, unknown> = { terminal_status: status };
+        if ((status === 'Awaiting Response' || status === 'Blocker') && reminderDate) {
+            updatePayload.sla_deadline = reminderDate;
+        }
+
+        const { error } = await apiDb({ table: 'companies', operation: 'update', data: updatePayload, match: { id: companyId } });
+        if (error) { console.error('setTerminalStatus error:', error); return; }
+
+        await apiDb({
+            table: 'activity_logs', operation: 'insert',
+            data: {
+                company_id: companyId, user_id: user.id,
+                action: 'terminal_status_set',
+                details: `Set terminal status to ${status}`,
+            },
+        });
+
+        // For Portfolio: notify all analysts
+        if (status === 'Portfolio') {
+            const notifInserts = users
+                .filter(u => u.id !== user.id)
+                .map(u => ({
+                    user_id: u.id, type: 'stage_change' as const,
+                    title: 'Portfolio Company',
+                    message: `${company.companyName} has been marked as Portfolio`,
+                    company_id: companyId,
+                }));
+            if (notifInserts.length > 0) {
+                await apiDb({ table: 'notifications', operation: 'insert', data: notifInserts });
+            }
+        }
+    }, [apiDb, user, companies, users]);
+
+    const resolveTerminalStatus = useCallback(async (companyId: string, targetStageId: string) => {
+        if (!user) return;
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+        const toStage = pipelineStages.find(s => s.id === targetStageId);
+
+        const { error } = await apiDb({
+            table: 'companies', operation: 'update',
+            data: { terminal_status: null, pipeline_stage_id: targetStageId },
+            match: { id: companyId },
+        });
+        if (error) { console.error('resolveTerminalStatus error:', error); return; }
+
+        await apiDb({
+            table: 'activity_logs', operation: 'insert',
+            data: {
+                company_id: companyId, user_id: user.id,
+                action: 'terminal_status_resolved',
+                details: `Resolved terminal status, returned to ${toStage?.name || 'pipeline'}`,
+                from_stage_id: company.pipelineStageId,
+                to_stage_id: targetStageId,
+            },
+        });
+    }, [apiDb, user, companies, pipelineStages]);
+
+    // ─── AI Generation Mutations ────────────────────
+
+    const generateAISummary = useCallback(async (companyId: string) => {
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+        const ind = industries.find(i => i.id === company.industryId);
+        const res = await fetch('/api/ai/quick-summary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyName: company.companyName, founderName: company.founderName,
+                industry: ind?.name, subIndustry: company.subIndustry,
+                companyRound: company.companyRound, totalFundRaise: company.totalFundRaise,
+                valuation: company.valuation, dealSourceType: company.dealSourceType,
+            }),
+        });
+        if (!res.ok) { console.error('generateAISummary error:', await res.text()); return; }
+        const { summary } = await res.json();
+        await apiDb({ table: 'companies', operation: 'update', data: { quick_summary: summary }, match: { id: companyId } });
+    }, [apiDb, companies, industries]);
+
+    const generateDeckAnalysis = useCallback(async (companyId: string) => {
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+        const ind = industries.find(i => i.id === company.industryId);
+        const res = await fetch('/api/ai/deck-analysis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyName: company.companyName, founderName: company.founderName,
+                industry: ind?.name, subIndustry: company.subIndustry,
+                companyRound: company.companyRound, totalFundRaise: company.totalFundRaise,
+                valuation: company.valuation, quickSummary: company.quickSummary,
+                googleDriveLink: company.googleDriveLink,
+            }),
+        });
+        if (!res.ok) { console.error('generateDeckAnalysis error:', await res.text()); return; }
+        const { analysis } = await res.json();
+        await apiDb({ table: 'companies', operation: 'update', data: { deck_analysis: analysis }, match: { id: companyId } });
+    }, [apiDb, companies, industries]);
+
+    const generateFilterBrief = useCallback(async (companyId: string) => {
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+        const ind = industries.find(i => i.id === company.industryId);
+        const res = await fetch('/api/ai/filter-brief', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyName: company.companyName, founderName: company.founderName,
+                industry: ind?.name, companyRound: company.companyRound,
+                totalFundRaise: company.totalFundRaise, valuation: company.valuation,
+                quickSummary: company.quickSummary, deckAnalysis: company.deckAnalysis,
+                kpiData: company.kpiData, callTranscript: company.callTranscript,
+            }),
+        });
+        if (!res.ok) { console.error('generateFilterBrief error:', await res.text()); return; }
+        const { brief } = await res.json();
+        await apiDb({ table: 'companies', operation: 'update', data: { filter_brief: brief }, match: { id: companyId } });
+    }, [apiDb, companies, industries]);
+
+    const generateICMemo = useCallback(async (companyId: string) => {
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+        const ind = industries.find(i => i.id === company.industryId);
+        const res = await fetch('/api/ai/ic-memo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyName: company.companyName, founderName: company.founderName,
+                industry: ind?.name, subIndustry: company.subIndustry,
+                companyRound: company.companyRound, totalFundRaise: company.totalFundRaise,
+                valuation: company.valuation, shareType: company.shareType,
+                quickSummary: company.quickSummary, deckAnalysis: company.deckAnalysis,
+                kpiData: company.kpiData, callTranscript: company.callTranscript,
+                filterBrief: company.filterBrief,
+            }),
+        });
+        if (!res.ok) { console.error('generateICMemo error:', await res.text()); return; }
+        const { memo } = await res.json();
+        await apiDb({ table: 'companies', operation: 'update', data: { ic_memo: memo }, match: { id: companyId } });
+    }, [apiDb, companies, industries]);
+
+    // ─── Saved Views CRUD ───────────────────────────
+
+    const fetchSavedViews = useCallback(async () => {
+        const { data, error } = await apiDb({
+            table: 'saved_views', operation: 'select',
+            order: { column: 'created_at', ascending: false },
+        });
+        if (error) { console.error('fetchSavedViews error:', error); return; }
+        setSavedViews((data || []).map((r: any): SavedView => ({
+            id: r.id, name: r.name, filters: r.filters ?? {}, createdAt: r.created_at,
+        })));
+    }, [apiDb]);
+
+    const saveSavedView = useCallback(async (name: string, filters: Record<string, string[]>) => {
+        if (!user) return;
+        const { data, error } = await apiDb({
+            table: 'saved_views', operation: 'insert',
+            data: { name, filters, user_id: user.id },
+        });
+        if (error) { console.error('saveSavedView error:', error); return; }
+        if (data) {
+            const view: SavedView = { id: data.id, name: data.name, filters: data.filters ?? {}, createdAt: data.created_at };
+            setSavedViews(prev => [view, ...prev]);
+        }
+    }, [apiDb, user]);
+
+    const deleteSavedView = useCallback(async (id: string) => {
+        const { error } = await apiDb({ table: 'saved_views', operation: 'delete', match: { id } });
+        if (error) { console.error('deleteSavedView error:', error); return; }
+        setSavedViews(prev => prev.filter(v => v.id !== id));
+    }, [apiDb]);
 
     // ─── Settings CRUD ──────────────────────────────
 
     const addPipelineStage = useCallback(async (name: string, color: string, description: string) => {
         const maxOrder = pipelineStages.reduce((max, s) => Math.max(max, s.order), 0);
-        const { data, error } = await supabase.from('pipeline_stages').insert({
-            organization_id: ORGANIZATION_ID, name, color, description, order: maxOrder + 1,
-        }).select().single();
-        if (!error && data) setPipelineStages(prev => [...prev, mapStage(data)]);
-    }, [supabase, user, pipelineStages]);
+        const { data, error } = await apiDb({
+            table: 'pipeline_stages', operation: 'insert',
+            data: { organization_id: ORGANIZATION_ID, name, color, description, order: maxOrder + 1 },
+        });
+        if (error) { console.error('addPipelineStage error:', error); return; }
+        if (data) setPipelineStages(prev => [...prev, mapStage(data)]);
+    }, [apiDb, pipelineStages]);
 
     const updatePipelineStage = useCallback(async (id: string, data: { name?: string; color?: string; description?: string }) => {
-        const { error } = await supabase.from('pipeline_stages').update(data).eq('id', id);
-        if (!error) setPipelineStages(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'pipeline_stages', operation: 'update', data, match: { id } });
+        if (error) { console.error('updatePipelineStage error:', error); return; }
+        setPipelineStages(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+    }, [apiDb]);
 
     const deletePipelineStage = useCallback(async (id: string) => {
-        const { error } = await supabase.from('pipeline_stages').delete().eq('id', id);
-        if (!error) setPipelineStages(prev => prev.filter(s => s.id !== id));
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'pipeline_stages', operation: 'delete', match: { id } });
+        if (error) { console.error('deletePipelineStage error:', error); return; }
+        setPipelineStages(prev => prev.filter(s => s.id !== id));
+    }, [apiDb]);
 
     const addIndustry = useCallback(async (name: string) => {
-        const { data, error } = await supabase.from('industries').insert({
-            organization_id: ORGANIZATION_ID, name,
-        }).select().single();
-        if (!error && data) setIndustries(prev => [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
-    }, [supabase, user]);
+        const { data, error } = await apiDb({
+            table: 'industries', operation: 'insert',
+            data: { organization_id: ORGANIZATION_ID, name },
+        });
+        if (error) { console.error('addIndustry error:', error); return; }
+        if (data) setIndustries(prev => [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+    }, [apiDb]);
 
     const updateIndustry = useCallback(async (id: string, name: string) => {
-        const { error } = await supabase.from('industries').update({ name }).eq('id', id);
-        if (!error) setIndustries(prev => prev.map(i => i.id === id ? { ...i, name } : i));
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'industries', operation: 'update', data: { name }, match: { id } });
+        if (error) { console.error('updateIndustry error:', error); return; }
+        setIndustries(prev => prev.map(i => i.id === id ? { ...i, name } : i));
+    }, [apiDb]);
 
     const deleteIndustry = useCallback(async (id: string) => {
-        const { error } = await supabase.from('industries').delete().eq('id', id);
-        if (!error) setIndustries(prev => prev.filter(i => i.id !== id));
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'industries', operation: 'delete', match: { id } });
+        if (error) { console.error('deleteIndustry error:', error); return; }
+        setIndustries(prev => prev.filter(i => i.id !== id));
+    }, [apiDb]);
 
     const addDealSourceName = useCallback(async (name: string) => {
-        const { data, error } = await supabase.from('deal_source_names').insert({
-            organization_id: ORGANIZATION_ID, name,
-        }).select().single();
-        if (!error && data) setDealSourceNames(prev => [...prev, { id: data.id, name: data.name }]);
-    }, [supabase, user]);
+        const { data, error } = await apiDb({
+            table: 'deal_source_names', operation: 'insert',
+            data: { organization_id: ORGANIZATION_ID, name },
+        });
+        if (error) { console.error('addDealSourceName error:', error); return; }
+        if (data) setDealSourceNames(prev => [...prev, { id: data.id, name: data.name }]);
+    }, [apiDb]);
 
     const updateDealSourceName = useCallback(async (id: string, name: string) => {
-        const { error } = await supabase.from('deal_source_names').update({ name }).eq('id', id);
-        if (!error) setDealSourceNames(prev => prev.map(d => d.id === id ? { ...d, name } : d));
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'deal_source_names', operation: 'update', data: { name }, match: { id } });
+        if (error) { console.error('updateDealSourceName error:', error); return; }
+        setDealSourceNames(prev => prev.map(d => d.id === id ? { ...d, name } : d));
+    }, [apiDb]);
 
     const deleteDealSourceName = useCallback(async (id: string) => {
-        const { error } = await supabase.from('deal_source_names').delete().eq('id', id);
-        if (!error) setDealSourceNames(prev => prev.filter(d => d.id !== id));
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'deal_source_names', operation: 'delete', match: { id } });
+        if (error) { console.error('deleteDealSourceName error:', error); return; }
+        setDealSourceNames(prev => prev.filter(d => d.id !== id));
+    }, [apiDb]);
 
     const addRejectionCategory = useCallback(async (name: string) => {
-        const { data, error } = await supabase.from('rejection_reason_categories').insert({
-            organization_id: ORGANIZATION_ID, name,
-        }).select().single();
-        if (!error && data) setRejectionReasonCategories(prev => [...prev, { id: data.id, name: data.name, subReasons: [] }]);
-    }, [supabase, user]);
+        const { data, error } = await apiDb({
+            table: 'rejection_reason_categories', operation: 'insert',
+            data: { organization_id: ORGANIZATION_ID, name },
+        });
+        if (error) { console.error('addRejectionCategory error:', error); return; }
+        if (data) setRejectionReasonCategories(prev => [...prev, { id: data.id, name: data.name, subReasons: [] }]);
+    }, [apiDb]);
 
     const deleteRejectionCategory = useCallback(async (id: string) => {
-        // Sub-reasons are deleted first (or rely on DB cascade)
-        await supabase.from('rejection_sub_reasons').delete().eq('category_id', id);
-        const { error } = await supabase.from('rejection_reason_categories').delete().eq('id', id);
-        if (!error) setRejectionReasonCategories(prev => prev.filter(cat => cat.id !== id));
-    }, [supabase]);
+        await apiDb({ table: 'rejection_sub_reasons', operation: 'delete', match: { category_id: id } });
+        const { error } = await apiDb({ table: 'rejection_reason_categories', operation: 'delete', match: { id } });
+        if (error) { console.error('deleteRejectionCategory error:', error); return; }
+        setRejectionReasonCategories(prev => prev.filter(cat => cat.id !== id));
+    }, [apiDb]);
 
     const addSubReason = useCallback(async (categoryId: string, name: string) => {
-        const { data, error } = await supabase.from('rejection_sub_reasons').insert({
-            category_id: categoryId, name,
-        }).select().single();
-        if (!error && data) {
+        const { data, error } = await apiDb({
+            table: 'rejection_sub_reasons', operation: 'insert',
+            data: { category_id: categoryId, name },
+        });
+        if (error) { console.error('addSubReason error:', error); return; }
+        if (data) {
             const sr: RejectionSubReason = { id: data.id, name: data.name, categoryId: data.category_id };
             setRejectionReasonCategories(prev =>
                 prev.map(cat => cat.id === categoryId ? { ...cat, subReasons: [...cat.subReasons, sr] } : cat)
             );
         }
-    }, [supabase]);
+    }, [apiDb]);
 
     const updateSubReason = useCallback(async (id: string, name: string) => {
-        const { error } = await supabase.from('rejection_sub_reasons').update({ name }).eq('id', id);
-        if (!error) {
-            setRejectionReasonCategories(prev =>
-                prev.map(cat => ({ ...cat, subReasons: cat.subReasons.map(sr => sr.id === id ? { ...sr, name } : sr) }))
-            );
-        }
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'rejection_sub_reasons', operation: 'update', data: { name }, match: { id } });
+        if (error) { console.error('updateSubReason error:', error); return; }
+        setRejectionReasonCategories(prev =>
+            prev.map(cat => ({ ...cat, subReasons: cat.subReasons.map(sr => sr.id === id ? { ...sr, name } : sr) }))
+        );
+    }, [apiDb]);
 
     const deleteSubReason = useCallback(async (id: string) => {
-        const { error } = await supabase.from('rejection_sub_reasons').delete().eq('id', id);
-        if (!error) {
-            setRejectionReasonCategories(prev =>
-                prev.map(cat => ({ ...cat, subReasons: cat.subReasons.filter(sr => sr.id !== id) }))
-            );
-        }
-    }, [supabase]);
+        const { error } = await apiDb({ table: 'rejection_sub_reasons', operation: 'delete', match: { id } });
+        if (error) { console.error('deleteSubReason error:', error); return; }
+        setRejectionReasonCategories(prev =>
+            prev.map(cat => ({ ...cat, subReasons: cat.subReasons.filter(sr => sr.id !== id) }))
+        );
+    }, [apiDb]);
 
     // Invite user: calls API route to send invite and upsert profile
     const inviteUser = useCallback(async (email: string, role: UserRole) => {
@@ -700,21 +1040,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await refreshData();
     }, [user, refreshData]);
 
+    // ─── Email Ingestion ─────────────────────────────
+
+    const syncEmails = useCallback(async () => {
+        try {
+            const token = await getToken();
+            if (!token) return null;
+            const res = await fetch('/api/gmail/ingest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Sync failed');
+            if (user) await fetchAllData(user.id);
+            return data;
+        } catch (err) {
+            console.error('Email sync error:', err);
+            return null;
+        }
+    }, [getToken, user, fetchAllData]);
+
+    const approveCompany = useCallback(async (companyId: string) => {
+        await updateCompany(companyId, { needsReview: false });
+        if (user) {
+            await apiDb({
+                table: 'activity_logs', operation: 'insert',
+                data: {
+                    company_id: companyId, user_id: user.id,
+                    action: 'approved', details: 'Approved email-ingested company for pipeline',
+                },
+            });
+        }
+    }, [updateCompany, apiDb, user]);
+
     // ─── Context Value ──────────────────────────────
     const value = useMemo<AppContextType>(() => ({
         user, isLoading, signOut,
         users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, notifications,
+        savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
         formatCurrency, getDaysInPipeline,
-        fetchComments, fetchActivity,
+        fetchComments, fetchActivity, fetchEmailLogs,
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
+        setTerminalStatus, resolveTerminalStatus,
+        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
+        fetchSavedViews, saveSavedView, deleteSavedView,
         addPipelineStage, updatePipelineStage, deletePipelineStage,
         addIndustry, updateIndustry, deleteIndustry,
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, refreshData,
+        syncEmails, approveCompany,
         selectedCompany, setSelectedCompany,
         editingCompany, setEditingCompany,
         showNotifications, setShowNotifications,
@@ -728,16 +1106,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }), [
         user, isLoading, signOut,
         users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, notifications,
+        savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
-        fetchComments, fetchActivity,
+        fetchComments, fetchActivity, fetchEmailLogs,
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
+        setTerminalStatus, resolveTerminalStatus,
+        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
+        fetchSavedViews, saveSavedView, deleteSavedView,
         addPipelineStage, updatePipelineStage, deletePipelineStage,
         addIndustry, updateIndustry, deleteIndustry,
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, refreshData,
+        syncEmails, approveCompany,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm,
         searchQuery, viewMode, activeFilters,

@@ -39,12 +39,36 @@ export async function GET(request: NextRequest) {
 
     const db = createServiceClient(supabaseUrl, serviceRoleKey);
 
+    // ── Ensure organization row exists (service role bypasses RLS) ──
+    const { data: orgExists } = await db
+        .from('organizations').select('id').eq('id', ORGANIZATION_ID).single();
+    if (!orgExists) {
+        await db.from('organizations').upsert({
+            id: ORGANIZATION_ID,
+            name: 'Dholakia Ventures',
+            slug: 'dholakia-ventures',
+        }, { onConflict: 'id' });
+    }
+
     // Primary lookup: by auth UID
     const { data: byId } = await db
         .from('profiles').select('*').eq('id', userId).single();
 
     if (byId) {
-        const profile = email === SUPER_ADMIN_EMAIL ? { ...byId, role: 'admin' } : byId;
+        const isSuperAdmin = email === SUPER_ADMIN_EMAIL;
+        // Ensure DB profile has organization_id and correct admin role
+        const needsUpdate =
+            !byId.organization_id ||
+            (isSuperAdmin && byId.role !== 'admin');
+        if (needsUpdate) {
+            await db.from('profiles').update({
+                organization_id: ORGANIZATION_ID,
+                ...(isSuperAdmin ? { role: 'admin' } : {}),
+            }).eq('id', userId);
+        }
+        const profile = isSuperAdmin
+            ? { ...byId, role: 'admin', organization_id: ORGANIZATION_ID }
+            : { ...byId, organization_id: byId.organization_id || ORGANIZATION_ID };
         return NextResponse.json({ profile });
     }
 
@@ -64,7 +88,7 @@ export async function GET(request: NextRequest) {
             name: source?.name || email,
             avatar_url: source?.avatar_url || null,
             role: 'admin',
-            organization_id: source?.organization_id || ORGANIZATION_ID,
+            organization_id: ORGANIZATION_ID,
         };
 
         if (!byId) {
@@ -74,7 +98,7 @@ export async function GET(request: NextRequest) {
             if (insertErr) {
                 // Insert failed (probably email unique-constraint with old UUID row).
                 // Update the existing row's id to the auth UID so RLS works.
-                await db.from('profiles').update({ id: userId, role: 'admin' }).eq('email', email);
+                await db.from('profiles').update({ id: userId, role: 'admin', organization_id: ORGANIZATION_ID }).eq('email', email);
             }
         }
 
@@ -82,6 +106,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (byEmail) {
+        // Ensure org_id is set for non-super-admin users too
+        if (!byEmail.organization_id) {
+            await db.from('profiles').update({ organization_id: ORGANIZATION_ID }).eq('id', byEmail.id);
+            byEmail.organization_id = ORGANIZATION_ID;
+        }
         return NextResponse.json({ profile: byEmail });
     }
 

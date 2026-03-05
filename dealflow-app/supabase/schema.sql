@@ -20,22 +20,47 @@ create table public.profiles (
 
 alter table public.profiles enable row level security;
 
+-- ─── SECURITY DEFINER helpers (bypass RLS to avoid recursion) ─
+-- These functions read the current user's profile WITHOUT going
+-- through RLS, preventing infinite recursion in policies.
+
+create or replace function public.get_my_role()
+returns text
+language sql stable security definer
+set search_path = public
+as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+create or replace function public.get_my_org_id()
+returns uuid
+language sql stable security definer
+set search_path = public
+as $$
+  select organization_id from public.profiles where id = auth.uid();
+$$;
+
+-- ─── Profiles RLS (uses helper functions, no recursion) ─────
 create policy "Users can view own profile" on public.profiles
     for select using (auth.uid() = id);
 create policy "Users can update own profile" on public.profiles
     for update using (auth.uid() = id);
 create policy "Admins can view all profiles" on public.profiles
-    for select using (
-        exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
-    );
+    for select using (public.is_admin());
 create policy "Admins can update all profiles" on public.profiles
-    for update using (
-        exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
-    );
+    for update using (public.is_admin());
 create policy "Admins can insert profiles" on public.profiles
-    for insert with check (
-        exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
-    );
+    for insert with check (public.is_admin());
 
 -- ─── Organizations (Multi-tenant) ─────────────────────────
 create table public.organizations (
@@ -51,13 +76,11 @@ alter table public.organizations enable row level security;
 
 create policy "Org members can view own org" on public.organizations
     for select using (
-        id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Admins can manage orgs" on public.organizations
-    for all using (
-        exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
-    );
+    for all using (public.is_admin());
 
 -- Add FK from profiles to organizations
 alter table public.profiles
@@ -79,15 +102,13 @@ alter table public.pipeline_stages enable row level security;
 
 create policy "Org members can view stages" on public.pipeline_stages
     for select using (
-        organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        organization_id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Partners/Admins can manage stages" on public.pipeline_stages
     for all using (
-        exists (
-            select 1 from public.profiles p
-            where p.id = auth.uid() and (p.role = 'admin' or (p.role = 'partner' and p.organization_id = organization_id))
-        )
+        public.is_admin()
+        or (public.get_my_role() = 'partner' and organization_id = public.get_my_org_id())
     );
 
 -- ─── Industries ───────────────────────────────────────────
@@ -102,15 +123,13 @@ alter table public.industries enable row level security;
 
 create policy "Org members can view industries" on public.industries
     for select using (
-        organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        organization_id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Partners/Admins can manage industries" on public.industries
     for all using (
-        exists (
-            select 1 from public.profiles p
-            where p.id = auth.uid() and (p.role = 'admin' or (p.role = 'partner' and p.organization_id = organization_id))
-        )
+        public.is_admin()
+        or (public.get_my_role() = 'partner' and organization_id = public.get_my_org_id())
     );
 
 -- ─── Deal Source Names ────────────────────────────────────
@@ -125,15 +144,13 @@ alter table public.deal_source_names enable row level security;
 
 create policy "Org members can view deal sources" on public.deal_source_names
     for select using (
-        organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        organization_id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Partners/Admins can manage deal sources" on public.deal_source_names
     for all using (
-        exists (
-            select 1 from public.profiles p
-            where p.id = auth.uid() and (p.role = 'admin' or (p.role = 'partner' and p.organization_id = organization_id))
-        )
+        public.is_admin()
+        or (public.get_my_role() = 'partner' and organization_id = public.get_my_org_id())
     );
 
 -- ─── Rejection Reason Categories ──────────────────────────
@@ -148,15 +165,13 @@ alter table public.rejection_reason_categories enable row level security;
 
 create policy "Org members can view rejection categories" on public.rejection_reason_categories
     for select using (
-        organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        organization_id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Partners/Admins can manage rejection categories" on public.rejection_reason_categories
     for all using (
-        exists (
-            select 1 from public.profiles p
-            where p.id = auth.uid() and (p.role = 'admin' or (p.role = 'partner' and p.organization_id = organization_id))
-        )
+        public.is_admin()
+        or (public.get_my_role() = 'partner' and organization_id = public.get_my_org_id())
     );
 
 -- ─── Rejection Sub-Reasons ───────────────────────────────
@@ -173,14 +188,12 @@ create policy "Org members can view sub-reasons" on public.rejection_sub_reasons
     for select using (
         category_id in (
             select id from public.rejection_reason_categories
-            where organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
+            where organization_id = public.get_my_org_id()
         )
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        or public.is_admin()
     );
 create policy "Partners/Admins can manage sub-reasons" on public.rejection_sub_reasons
-    for all using (
-        exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
-    );
+    for all using (public.is_admin());
 
 -- ─── Companies (Core entity) ─────────────────────────────
 create table public.companies (
@@ -227,23 +240,21 @@ alter table public.companies enable row level security;
 
 create policy "Org members can view companies" on public.companies
     for select using (
-        organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        organization_id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Org members can insert companies" on public.companies
     for insert with check (
-        organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        organization_id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Org members can update companies" on public.companies
     for update using (
-        organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        organization_id = public.get_my_org_id()
+        or public.is_admin()
     );
 create policy "Admins can delete companies" on public.companies
-    for delete using (
-        exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
-    );
+    for delete using (public.is_admin());
 
 -- ─── Rejection Records ───────────────────────────────────
 create table public.rejection_records (
@@ -266,16 +277,17 @@ create policy "Org members can view rejection records" on public.rejection_recor
     for select using (
         company_id in (
             select id from public.companies
-            where organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
+            where organization_id = public.get_my_org_id()
         )
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        or public.is_admin()
     );
 create policy "Org members can insert rejection records" on public.rejection_records
     for insert with check (
         company_id in (
             select id from public.companies
-            where organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
+            where organization_id = public.get_my_org_id()
         )
+        or public.is_admin()
     );
 
 -- ─── Comments ─────────────────────────────────────────────
@@ -293,9 +305,9 @@ create policy "Org members can view comments" on public.comments
     for select using (
         company_id in (
             select id from public.companies
-            where organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
+            where organization_id = public.get_my_org_id()
         )
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        or public.is_admin()
     );
 create policy "Authenticated users can insert comments" on public.comments
     for insert with check (auth.uid() = author_id);
@@ -320,9 +332,9 @@ create policy "Org members can view activity logs" on public.activity_logs
     for select using (
         company_id in (
             select id from public.companies
-            where organization_id in (select organization_id from public.profiles where profiles.id = auth.uid())
+            where organization_id = public.get_my_org_id()
         )
-        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+        or public.is_admin()
     );
 create policy "Authenticated users can insert activity logs" on public.activity_logs
     for insert with check (auth.uid() = user_id);
@@ -398,6 +410,52 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
     after insert on auth.users
     for each row execute function public.handle_new_user();
+
+-- ─── Saved Views (personal saved filter combinations) ────
+create table public.saved_views (
+    id uuid default uuid_generate_v4() primary key,
+    user_id uuid references public.profiles(id) on delete cascade not null,
+    name text not null,
+    filters jsonb not null default '{}',
+    created_at timestamptz default now()
+);
+
+alter table public.saved_views enable row level security;
+
+create policy "Users can view own saved views" on public.saved_views
+    for select using (auth.uid() = user_id);
+create policy "Users can insert own saved views" on public.saved_views
+    for insert with check (auth.uid() = user_id);
+create policy "Users can delete own saved views" on public.saved_views
+    for delete using (auth.uid() = user_id);
+
+-- ─── Email Logs (track sent emails) ────────────────────
+create table public.email_logs (
+    id uuid default uuid_generate_v4() primary key,
+    company_id uuid references public.companies(id) on delete cascade,
+    sender_id uuid references public.profiles(id) on delete set null,
+    recipient_email text not null,
+    subject text not null,
+    body text not null,
+    email_type text not null default 'general',
+    created_at timestamptz default now()
+);
+
+alter table public.email_logs enable row level security;
+
+create policy "Org members can view email logs" on public.email_logs
+    for select using (
+        company_id in (
+            select id from public.companies
+            where organization_id = public.get_my_org_id()
+        )
+        or public.is_admin()
+    );
+create policy "Authenticated users can insert email logs" on public.email_logs
+    for insert with check (auth.uid() = sender_id);
+
+create index idx_email_logs_company on public.email_logs(company_id);
+create index idx_saved_views_user on public.saved_views(user_id);
 
 -- ─── Realtime ─────────────────────────────────────────────
 alter publication supabase_realtime add table public.companies;

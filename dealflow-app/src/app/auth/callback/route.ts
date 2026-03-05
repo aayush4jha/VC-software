@@ -83,6 +83,7 @@ export async function GET(request: Request) {
                     await serviceClient.from('profiles').update({
                         name,
                         avatar_url: avatarUrl,
+                        organization_id: ORGANIZATION_ID,
                         ...(isSuperAdmin ? { role: 'admin' } : {}),
                     }).eq('id', existingProfileId);
                 } else {

@@ -11,20 +11,46 @@ export default function TableView() {
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
     const filtered = companies.filter(c => {
-        if (c.terminalStatus) return false;
+        // ── Status filter ──
+        if (activeFilters.status?.length) {
+            const hasActive = activeFilters.status.includes('Active');
+            const terminalStatuses = activeFilters.status.filter(s => s !== 'Active');
+            const matchesActive = hasActive && !c.terminalStatus;
+            const matchesTerminal = terminalStatuses.length > 0 && c.terminalStatus && terminalStatuses.includes(c.terminalStatus);
+            if (!matchesActive && !matchesTerminal) return false;
+        } else {
+            // Default: exclude terminal-status companies
+            if (c.terminalStatus) return false;
+        }
+
+        // ── Search query (extended) ──
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             const industry = getIndustryById(c.industryId);
-            if (
-                !c.companyName.toLowerCase().includes(q) &&
-                !c.founderName.toLowerCase().includes(q) &&
-                !(industry?.name.toLowerCase().includes(q))
-            ) return false;
+            const source = getDealSourceNameById(c.dealSourceNameId);
+            const matchesAny =
+                c.companyName.toLowerCase().includes(q) ||
+                c.founderName.toLowerCase().includes(q) ||
+                (industry?.name.toLowerCase().includes(q)) ||
+                (c.subIndustry && c.subIndustry.toLowerCase().includes(q)) ||
+                (c.dealSourceType && c.dealSourceType.toLowerCase().includes(q)) ||
+                (source?.name.toLowerCase().includes(q)) ||
+                (c.quickSummary && c.quickSummary.toLowerCase().includes(q)) ||
+                (c.customTags && c.customTags.some(tag => tag.toLowerCase().includes(q)));
+            if (!matchesAny) return false;
         }
+
+        // ── Existing filters ──
         if (activeFilters.priority?.length && !activeFilters.priority.includes(c.priorityLevel)) return false;
         if (activeFilters.industry?.length && !activeFilters.industry.includes(c.industryId)) return false;
         if (activeFilters.analyst?.length && (!c.analystId || !activeFilters.analyst.includes(c.analystId))) return false;
         if (activeFilters.round?.length && !activeFilters.round.includes(c.companyRound)) return false;
+        if (activeFilters.stage?.length && !activeFilters.stage.includes(c.pipelineStageId)) return false;
+
+        // ── New filters ──
+        if (activeFilters.dealSourceType?.length && !activeFilters.dealSourceType.includes(c.dealSourceType)) return false;
+        if (activeFilters.dealSourceName?.length && !activeFilters.dealSourceName.includes(c.dealSourceNameId)) return false;
+
         return true;
     });
 
@@ -87,7 +113,20 @@ export default function TableView() {
 
                         return (
                             <tr key={c.id} onClick={() => setSelectedCompany(c)}>
-                                <td><span className="table-company-name">{c.companyName}</span></td>
+                                <td>
+                                    <span className="table-company-name">
+                                        {c.companyName}
+                                        {c.needsReview && (
+                                            <span style={{
+                                                marginLeft: 6, fontSize: 10, fontWeight: 600,
+                                                color: '#8b5cf6', background: 'rgba(139,92,246,0.1)',
+                                                padding: '1px 6px', borderRadius: 4,
+                                            }}>
+                                                Draft
+                                            </span>
+                                        )}
+                                    </span>
+                                </td>
                                 <td>{c.founderName}</td>
                                 <td>
                                     <span className="table-stage-badge" style={{
@@ -109,10 +148,10 @@ export default function TableView() {
                                 <td>{analyst?.name || <span className="badge badge-warning">Unassigned</span>}</td>
                                 <td>{source?.name}</td>
                                 <td>{days}d</td>
-                                <td>{c.totalFundRaise ? formatCurrency(c.totalFundRaise) : '—'}</td>
+                                <td>{c.totalFundRaise ? formatCurrency(c.totalFundRaise) : '\u2014'}</td>
                                 <td>
                                     <span className={`sla-indicator ${slaStatus}`}>
-                                        {slaStatus === 'on-track' ? '✓ On Track' : slaStatus === 'at-risk' ? '⚠ At Risk' : '✕ Overdue'}
+                                        {slaStatus === 'on-track' ? '\u2713 On Track' : slaStatus === 'at-risk' ? '\u26A0 At Risk' : '\u2715 Overdue'}
                                     </span>
                                 </td>
                                 <td>
