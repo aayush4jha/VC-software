@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
         // User denied access — redirect back to app with error
-        return NextResponse.redirect(new URL('/?google_auth=error', request.url));
+        return NextResponse.redirect(new URL('/emails?google_auth=error', request.url));
     }
 
     if (!code) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
         const { tokens } = await oauth2Client.getToken(code);
 
         // Store tokens in HTTP-only cookies so the client can use them
-        const response = NextResponse.redirect(new URL('/?google_auth=success', request.url));
+        const response = NextResponse.redirect(new URL('/emails?google_auth=success', request.url));
 
         response.cookies.set('google_access_token', tokens.access_token || '', {
             httpOnly: true,
@@ -56,6 +56,6 @@ export async function GET(request: NextRequest) {
         return response;
     } catch (err) {
         console.error('Error exchanging code for tokens:', err);
-        return NextResponse.redirect(new URL('/?google_auth=error', request.url));
+        return NextResponse.redirect(new URL('/emails?google_auth=error', request.url));
     }
 }
