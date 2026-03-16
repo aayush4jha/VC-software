@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { getAuthenticatedClient } from '@/lib/google';
 
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
 const FUNDING_KEYWORDS = [
     'pitch deck', 'fundraising', 'funding', 'startup', 'investor',
     'venture capital', 'seed round', 'series a', 'series b', 'pre-seed',
@@ -38,6 +40,145 @@ function extractSenderInfo(fromHeader: string): { name: string; email: string } 
     return { name: fromHeader.split('@')[0], email: fromHeader };
 }
 
+function decodeBase64Url(data: string): string {
+    return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
+}
+
+function extractBodyText(payload: { mimeType?: string; body?: { data?: string }; parts?: unknown[] }): string {
+    if (payload.body?.data && payload.mimeType === 'text/plain') {
+        return decodeBase64Url(payload.body.data);
+    }
+    if (payload.parts) {
+        for (const part of payload.parts as typeof payload[]) {
+            // Prefer text/plain
+            if (part.mimeType === 'text/plain' && part.body?.data) {
+                return decodeBase64Url(part.body.data);
+            }
+        }
+        // Fallback to text/html stripped
+        for (const part of payload.parts as typeof payload[]) {
+            if (part.mimeType === 'text/html' && part.body?.data) {
+                const html = decodeBase64Url(part.body.data);
+                return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            }
+        }
+        // Recurse into multipart
+        for (const part of payload.parts as typeof payload[]) {
+            if (part.parts) {
+                const result = extractBodyText(part);
+                if (result) return result;
+            }
+        }
+    }
+    return '';
+}
+
+interface ExtractedData {
+    companyName: string | null;
+    founderName: string | null;
+    companyRound: string | null;
+    totalFundRaise: number | null;
+    valuation: number | null;
+    industry: string | null;
+    subIndustry: string | null;
+    dealSourceType: string | null;
+    priorityLevel: string | null;
+    shareType: string | null;
+    summary: string | null;
+}
+
+async function analyzeEmailWithAI(subject: string, senderName: string, senderEmail: string, bodyText: string, snippet: string): Promise<ExtractedData> {
+    if (!GEMINI_API_KEY) {
+        return {
+            companyName: null, founderName: null, companyRound: null,
+            totalFundRaise: null, valuation: null, industry: null,
+            subIndustry: null, dealSourceType: null, priorityLevel: null,
+            shareType: null, summary: null,
+        };
+    }
+
+    // Truncate body to avoid token limits
+    const truncatedBody = bodyText.slice(0, 4000);
+
+    const prompt = `You are analyzing an email received by a Venture Capital firm. Extract structured data from this email for their deal pipeline.
+
+EMAIL DETAILS:
+- Subject: ${subject}
+- From: ${senderName} <${senderEmail}>
+- Snippet: ${snippet}
+- Full Body:
+${truncatedBody}
+
+Extract the following fields. Return ONLY valid JSON with these exact keys. Use null for any field you cannot determine:
+
+{
+  "companyName": "The startup/company name (NOT the sender's personal name, extract the actual company name)",
+  "founderName": "The founder's full name",
+  "companyRound": "One of: Pre-Seed, Seed, Pre-Series A, Series A, Pre-Series B, Series B, Growth Stage, Pre-IPO, IPO",
+  "totalFundRaise": "Amount being raised in INR crores as a number (e.g. 1.2 for ₹1.2Cr). Convert from USD/other currencies if needed (1 USD ≈ 83 INR). null if not mentioned",
+  "valuation": "Company valuation in INR crores as a number. Convert if needed. null if not mentioned",
+  "industry": "The primary industry/sector (e.g. FinTech, HealthTech, SaaS, Defense, EdTech, E-commerce, AI/ML, CleanTech, etc.)",
+  "subIndustry": "More specific sub-industry if mentioned",
+  "dealSourceType": "One of: Founder Network, Investment Banker, Friends & Family, VC & PE",
+  "priorityLevel": "One of: Low, Medium, High - based on the quality/urgency of the opportunity",
+  "shareType": "One of: Primary, Secondary",
+  "summary": "A 1-2 sentence summary of what this email is about and why it's relevant for the VC firm"
+}
+
+IMPORTANT: Return ONLY the JSON object, no markdown formatting, no code blocks, no explanation.`;
+
+    try {
+        const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+                }),
+            },
+        );
+
+        if (!res.ok) {
+            console.error('[workspace] Gemini API error:', res.status, await res.text());
+            return {
+                companyName: null, founderName: null, companyRound: null,
+                totalFundRaise: null, valuation: null, industry: null,
+                subIndustry: null, dealSourceType: null, priorityLevel: null,
+                shareType: null, summary: null,
+            };
+        }
+
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        // Strip markdown code blocks if present
+        const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        return {
+            companyName: parsed.companyName || null,
+            founderName: parsed.founderName || null,
+            companyRound: parsed.companyRound || null,
+            totalFundRaise: typeof parsed.totalFundRaise === 'number' ? parsed.totalFundRaise : null,
+            valuation: typeof parsed.valuation === 'number' ? parsed.valuation : null,
+            industry: parsed.industry || null,
+            subIndustry: parsed.subIndustry || null,
+            dealSourceType: parsed.dealSourceType || null,
+            priorityLevel: parsed.priorityLevel || null,
+            shareType: parsed.shareType || null,
+            summary: parsed.summary || null,
+        };
+    } catch (err) {
+        console.error('[workspace] AI extraction error:', err);
+        return {
+            companyName: null, founderName: null, companyRound: null,
+            totalFundRaise: null, valuation: null, industry: null,
+            subIndustry: null, dealSourceType: null, priorityLevel: null,
+            shareType: null, summary: null,
+        };
+    }
+}
+
 export interface WorkspaceEmail {
     id: string;
     threadId: string | null;
@@ -52,6 +193,8 @@ export interface WorkspaceEmail {
     isRelevant: boolean;
     relevanceLabel: string;
     derivedCompanyName: string;
+    // AI-extracted fields
+    extracted: ExtractedData;
 }
 
 export async function GET(request: NextRequest) {
@@ -95,11 +238,11 @@ export async function GET(request: NextRequest) {
             if (!msg.id) continue;
 
             try {
+                // Fetch FULL format to get email body for AI analysis
                 const fullMsg = await gmail.users.messages.get({
                     userId: 'me',
                     id: msg.id,
-                    format: 'metadata',
-                    metadataHeaders: ['From', 'Subject', 'Date'],
+                    format: 'full',
                 });
 
                 const headers = fullMsg.data.payload?.headers || [];
@@ -113,14 +256,31 @@ export async function GET(request: NextRequest) {
                 const parts = fullMsg.data.payload?.parts || [];
                 const attachmentNames = parts
                     .filter(p => p.filename && p.filename.length > 0)
-                    .map(p => p.filename!);
+                    .map(p => p.filename as string);
                 const hasPitchDeck = attachmentNames.some(fn =>
                     PITCH_DECK_EXTENSIONS.some(ext => fn.toLowerCase().endsWith(ext))
                 );
 
                 const { isRelevant, label } = detectRelevance(subject, snippet);
 
-                let derivedCompanyName = subject.replace(/^(re|fwd|fw):\s*/gi, '').trim();
+                // Extract full body text for AI analysis
+                const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
+
+                // Run AI extraction on relevant emails
+                let extracted: ExtractedData;
+                if (isRelevant && GEMINI_API_KEY) {
+                    extracted = await analyzeEmailWithAI(subject, senderName, senderEmail, bodyText, snippet);
+                } else {
+                    extracted = {
+                        companyName: null, founderName: null, companyRound: null,
+                        totalFundRaise: null, valuation: null, industry: null,
+                        subIndustry: null, dealSourceType: null, priorityLevel: null,
+                        shareType: null, summary: null,
+                    };
+                }
+
+                // Use AI-extracted company name, or fall back to subject-based derivation
+                let derivedCompanyName = extracted.companyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim();
                 if (!derivedCompanyName || derivedCompanyName === '(No Subject)') {
                     const domain = senderEmail.split('@')[1]?.split('.')[0] || 'Unknown';
                     derivedCompanyName = domain.charAt(0).toUpperCase() + domain.slice(1);
@@ -129,7 +289,7 @@ export async function GET(request: NextRequest) {
                 emails.push({
                     id: msg.id,
                     threadId: msg.threadId || null,
-                    senderName,
+                    senderName: extracted.founderName || senderName,
                     senderEmail,
                     subject,
                     snippet,
@@ -140,6 +300,7 @@ export async function GET(request: NextRequest) {
                     isRelevant,
                     relevanceLabel: label,
                     derivedCompanyName,
+                    extracted,
                 });
             } catch {
                 // Skip individual message errors

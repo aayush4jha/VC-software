@@ -14,6 +14,20 @@ import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 import { createClient } from '@/lib/supabase/client';
 
+interface ExtractedData {
+    companyName: string | null;
+    founderName: string | null;
+    companyRound: string | null;
+    totalFundRaise: number | null;
+    valuation: number | null;
+    industry: string | null;
+    subIndustry: string | null;
+    dealSourceType: string | null;
+    priorityLevel: string | null;
+    shareType: string | null;
+    summary: string | null;
+}
+
 interface WorkspaceEmail {
     id: string;
     threadId: string | null;
@@ -28,6 +42,7 @@ interface WorkspaceEmail {
     isRelevant: boolean;
     relevanceLabel: string;
     derivedCompanyName: string;
+    extracted: ExtractedData;
 }
 
 function EmailsContent() {
@@ -103,6 +118,7 @@ function EmailsContent() {
                     hasPitchDeck: email.hasPitchDeck,
                     relevanceLabel: email.relevanceLabel,
                     derivedCompanyName: email.derivedCompanyName,
+                    extracted: email.extracted,
                 }),
             });
             const data = await res.json();
@@ -429,6 +445,66 @@ function EmailsContent() {
                                                             </span>
                                                         )}
                                                     </div>
+                                                    {/* AI-Extracted Details */}
+                                                    {email.isRelevant && email.extracted && (email.extracted.companyName || email.extracted.summary) && (
+                                                        <div style={{
+                                                            marginTop: 10,
+                                                            padding: '10px 12px',
+                                                            background: 'var(--bg-primary)',
+                                                            border: '1px solid var(--border-color)',
+                                                            borderRadius: 8,
+                                                            fontSize: 12,
+                                                        }}>
+                                                            <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--primary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                AI-Extracted Details
+                                                            </div>
+                                                            {email.extracted.summary && (
+                                                                <div style={{ color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>
+                                                                    {email.extracted.summary}
+                                                                </div>
+                                                            )}
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+                                                                {email.extracted.companyName && (
+                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
+                                                                        Company: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.companyName}</strong>
+                                                                    </span>
+                                                                )}
+                                                                {email.extracted.founderName && (
+                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
+                                                                        Founder: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.founderName}</strong>
+                                                                    </span>
+                                                                )}
+                                                                {email.extracted.companyRound && (
+                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
+                                                                        Round: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.companyRound}</strong>
+                                                                    </span>
+                                                                )}
+                                                                {email.extracted.industry && (
+                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
+                                                                        Industry: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.industry}</strong>
+                                                                    </span>
+                                                                )}
+                                                                {email.extracted.totalFundRaise !== null && (
+                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
+                                                                        Raising: <strong style={{ color: 'var(--text-primary)' }}>{'\u20B9'}{email.extracted.totalFundRaise}Cr</strong>
+                                                                    </span>
+                                                                )}
+                                                                {email.extracted.valuation !== null && (
+                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
+                                                                        Valuation: <strong style={{ color: 'var(--text-primary)' }}>{'\u20B9'}{email.extracted.valuation}Cr</strong>
+                                                                    </span>
+                                                                )}
+                                                                {email.extracted.priorityLevel && (
+                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
+                                                                        Priority: <strong style={{
+                                                                            color: email.extracted.priorityLevel === 'High' ? '#ef4444' :
+                                                                                   email.extracted.priorityLevel === 'Medium' ? '#f59e0b' : 'var(--text-primary)'
+                                                                        }}>{email.extracted.priorityLevel}</strong>
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div style={{ flexShrink: 0 }}>
                                                     {sentIds.has(email.id) ? (

@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
         gmailMessageId, gmailThreadId, senderName, senderEmail,
         subject, receivedAt, hasAttachments, attachmentNames,
         hasPitchDeck, relevanceLabel, derivedCompanyName,
+        // AI-extracted fields
+        extracted,
     } = body;
 
     if (!senderEmail || !subject) {
@@ -85,26 +87,60 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const companyName = derivedCompanyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim() || 'Unknown';
+        // Use AI-extracted data if available, with sensible fallbacks
+        const ai = extracted || {};
+        const companyName = ai.companyName || derivedCompanyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim() || 'Unknown';
+        const founderName = ai.founderName || senderName || senderEmail.split('@')[0];
+        const companyRound = ai.companyRound || 'Seed';
+        const priorityLevel = ai.priorityLevel || 'Medium';
+        const dealSourceType = ai.dealSourceType || 'Founder Network';
+        const shareType = ai.shareType || 'Primary';
+        const totalFundRaise = typeof ai.totalFundRaise === 'number' ? ai.totalFundRaise : null;
+        const valuation = typeof ai.valuation === 'number' ? ai.valuation : null;
+        const subIndustry = ai.subIndustry || '';
+
         const customTags = ['email-ingested', 'email-workspace'];
         if (hasPitchDeck) customTags.push('has-pitch-deck');
 
+        // Try to match industry by name
+        let industryId = '';
+        if (ai.industry) {
+            const { data: matchedIndustry } = await db
+                .from('industries')
+                .select('id')
+                .eq('organization_id', ORGANIZATION_ID)
+                .ilike('name', ai.industry)
+                .limit(1);
+            if (matchedIndustry && matchedIndustry.length > 0) {
+                industryId = matchedIndustry[0].id;
+            }
+        }
+
+        // Build company insert
+        const companyInsert: Record<string, unknown> = {
+            organization_id: ORGANIZATION_ID,
+            company_name: companyName,
+            founder_name: founderName,
+            founder_email: senderEmail,
+            pipeline_stage_id: firstStageId,
+            priority_level: priorityLevel,
+            company_round: companyRound,
+            deal_source_type: dealSourceType,
+            share_type: shareType,
+            needs_review: true,
+            ingestion_source: 'email-workspace',
+            custom_tags: customTags,
+            sub_industry: subIndustry,
+        };
+
+        if (totalFundRaise !== null) companyInsert.total_fund_raise = totalFundRaise;
+        if (valuation !== null) companyInsert.valuation = valuation;
+        if (industryId) companyInsert.industry_id = industryId;
+        if (ai.summary) companyInsert.quick_summary = ai.summary;
+
         const { data: newCompany, error: companyError } = await db
             .from('companies')
-            .insert({
-                organization_id: ORGANIZATION_ID,
-                company_name: companyName,
-                founder_name: senderName || senderEmail.split('@')[0],
-                founder_email: senderEmail,
-                pipeline_stage_id: firstStageId,
-                priority_level: 'Medium',
-                company_round: 'Seed',
-                deal_source_type: 'Founder Network',
-                share_type: 'Primary',
-                needs_review: true,
-                ingestion_source: 'email-workspace',
-                custom_tags: customTags,
-            })
+            .insert(companyInsert)
             .select()
             .single();
 
@@ -118,7 +154,7 @@ export async function POST(request: NextRequest) {
                 organization_id: ORGANIZATION_ID,
                 gmail_message_id: gmailMessageId,
                 gmail_thread_id: gmailThreadId || null,
-                sender_name: senderName || '',
+                sender_name: founderName,
                 sender_email: senderEmail,
                 subject,
                 received_at: receivedAt || null,
@@ -135,7 +171,7 @@ export async function POST(request: NextRequest) {
             company_id: newCompany.id,
             user_id: userId,
             action: 'created',
-            details: `Manually sent to Kanban from Email Workspace: "${subject}" from ${senderEmail}`,
+            details: `Manually sent to Kanban from Email Workspace: "${subject}" from ${senderEmail}. AI-extracted: ${ai.summary || 'N/A'}`,
         });
 
         // Notify other users
@@ -150,7 +186,7 @@ export async function POST(request: NextRequest) {
                 user_id: p.id,
                 type: 'new_company',
                 title: 'Email Workspace',
-                message: `${companyName} manually added from email (needs review)`,
+                message: `${companyName} added from email (needs review)${ai.companyRound ? ' — ' + ai.companyRound : ''}`,
                 company_id: newCompany.id,
             }));
             await db.from('notifications').insert(notifs);
