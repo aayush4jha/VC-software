@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Gmail env vars not set' }, { status: 500 });
   }
 
-  const { email, role } = await req.json();
+  const { email, role, permissions } = await req.json();
   const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
   if (!email || !role) {
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     // 1️⃣ (Removed Supabase Invite to avoid rate limit)
 
   // 2️⃣ No profile upsert here. Profile will be created after user signs up.
+  // Store permissions info for when the user registers (via URL params)
 
   // 3️⃣ Send Custom Email via Gmail SMTP
   try {
@@ -42,7 +43,8 @@ export async function POST(req: NextRequest) {
     });
 
     // Registration link (actual domain and path)
-    const registrationUrl = `${SITE_URL}/login?email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}`;
+    const permissionsParam = permissions && permissions.length > 0 ? `&permissions=${encodeURIComponent(permissions.join(','))}` : '';
+    const registrationUrl = `${SITE_URL}/login?email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}${permissionsParam}`;
 
     await transporter.sendMail({
       from: `"VC-SAAS" <${GMAIL_USER}>`,

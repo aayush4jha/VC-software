@@ -9,6 +9,7 @@ import type {
     User, Company, PipelineStage, Industry, DealSourceName,
     RejectionReasonCategory, RejectionSubReason, Notification,
     Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
+    PagePermission,
 } from '@/types/database';
 
 // ──────────────────────────────────────────────────
@@ -17,15 +18,28 @@ import type {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, PagePermission[]> = {
+    admin: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai', 'admin', 'settings'],
+    partner: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai'],
+    analyst: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai'],
+};
+
 function mapUser(r: any): User {
     if (!r) return r;
+    const role = (r.role ?? 'analyst') as UserRole;
+    const rawPermissions = r.permissions as PagePermission[] | null;
+    // If no permissions set, fall back to role-based defaults
+    const permissions = (rawPermissions && rawPermissions.length > 0)
+        ? rawPermissions
+        : (DEFAULT_PERMISSIONS_BY_ROLE[role] || DEFAULT_PERMISSIONS_BY_ROLE['analyst']);
     return {
         id: r.id,
         name: r.name ?? '',
         email: r.email ?? '',
-        role: (r.role ?? 'analyst') as UserRole,
+        role,
         avatar: r.avatar_url ?? r.avatar ?? '',
         organizationId: r.organization_id ?? null,
+        permissions,
     };
 }
 
@@ -185,7 +199,9 @@ interface AppContextType {
     addSubReason: (categoryId: string, name: string) => Promise<void>;
     updateSubReason: (id: string, name: string) => Promise<void>;
     deleteSubReason: (id: string) => Promise<void>;
-    inviteUser: (email: string, role: UserRole) => Promise<void>;
+    inviteUser: (email: string, role: UserRole, permissions?: PagePermission[]) => Promise<void>;
+    updateUserPermissions: (userId: string, permissions: PagePermission[]) => Promise<void>;
+    updateUserRole: (userId: string, role: string) => Promise<void>;
 
     // Email ingestion
     syncEmails: () => Promise<{ processed: number; skipped: number; created: { companyName: string; companyId: string }[]; errors?: string[] } | null>;
@@ -1010,17 +1026,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, [apiDb]);
 
     // Invite user: calls API route to send invite and upsert profile
-    const inviteUser = useCallback(async (email: string, role: UserRole) => {
-        console.log('✅ Invite API HIT');
-        // if (!user?.organizationId) {
-        //     console.warn('inviteUser: No organizationId in user context', user);
-        //     throw new Error('Failed to send invite');
-        // }
-        // console.log('inviteUser: Sending invite', { email, role, organizationId: user.organizationId });
+    const inviteUser = useCallback(async (email: string, role: UserRole, permissions?: PagePermission[]) => {
         const res = await fetch('/api/invite-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, role, organizationId: ORGANIZATION_ID }),
+            body: JSON.stringify({ email, role, organizationId: ORGANIZATION_ID, permissions }),
         });
         let data;
         try {
@@ -1039,6 +1049,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         await refreshData();
     }, [user, refreshData]);
+
+    const updateUserPermissions = useCallback(async (userId: string, permissions: PagePermission[]) => {
+        const { error } = await apiDb({
+            table: 'profiles', operation: 'update',
+            data: { permissions },
+            match: { id: userId },
+        });
+        if (error) { console.error('updateUserPermissions error:', error); return; }
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions } : u));
+    }, [apiDb]);
+
+    const updateUserRole = useCallback(async (userId: string, role: string) => {
+        const { error } = await apiDb({
+            table: 'profiles', operation: 'update',
+            data: { role },
+            match: { id: userId },
+        });
+        if (error) { console.error('updateUserRole error:', error); return; }
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+    }, [apiDb]);
 
     // ─── Email Ingestion ─────────────────────────────
 
@@ -1091,7 +1121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addIndustry, updateIndustry, deleteIndustry,
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
-        inviteUser, refreshData,
+        inviteUser, updateUserPermissions, updateUserRole, refreshData,
         syncEmails, approveCompany,
         selectedCompany, setSelectedCompany,
         editingCompany, setEditingCompany,
@@ -1119,7 +1149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addIndustry, updateIndustry, deleteIndustry,
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
-        inviteUser, refreshData,
+        inviteUser, updateUserPermissions, updateUserRole, refreshData,
         syncEmails, approveCompany,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm,

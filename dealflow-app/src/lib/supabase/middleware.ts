@@ -53,8 +53,25 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
     }
 
-    // Admin-only route protection (/admin and /settings)
-    if (user && (pathname.startsWith('/admin') || pathname.startsWith('/settings'))) {
+    // Page-level permission protection
+    // Map routes to permission keys
+    const routePermissionMap: Record<string, string> = {
+        '/admin': 'admin',
+        '/settings': 'settings',
+        '/dealflow': 'dealflow',
+        '/portfolio': 'portfolio',
+        '/contacts': 'contacts',
+        '/emails': 'emails',
+        '/ai': 'ai',
+    };
+
+    const matchedPermission = Object.entries(routePermissionMap).find(
+        ([route]) => pathname.startsWith(route)
+    );
+
+    if (user && matchedPermission) {
+        const requiredPermission = matchedPermission[1];
+
         // Super-admin email always has access — no DB lookup needed.
         const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
 
@@ -63,24 +80,45 @@ export async function updateSession(request: NextRequest) {
             const serviceClient = createServiceClient(SUPABASE_URL, SERVICE_ROLE_KEY);
             const { data: profileById } = await serviceClient
                 .from('profiles')
-                .select('role')
+                .select('role, permissions')
                 .eq('id', user.id)
                 .single();
 
-            let isAdmin = profileById?.role === 'admin';
+            let hasAccess = false;
 
-            // Email fallback: handles the case where the profile was created manually
-            // with a different UUID than the actual auth UID (UUID mismatch)
-            if (!isAdmin && user.email) {
-                const { data: profileByEmail } = await serviceClient
-                    .from('profiles')
-                    .select('role')
-                    .eq('email', user.email)
-                    .single();
-                isAdmin = profileByEmail?.role === 'admin';
+            if (profileById) {
+                const permissions = profileById.permissions as string[] | null;
+                if (permissions && permissions.length > 0) {
+                    hasAccess = permissions.includes(requiredPermission);
+                } else {
+                    // Backward compat: if no permissions set, use role-based defaults
+                    hasAccess = profileById.role === 'admin' ||
+                        (profileById.role === 'partner' && !['admin', 'settings'].includes(requiredPermission)) ||
+                        (profileById.role === 'analyst' && !['admin', 'settings'].includes(requiredPermission));
+                }
             }
 
-            if (!isAdmin) {
+            // Email fallback for UUID mismatch
+            if (!hasAccess && user.email) {
+                const { data: profileByEmail } = await serviceClient
+                    .from('profiles')
+                    .select('role, permissions')
+                    .eq('email', user.email)
+                    .single();
+
+                if (profileByEmail) {
+                    const permissions = profileByEmail.permissions as string[] | null;
+                    if (permissions && permissions.length > 0) {
+                        hasAccess = permissions.includes(requiredPermission);
+                    } else {
+                        hasAccess = profileByEmail.role === 'admin' ||
+                            (profileByEmail.role === 'partner' && !['admin', 'settings'].includes(requiredPermission)) ||
+                            (profileByEmail.role === 'analyst' && !['admin', 'settings'].includes(requiredPermission));
+                    }
+                }
+            }
+
+            if (!hasAccess) {
                 const url = request.nextUrl.clone();
                 url.pathname = '/';
                 return NextResponse.redirect(url);

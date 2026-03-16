@@ -1,6 +1,27 @@
 // Dholakia Ventures — Deal Flow Management Types
 
-export type UserRole = 'analyst' | 'partner' | 'admin';
+export type UserRole = 'analyst' | 'partner' | 'admin' | string;
+
+export type PagePermission =
+  | 'dashboard'
+  | 'dealflow'
+  | 'portfolio'
+  | 'contacts'
+  | 'emails'
+  | 'ai'
+  | 'admin'
+  | 'settings';
+
+export const ALL_PAGE_PERMISSIONS: { key: PagePermission; label: string }[] = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'dealflow', label: 'Deal Flow' },
+  { key: 'portfolio', label: 'Portfolio' },
+  { key: 'contacts', label: 'Contacts' },
+  { key: 'emails', label: 'Email Workspace' },
+  { key: 'ai', label: 'Dealflow AI' },
+  { key: 'admin', label: 'Admin' },
+  { key: 'settings', label: 'Settings' },
+];
 
 export interface User {
   id: string;
@@ -9,6 +30,7 @@ export interface User {
   role: UserRole;
   avatar?: string;
   organizationId?: string | null;
+  permissions: PagePermission[];
 }
 
 export type CompanyRound =
@@ -216,6 +238,7 @@ export interface IngestedEmail {
   companyId: string | null;
   status: 'processed' | 'skipped' | 'error';
   errorMessage: string | null;
+  relevanceLabel: string | null;
   createdAt: string;
 }
 

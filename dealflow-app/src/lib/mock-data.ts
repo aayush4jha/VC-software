@@ -7,11 +7,11 @@ import {
 
 // ─── Users ─────────────────────────────────────────────
 export const users: User[] = [
-    { id: 'u1', name: 'Arjun Mehta', email: 'arjun@dv.com', role: 'analyst', avatar: '' },
-    { id: 'u2', name: 'Priya Sharma', email: 'priya@dv.com', role: 'analyst', avatar: '' },
-    { id: 'u3', name: 'Rohan Kapoor', email: 'rohan@dv.com', role: 'analyst', avatar: '' },
-    { id: 'u4', name: 'Vikram Dholakia', email: 'vikram@dv.com', role: 'partner', avatar: '' },
-    { id: 'u5', name: 'Neha Patel', email: 'neha@dv.com', role: 'partner', avatar: '' },
+    { id: 'u1', name: 'Arjun Mehta', email: 'arjun@dv.com', role: 'analyst', avatar: '', permissions: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai'] },
+    { id: 'u2', name: 'Priya Sharma', email: 'priya@dv.com', role: 'analyst', avatar: '', permissions: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai'] },
+    { id: 'u3', name: 'Rohan Kapoor', email: 'rohan@dv.com', role: 'analyst', avatar: '', permissions: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai'] },
+    { id: 'u4', name: 'Vikram Dholakia', email: 'vikram@dv.com', role: 'partner', avatar: '', permissions: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai'] },
+    { id: 'u5', name: 'Neha Patel', email: 'neha@dv.com', role: 'partner', avatar: '', permissions: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai'] },
 ];
 
 export const currentUser = users[0]; // Arjun Mehta (analyst)

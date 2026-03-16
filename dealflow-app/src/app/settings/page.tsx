@@ -11,6 +11,8 @@ import {
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
+import { ALL_PAGE_PERMISSIONS } from '@/types/database';
+import type { PagePermission } from '@/types/database';
 
 type SettingsSection = 'stages' | 'industries' | 'rejection' | 'sources' | 'team';
 
@@ -47,7 +49,7 @@ export default function SettingsPage() {
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory,
         addSubReason, updateSubReason, deleteSubReason,
-        inviteUser,
+        inviteUser, updateUserPermissions, updateUserRole,
     } = useAppContext();
 
     // ── redirect non-admins ──────────────────────────────────
@@ -89,9 +91,15 @@ export default function SettingsPage() {
 
     // ── invite form ──────────────────────────────────────────
     const [inviteEmail,   setInviteEmail]   = useState('');
-    const [inviteRole,    setInviteRole]    = useState<'analyst'|'partner'|'admin'>('analyst');
+    const [inviteRole,    setInviteRole]    = useState('analyst');
+    const [invitePerms,   setInvitePerms]   = useState<PagePermission[]>([]);
     const [inviteStatus,  setInviteStatus]  = useState<'idle'|'sending'|'success'|'error'>('idle');
     const [inviteMsg,     setInviteMsg]     = useState('');
+
+    // ── per-user edit state ────────────────────────────────
+    const [editUserId,    setEditUserId]    = useState<string | null>(null);
+    const [editUserRole,  setEditUserRole]  = useState('');
+    const [editUserPerms, setEditUserPerms] = useState<PagePermission[]>([]);
 
     // ── helpers ──────────────────────────────────────────────
     const resetAdd = () => { setAddName(''); setAddDesc(''); setShowAdd(false); };
@@ -354,6 +362,10 @@ export default function SettingsPage() {
         </div>
     );
 
+    /* ── Toggle helper for permission arrays ── */
+    const togglePerm = (arr: PagePermission[], perm: PagePermission): PagePermission[] =>
+        arr.includes(perm) ? arr.filter(p => p !== perm) : [...arr, perm];
+
     /* ── Team Members ── */
     const renderTeam = () => (
         <div>
@@ -365,50 +377,79 @@ export default function SettingsPage() {
             </div>
 
             {showAdd && (
-                <div style={{ display:'flex', gap:8, marginBottom:12, padding:12, background:'var(--bg-tertiary)', borderRadius:8, alignItems:'center', flexWrap:'wrap' }}>
-                    <input
-                        className="form-input"
-                        placeholder="Email address"
-                        type="email"
-                        value={inviteEmail}
-                        onChange={e => setInviteEmail(e.target.value)}
-                        style={{ flex:2, minWidth:200 }}
-                        autoFocus
-                    />
-                    <select
-                        className="form-input"
-                        value={inviteRole}
-                        onChange={e => setInviteRole(e.target.value as 'analyst'|'partner'|'admin')}
-                        style={{ flex:1, minWidth:120 }}
-                    >
-                        <option value="analyst">Analyst</option>
-                        <option value="partner">Partner</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                    <button
-                        className="btn btn-primary btn-sm"
-                        disabled={inviteStatus === 'sending'}
-                        onClick={async () => {
-                            if (!inviteEmail.trim()) return;
-                            setInviteStatus('sending'); setInviteMsg('');
-                            try {
-                                await inviteUser(inviteEmail, inviteRole);
-                                setInviteStatus('success'); setInviteMsg('Invitation sent!');
-                                setInviteEmail('');
-                                setTimeout(() => { setInviteStatus('idle'); setShowAdd(false); }, 2000);
-                            } catch {
-                                setInviteStatus('error'); setInviteMsg('Failed to send invite.');
-                            }
-                        }}
-                    >
-                        {inviteStatus === 'sending' ? 'Sending…' : <><Plus size={13} /> Send Invite</>}
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => { setShowAdd(false); setInviteStatus('idle'); setInviteEmail(''); }}><X size={13} /></button>
-                    {inviteStatus !== 'idle' && (
-                        <span style={{ fontSize:12, color: inviteStatus === 'success' ? 'var(--success)' : 'var(--danger)', width:'100%' }}>
-                            {inviteMsg}
-                        </span>
-                    )}
+                <div style={{ marginBottom:16, padding:16, background:'var(--bg-tertiary)', borderRadius:8 }}>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:12 }}>
+                        <input
+                            className="form-input"
+                            placeholder="Email address"
+                            type="email"
+                            value={inviteEmail}
+                            onChange={e => setInviteEmail(e.target.value)}
+                            style={{ flex:2, minWidth:200 }}
+                            autoFocus
+                        />
+                        <input
+                            className="form-input"
+                            placeholder="Role (e.g. Analyst, VC Intern)"
+                            value={inviteRole}
+                            onChange={e => setInviteRole(e.target.value)}
+                            style={{ flex:1, minWidth:150 }}
+                        />
+                    </div>
+                    <div style={{ marginBottom:12 }}>
+                        <div style={{ fontSize:12, fontWeight:600, color:'var(--text-secondary)', marginBottom:8 }}>Page Access</div>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                            {ALL_PAGE_PERMISSIONS.map(p => (
+                                <label
+                                    key={p.key}
+                                    style={{
+                                        display:'flex', alignItems:'center', gap:5,
+                                        padding:'5px 10px', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:500,
+                                        background: invitePerms.includes(p.key) ? 'var(--primary)' : 'var(--bg-secondary)',
+                                        color: invitePerms.includes(p.key) ? '#fff' : 'var(--text-secondary)',
+                                        border: '1px solid',
+                                        borderColor: invitePerms.includes(p.key) ? 'var(--primary)' : 'var(--border)',
+                                        transition: 'all 0.15s ease',
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={invitePerms.includes(p.key)}
+                                        onChange={() => setInvitePerms(prev => togglePerm(prev, p.key))}
+                                        style={{ display:'none' }}
+                                    />
+                                    {invitePerms.includes(p.key) ? <Check size={11} /> : null}
+                                    {p.label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <button
+                            className="btn btn-primary btn-sm"
+                            disabled={inviteStatus === 'sending'}
+                            onClick={async () => {
+                                if (!inviteEmail.trim()) return;
+                                setInviteStatus('sending'); setInviteMsg('');
+                                try {
+                                    await inviteUser(inviteEmail, inviteRole, invitePerms);
+                                    setInviteStatus('success'); setInviteMsg('Invitation sent!');
+                                    setInviteEmail(''); setInvitePerms([]);
+                                    setTimeout(() => { setInviteStatus('idle'); setShowAdd(false); }, 2000);
+                                } catch {
+                                    setInviteStatus('error'); setInviteMsg('Failed to send invite.');
+                                }
+                            }}
+                        >
+                            {inviteStatus === 'sending' ? 'Sending…' : <><Plus size={13} /> Send Invite</>}
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setShowAdd(false); setInviteStatus('idle'); setInviteEmail(''); setInvitePerms([]); }}><X size={13} /></button>
+                        {inviteStatus !== 'idle' && (
+                            <span style={{ fontSize:12, color: inviteStatus === 'success' ? 'var(--success)' : 'var(--danger)' }}>
+                                {inviteMsg}
+                            </span>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -420,28 +461,127 @@ export default function SettingsPage() {
                 {users.map(u => {
                     const bg = avatarColor(u.email || u.id);
                     const ini = initials(u.name, u.email);
+                    const isEditing = editUserId === u.id;
+
                     return (
-                        <div key={u.id} className="config-item">
-                            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                                <div style={{
-                                    width:34, height:34, borderRadius:'50%',
-                                    background: bg,
-                                    display:'flex', alignItems:'center', justifyContent:'center',
-                                    fontSize:12, fontWeight:700, color:'#fff', flexShrink:0,
-                                }}>
-                                    {ini}
+                        <div key={u.id} className="config-item" style={{ flexDirection:'column', alignItems:'stretch', gap:10 }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                                    <div style={{
+                                        width:34, height:34, borderRadius:'50%',
+                                        background: bg,
+                                        display:'flex', alignItems:'center', justifyContent:'center',
+                                        fontSize:12, fontWeight:700, color:'#fff', flexShrink:0,
+                                    }}>
+                                        {ini}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight:600, fontSize:13 }}>{u.name || u.email}</div>
+                                        <div style={{ fontSize:11, color:'var(--text-tertiary)' }}>{u.email}</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div style={{ fontWeight:600, fontSize:13 }}>{u.name || u.email}</div>
-                                    <div style={{ fontSize:11, color:'var(--text-tertiary)' }}>{u.email}</div>
+                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    {!isEditing && (
+                                        <>
+                                            <span className={`badge ${
+                                                u.role === 'admin'   ? 'badge-danger'  :
+                                                u.role === 'partner' ? 'badge-warning' : 'badge-info'
+                                            }`}>
+                                                {u.role}
+                                            </span>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                title="Edit permissions"
+                                                onClick={() => {
+                                                    setEditUserId(u.id);
+                                                    setEditUserRole(u.role);
+                                                    setEditUserPerms(u.permissions || []);
+                                                }}
+                                            >
+                                                <Pencil size={12} />
+                                            </button>
+                                        </>
+                                    )}
+                                    {isEditing && (
+                                        <>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                style={{ color:'var(--success)' }}
+                                                title="Save"
+                                                onClick={async () => {
+                                                    await updateUserRole(u.id, editUserRole);
+                                                    await updateUserPermissions(u.id, editUserPerms);
+                                                    setEditUserId(null);
+                                                }}
+                                            >
+                                                <Check size={13} /> Save
+                                            </button>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => setEditUserId(null)}>
+                                                <X size={13} />
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
-                            <span className={`badge ${
-                                u.role === 'admin'   ? 'badge-danger'  :
-                                u.role === 'partner' ? 'badge-warning' : 'badge-info'
-                            }`}>
-                                {u.role}
-                            </span>
+
+                            {/* Edit mode: role + permission checkboxes */}
+                            {isEditing && (
+                                <div style={{ paddingLeft:46 }}>
+                                    <div style={{ marginBottom:10 }}>
+                                        <label style={{ fontSize:11, fontWeight:600, color:'var(--text-tertiary)', display:'block', marginBottom:4 }}>Role / Title</label>
+                                        <input
+                                            className="form-input"
+                                            value={editUserRole}
+                                            onChange={e => setEditUserRole(e.target.value)}
+                                            placeholder="e.g. Analyst, VC Intern, Partner"
+                                            style={{ fontSize:13, maxWidth:280 }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize:11, fontWeight:600, color:'var(--text-tertiary)', display:'block', marginBottom:6 }}>Page Access</label>
+                                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                                            {ALL_PAGE_PERMISSIONS.map(p => (
+                                                <label
+                                                    key={p.key}
+                                                    style={{
+                                                        display:'flex', alignItems:'center', gap:5,
+                                                        padding:'5px 10px', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:500,
+                                                        background: editUserPerms.includes(p.key) ? 'var(--primary)' : 'var(--bg-secondary)',
+                                                        color: editUserPerms.includes(p.key) ? '#fff' : 'var(--text-secondary)',
+                                                        border: '1px solid',
+                                                        borderColor: editUserPerms.includes(p.key) ? 'var(--primary)' : 'var(--border)',
+                                                        transition: 'all 0.15s ease',
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={editUserPerms.includes(p.key)}
+                                                        onChange={() => setEditUserPerms(prev => togglePerm(prev, p.key))}
+                                                        style={{ display:'none' }}
+                                                    />
+                                                    {editUserPerms.includes(p.key) ? <Check size={11} /> : null}
+                                                    {p.label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Read-only permission badges */}
+                            {!isEditing && u.permissions && u.permissions.length > 0 && (
+                                <div style={{ paddingLeft:46, display:'flex', flexWrap:'wrap', gap:4 }}>
+                                    {u.permissions.map(perm => (
+                                        <span key={perm} style={{
+                                            fontSize:10, padding:'2px 7px', borderRadius:4,
+                                            background:'var(--bg-tertiary)', color:'var(--text-secondary)',
+                                            fontWeight:500,
+                                        }}>
+                                            {ALL_PAGE_PERMISSIONS.find(p => p.key === perm)?.label || perm}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     );
                 })}

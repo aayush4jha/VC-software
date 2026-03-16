@@ -53,6 +53,15 @@ export async function GET(request: NextRequest) {
             path: '/',
         });
 
+        // Store the connection timestamp so email ingestion only fetches new emails
+        response.cookies.set('google_connected_at', new Date().toISOString(), {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 365, // 1 year
+            path: '/',
+        });
+
         return response;
     } catch (err) {
         console.error('Error exchanging code for tokens:', err);

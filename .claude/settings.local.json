@@ -9,7 +9,12 @@
       "Bash(git commit -m \"Fix TypeScript null check on user in activity_logs insert\")",
       "Bash(git push)",
       "Bash(git add src/lib/supabase/client.ts src/lib/supabase/server.ts src/lib/context.tsx)",
-      "Bash(git commit -m \"Remove placeholder fallbacks, add fetchAllData error logging\")"
+      "Bash(git commit -m \"Remove placeholder fallbacks, add fetchAllData error logging\")",
+      "Bash(python3 generate_report.py)",
+      "Bash(git add dealflow-app/src/app/api/auth/google/callback/route.ts dealflow-app/src/lib/google.ts)",
+      "Bash(git commit:*)",
+      "Bash(vercel env ls)",
+      "Bash(npx next build)"
     ]
   }
 }

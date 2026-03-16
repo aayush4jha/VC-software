@@ -7,6 +7,30 @@ const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 const TARGET_EMAIL = 'pipeline@dholakiaventures.com';
 const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
 
+const FUNDING_KEYWORDS = [
+    'pitch deck', 'fundraising', 'funding', 'startup', 'investor',
+    'venture capital', 'seed round', 'series a', 'series b', 'pre-seed',
+    'investment opportunity', 'founder', 'vc', 'angel investor',
+    'capital raise', 'investment', 'raise', 'round', 'valuation',
+    'term sheet', 'due diligence', 'portfolio', 'equity',
+];
+
+function detectFundingRelevance(subject: string, snippet: string): { isRelevant: boolean; label: string | null } {
+    const text = `${subject} ${snippet}`.toLowerCase();
+    const matched = FUNDING_KEYWORDS.filter(kw => text.includes(kw));
+    if (matched.length === 0) return { isRelevant: false, label: null };
+
+    // Categorize by label
+    const pitchKeywords = ['pitch deck', 'deck'];
+    const fundingKeywords = ['fundraising', 'funding', 'capital raise', 'raise', 'round', 'seed round', 'series a', 'series b', 'pre-seed'];
+    const investorKeywords = ['investor', 'venture capital', 'vc', 'angel investor', 'investment opportunity', 'investment'];
+
+    if (matched.some(kw => pitchKeywords.includes(kw))) return { isRelevant: true, label: 'Startup Pitch' };
+    if (matched.some(kw => fundingKeywords.includes(kw))) return { isRelevant: true, label: 'Funding Relevant' };
+    if (matched.some(kw => investorKeywords.includes(kw))) return { isRelevant: true, label: 'Investor Opportunity' };
+    return { isRelevant: true, label: 'Startup Relevant' };
+}
+
 function parseJwt(token: string): Record<string, unknown> | null {
     try {
         const payload = token.split('.')[1];
@@ -85,10 +109,18 @@ export async function POST(request: NextRequest) {
 
         const processedIds = new Set((existingEmails || []).map((e: { gmail_message_id: string }) => e.gmail_message_id));
 
-        // List messages sent to the pipeline email
+        // Only ingest emails received after the account was connected
+        const connectedAt = request.cookies.get('google_connected_at')?.value;
+        let query = `to:${TARGET_EMAIL}`;
+        if (connectedAt) {
+            // Gmail uses epoch seconds for after: filter
+            const epochSeconds = Math.floor(new Date(connectedAt).getTime() / 1000);
+            query += ` after:${epochSeconds}`;
+        }
+
         const listResponse = await gmail.users.messages.list({
             userId: 'me',
-            q: `to:${TARGET_EMAIL}`,
+            q: query,
             maxResults: 50,
         });
 
@@ -124,6 +156,7 @@ export async function POST(request: NextRequest) {
                 const fromHeader = headers.find(h => h.name === 'From')?.value || '';
                 const subject = headers.find(h => h.name === 'Subject')?.value || '(No Subject)';
                 const dateHeader = headers.find(h => h.name === 'Date')?.value;
+                const snippet = fullMsg.data.snippet || '';
 
                 const { name: senderName, email: senderEmail } = extractSenderInfo(fromHeader);
 
@@ -134,6 +167,27 @@ export async function POST(request: NextRequest) {
                     .map(p => p.filename!);
                 const hasPitchDeck = attachmentNames.some(isPitchDeckAttachment);
                 const hasAttachments = attachmentNames.length > 0;
+
+                // Keyword-based filtering: only process funding-relevant emails
+                const { isRelevant, label: relevanceLabel } = detectFundingRelevance(subject, snippet);
+                if (!isRelevant) {
+                    await db.from('ingested_emails').insert({
+                        organization_id: ORGANIZATION_ID,
+                        gmail_message_id: msg.id,
+                        gmail_thread_id: msg.threadId || null,
+                        sender_name: senderName,
+                        sender_email: senderEmail,
+                        subject,
+                        received_at: dateHeader ? new Date(dateHeader).toISOString() : null,
+                        has_attachments: hasAttachments,
+                        attachment_names: attachmentNames,
+                        status: 'skipped',
+                        error_message: 'Not funding/startup relevant',
+                        relevance_label: null,
+                    });
+                    skipped++;
+                    continue;
+                }
 
                 // Derive company name from subject
                 let companyName = subject.replace(/^(re|fwd|fw):\s*/gi, '').trim();
@@ -164,6 +218,7 @@ export async function POST(request: NextRequest) {
                         company_id: existingCompany[0].id,
                         status: 'skipped',
                         error_message: `Company already exists: ${existingCompany[0].company_name}`,
+                        relevance_label: relevanceLabel,
                     });
                     skipped++;
                     continue;
@@ -223,6 +278,7 @@ export async function POST(request: NextRequest) {
                     attachment_names: attachmentNames,
                     company_id: newCompany.id,
                     status: 'processed',
+                    relevance_label: relevanceLabel,
                 });
 
                 // Add activity log

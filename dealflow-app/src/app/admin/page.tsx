@@ -2,11 +2,12 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-    Shield, Users, Building2, BarChart3, Activity, Settings,
-    Plus, Trash2, ChevronDown, Search, RefreshCw, AlertTriangle, Eye
+    Shield, Users, Building2, BarChart3, Settings,
+    Plus, Trash2, Search, RefreshCw, AlertTriangle, Eye, Check, X, Edit2,
 } from 'lucide-react';
+import { ALL_PAGE_PERMISSIONS, type PagePermission } from '@/types/database';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
@@ -20,11 +21,20 @@ export default function AdminPage() {
         dealSourceNames, rejectionReasonCategories,
         getUserById, getStageById, getIndustryById,
         deleteCompany, setSelectedCompany, refreshData,
+        updateUserPermissions, updateUserRole, inviteUser,
     } = useAppContext();
 
     const [activeSection, setActiveSection] = useState<AdminSection>('overview');
     const [search, setSearch] = useState('');
     const [refreshing, setRefreshing] = useState(false);
+    const [editingUserId, setEditingUserId] = useState<string | null>(null);
+    const [editRole, setEditRole] = useState('');
+    const [editPermissions, setEditPermissions] = useState<PagePermission[]>([]);
+    const [showInvite, setShowInvite] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState('analyst');
+    const [invitePermissions, setInvitePermissions] = useState<PagePermission[]>(['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai']);
+    const [inviting, setInviting] = useState(false);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -61,7 +71,7 @@ export default function AdminPage() {
         { id: 'settings', label: 'Configuration', icon: Settings },
     ];
 
-    if (user?.role !== 'admin' && user?.role !== 'partner') {
+    if (user && !user.permissions.includes('admin') && user.role !== 'admin' && user.role !== 'partner') {
         return (
             <div className="app-layout">
                 <Sidebar />
@@ -332,32 +342,221 @@ export default function AdminPage() {
                         </div>
                     )}
 
-                    {/* Users */}
+                    {/* Users & Permissions */}
                     {activeSection === 'users' && (
                         <div>
-                            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>
-                                Team Members ({users.length})
-                            </h2>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                                <h2 style={{ fontSize: 16, fontWeight: 700 }}>
+                                    Team Members ({users.length})
+                                </h2>
+                                <button
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => setShowInvite(!showInvite)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                    <Plus size={14} /> Invite Member
+                                </button>
+                            </div>
+
+                            {/* Invite Form */}
+                            {showInvite && (
+                                <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+                                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Invite New Team Member</h3>
+                                    <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                                        <input
+                                            type="email"
+                                            placeholder="Email address"
+                                            value={inviteEmail}
+                                            onChange={e => setInviteEmail(e.target.value)}
+                                            className="form-input"
+                                            style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13 }}
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Role (e.g. Analyst, Partner, VC Intern)"
+                                            value={inviteRole}
+                                            onChange={e => setInviteRole(e.target.value)}
+                                            style={{ width: 220, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13 }}
+                                        />
+                                    </div>
+                                    <div style={{ marginBottom: 12 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
+                                            Page Permissions
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                            {ALL_PAGE_PERMISSIONS.map(p => (
+                                                <label
+                                                    key={p.key}
+                                                    style={{
+                                                        display: 'flex', alignItems: 'center', gap: 6,
+                                                        padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
+                                                        background: invitePermissions.includes(p.key) ? 'rgba(59,130,246,0.1)' : 'var(--bg-tertiary)',
+                                                        border: `1px solid ${invitePermissions.includes(p.key) ? 'var(--primary)' : 'var(--border-color)'}`,
+                                                        fontSize: 12, fontWeight: 500,
+                                                        color: invitePermissions.includes(p.key) ? 'var(--primary)' : 'var(--text-secondary)',
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={invitePermissions.includes(p.key)}
+                                                        onChange={e => {
+                                                            if (e.target.checked) {
+                                                                setInvitePermissions(prev => [...prev, p.key]);
+                                                            } else {
+                                                                setInvitePermissions(prev => prev.filter(k => k !== p.key));
+                                                            }
+                                                        }}
+                                                        style={{ display: 'none' }}
+                                                    />
+                                                    {invitePermissions.includes(p.key) ? <Check size={12} /> : <X size={12} />}
+                                                    {p.label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button
+                                            className="btn btn-primary btn-sm"
+                                            disabled={inviting || !inviteEmail}
+                                            onClick={async () => {
+                                                setInviting(true);
+                                                try {
+                                                    await inviteUser(inviteEmail, inviteRole, invitePermissions);
+                                                    setInviteEmail('');
+                                                    setInviteRole('analyst');
+                                                    setInvitePermissions(['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai']);
+                                                    setShowInvite(false);
+                                                } catch (err) {
+                                                    alert((err as Error).message);
+                                                }
+                                                setInviting(false);
+                                            }}
+                                        >
+                                            {inviting ? 'Sending...' : 'Send Invite'}
+                                        </button>
+                                        <button className="btn btn-ghost btn-sm" onClick={() => setShowInvite(false)}>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* User list with permissions */}
                             <div className="config-list">
                                 {users.map(u => {
                                     const assigned = activeCompanies.filter(c => c.analystId === u.id).length;
+                                    const isEditing = editingUserId === u.id;
                                     return (
-                                        <div key={u.id} className="config-item" style={{ padding: '14px 16px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <div className="kanban-card-avatar" style={{ width: 36, height: 36, fontSize: 13 }}>
-                                                    {u.name.split(' ').map(n => n[0]).join('')}
+                                        <div key={u.id} className="config-item" style={{ padding: '14px 16px', flexDirection: 'column', alignItems: 'stretch' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                    <div className="kanban-card-avatar" style={{ width: 36, height: 36, fontSize: 13 }}>
+                                                        {u.name.split(' ').map(n => n[0]).join('')}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.email}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</div>
-                                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.email}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{assigned} active deals</span>
+                                                    <span className={`badge ${u.role === 'admin' ? 'badge-danger' : u.role === 'partner' ? 'badge-warning' : 'badge-info'}`}>
+                                                        {u.role}
+                                                    </span>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm"
+                                                        onClick={() => {
+                                                            if (isEditing) {
+                                                                setEditingUserId(null);
+                                                            } else {
+                                                                setEditingUserId(u.id);
+                                                                setEditRole(u.role);
+                                                                setEditPermissions([...u.permissions]);
+                                                            }
+                                                        }}
+                                                        title="Edit permissions"
+                                                    >
+                                                        <Edit2 size={14} />
+                                                    </button>
                                                 </div>
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{assigned} active deals</span>
-                                                <span className={`badge ${u.role === 'admin' ? 'badge-danger' : u.role === 'partner' ? 'badge-warning' : 'badge-info'}`}>
-                                                    {u.role}
-                                                </span>
-                                            </div>
+
+                                            {/* Permission badges (read-only) */}
+                                            {!isEditing && (
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, marginLeft: 48 }}>
+                                                    {u.permissions.map(p => (
+                                                        <span key={p} className="badge badge-neutral" style={{ fontSize: 10 }}>{p}</span>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Edit mode */}
+                                            {isEditing && (
+                                                <div style={{ marginTop: 12, marginLeft: 48, padding: '12px 16px', background: 'var(--bg-primary)', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                                                    <div style={{ marginBottom: 10 }}>
+                                                        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
+                                                            Role / Title
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={editRole}
+                                                            onChange={e => setEditRole(e.target.value)}
+                                                            style={{ width: 200, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13 }}
+                                                            placeholder="e.g. Analyst, VC Intern, Investment Associate"
+                                                        />
+                                                    </div>
+                                                    <div style={{ marginBottom: 10 }}>
+                                                        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+                                                            Page Permissions
+                                                        </label>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                                            {ALL_PAGE_PERMISSIONS.map(p => (
+                                                                <label
+                                                                    key={p.key}
+                                                                    style={{
+                                                                        display: 'flex', alignItems: 'center', gap: 5,
+                                                                        padding: '5px 9px', borderRadius: 6, cursor: 'pointer',
+                                                                        background: editPermissions.includes(p.key) ? 'rgba(59,130,246,0.1)' : 'var(--bg-tertiary)',
+                                                                        border: `1px solid ${editPermissions.includes(p.key) ? 'var(--primary)' : 'var(--border-color)'}`,
+                                                                        fontSize: 11, fontWeight: 500,
+                                                                        color: editPermissions.includes(p.key) ? 'var(--primary)' : 'var(--text-secondary)',
+                                                                    }}
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={editPermissions.includes(p.key)}
+                                                                        onChange={e => {
+                                                                            if (e.target.checked) {
+                                                                                setEditPermissions(prev => [...prev, p.key]);
+                                                                            } else {
+                                                                                setEditPermissions(prev => prev.filter(k => k !== p.key));
+                                                                            }
+                                                                        }}
+                                                                        style={{ display: 'none' }}
+                                                                    />
+                                                                    {editPermissions.includes(p.key) ? <Check size={10} /> : <X size={10} />}
+                                                                    {p.label}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
+                                                        <button
+                                                            className="btn btn-primary btn-sm"
+                                                            onClick={async () => {
+                                                                await updateUserRole(u.id, editRole);
+                                                                await updateUserPermissions(u.id, editPermissions);
+                                                                setEditingUserId(null);
+                                                            }}
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => setEditingUserId(null)}>
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}

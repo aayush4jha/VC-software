@@ -1,14 +1,15 @@
 'use client';
 
-import React from 'react';
-import { Pencil, Video, Mail } from 'lucide-react';
+import React, { useState } from 'react';
+import { Pencil, Video, Mail, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { Company, PipelineStage } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 function CompanyKanbanCard({ company, index }: { company: Company; index: number }) {
-    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById } = useAppContext();
+    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany } = useAppContext();
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const analyst = company.analystId ? getUserById(company.analystId) : null;
     const industry = getIndustryById(company.industryId);
     const days = getDaysInPipeline(company.createdAt);
@@ -29,6 +30,22 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
         e.stopPropagation();
         setSelectedCompany(company);
         setShowEmailCompose(true);
+    };
+
+    const handleDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        deleteCompany(company.id);
+        setShowDeleteConfirm(false);
+    };
+
+    const cancelDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowDeleteConfirm(false);
     };
 
     return (
@@ -104,11 +121,52 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                             >
                                 <Video size={12} />
                             </button>
+                            <button
+                                className="kanban-card-edit-btn"
+                                onClick={handleDelete}
+                                title="Delete company"
+                                style={{ color: '#ef4444' }}
+                            >
+                                <Trash2 size={12} />
+                            </button>
                             {company.totalFundRaise && (
                                 <span className="kanban-card-amount">{formatCurrency(company.totalFundRaise)}</span>
                             )}
                         </div>
                     </div>
+                    {showDeleteConfirm && (
+                        <div
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                                marginTop: 8,
+                                padding: '10px 12px',
+                                background: 'rgba(239,68,68,0.08)',
+                                border: '1px solid rgba(239,68,68,0.2)',
+                                borderRadius: 8,
+                                fontSize: 12,
+                            }}
+                        >
+                            <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: 6 }}>
+                                Delete {company.companyName}?
+                            </div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                    className="btn btn-sm"
+                                    onClick={confirmDelete}
+                                    style={{ background: '#ef4444', color: '#fff', border: 'none', fontSize: 11, padding: '4px 10px' }}
+                                >
+                                    Delete
+                                </button>
+                                <button
+                                    className="btn btn-sm btn-ghost"
+                                    onClick={cancelDelete}
+                                    style={{ fontSize: 11, padding: '4px 10px' }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </Draggable>

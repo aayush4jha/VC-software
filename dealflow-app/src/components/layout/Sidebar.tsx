@@ -7,24 +7,28 @@ import {
     Home, LayoutGrid, Briefcase, Users, Mail, Sparkles, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
+import type { PagePermission } from '@/types/database';
 
-const navItems = [
-    { label: 'Dashboard', href: '/', icon: Home },
-    { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid },
-    { label: 'Portfolio', href: '/portfolio', icon: Briefcase },
-    { label: 'Contacts', href: '/contacts', icon: Users },
-    { label: 'Emails', href: '/emails', icon: Mail },
-    { label: 'Dealflow AI', href: '/ai', icon: Sparkles },
+const navItems: { label: string; href: string; icon: React.ElementType; permission: PagePermission }[] = [
+    { label: 'Dashboard', href: '/', icon: Home, permission: 'dashboard' },
+    { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid, permission: 'dealflow' },
+    { label: 'Portfolio', href: '/portfolio', icon: Briefcase, permission: 'portfolio' },
+    { label: 'Contacts', href: '/contacts', icon: Users, permission: 'contacts' },
+    { label: 'Email Workspace', href: '/emails', icon: Mail, permission: 'emails' },
+    { label: 'Dealflow AI', href: '/ai', icon: Sparkles, permission: 'ai' },
 ];
 
-const bottomNav = [
-    { label: 'Settings', href: '/settings', icon: Settings },
-];
+function hasPermission(userPermissions: PagePermission[] | undefined, required: PagePermission): boolean {
+    if (!userPermissions || userPermissions.length === 0) return true; // backward compat: no permissions = show all
+    return userPermissions.includes(required);
+}
 
 export default function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
     const { user, signOut } = useAppContext();
+
+    const userPerms = user?.permissions;
 
     return (
         <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -39,24 +43,25 @@ export default function Sidebar() {
 
             <nav className="sidebar-nav">
                 {!collapsed && <div className="sidebar-section-label">Main</div>}
-                {navItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-                            title={collapsed ? item.label : undefined}
-                        >
-                            <Icon />
-                            {!collapsed && item.label}
+                {navItems
+                    .filter(item => hasPermission(userPerms, item.permission))
+                    .map((item) => {
+                        const Icon = item.icon;
+                        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                                title={collapsed ? item.label : undefined}
+                            >
+                                <Icon />
+                                {!collapsed && item.label}
+                            </Link>
+                        );
+                    })}
 
-                        </Link>
-                    );
-                })}
-
-                {user?.role === 'admin' && (
+                {hasPermission(userPerms, 'admin') && (
                     <Link
                         href="/admin"
                         className={`sidebar-nav-item ${pathname.startsWith('/admin') ? 'active' : ''}`}
@@ -69,22 +74,17 @@ export default function Sidebar() {
 
                 <div style={{ flex: 1 }} />
 
-                {!collapsed && user?.role === 'admin' && <div className="sidebar-section-label">System</div>}
-                {user?.role === 'admin' && bottomNav.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = pathname === item.href;
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-                            title={collapsed ? item.label : undefined}
-                        >
-                            <Icon />
-                            {!collapsed && item.label}
-                        </Link>
-                    );
-                })}
+                {!collapsed && hasPermission(userPerms, 'settings') && <div className="sidebar-section-label">System</div>}
+                {hasPermission(userPerms, 'settings') && (
+                    <Link
+                        href="/settings"
+                        className={`sidebar-nav-item ${pathname === '/settings' ? 'active' : ''}`}
+                        title={collapsed ? 'Settings' : undefined}
+                    >
+                        <Settings />
+                        {!collapsed && 'Settings'}
+                    </Link>
+                )}
                 <div className="sidebar-nav-item" style={{ cursor: 'pointer' }} title={collapsed ? 'Log Out' : undefined} onClick={() => signOut()}>
                     <LogOut />
                     {!collapsed && 'Log Out'}
