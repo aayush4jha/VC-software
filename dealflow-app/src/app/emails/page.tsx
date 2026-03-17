@@ -171,8 +171,8 @@ function EmailsContent() {
                     padding: 24,
                     marginBottom: 24,
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '1 1 auto', minWidth: 0 }}>
                             <div style={{
                                 width: 44,
                                 height: 44,
@@ -181,6 +181,7 @@ function EmailsContent() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
+                                flexShrink: 0,
                             }}>
                                 {isChecking ? (
                                     <Loader2 size={20} style={{ color: 'var(--text-tertiary)', animation: 'spin 1s linear infinite' }} />
@@ -353,6 +354,7 @@ function EmailsContent() {
                                     background: 'var(--bg-primary)',
                                     borderRadius: 8,
                                     border: '1px solid var(--border-color)',
+                                    flexWrap: 'wrap',
                                 }}>
                                     <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                                         {workspaceEmails.length} total emails
@@ -372,8 +374,8 @@ function EmailsContent() {
                                 </div>
 
                                 {/* Filter & search */}
-                                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                                    <div className="header-search" style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                                    <div className="header-search" style={{ flex: '1 1 200px', minWidth: 140 }}>
                                         <Search size={16} />
                                         <input
                                             type="text"

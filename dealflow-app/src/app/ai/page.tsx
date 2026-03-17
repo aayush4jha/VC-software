@@ -33,7 +33,7 @@ export default function AIPage() {
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
                         {aiFeatures.map((feat, i) => {
                             const Icon = feat.icon;
                             return (

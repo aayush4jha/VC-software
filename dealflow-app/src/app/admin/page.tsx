@@ -23,26 +23,59 @@ function ColumnFilterDropdown({ label, options, selected, onChange }: {
     onChange: (selected: Set<string>) => void;
 }) {
     const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [pos, setPos] = useState({ top: 0, left: 0, openUp: false });
     const hasFilter = selected.size > 0;
 
+    // Close on outside click
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+            if (
+                buttonRef.current && !buttonRef.current.contains(e.target as Node) &&
+                dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+            ) {
+                setOpen(false);
+            }
         };
         if (open) document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [open]);
 
+    // Close on scroll (since position: fixed won't follow)
+    useEffect(() => {
+        if (!open) return;
+        const onScroll = () => setOpen(false);
+        // Capture scroll on any ancestor
+        window.addEventListener('scroll', onScroll, true);
+        return () => window.removeEventListener('scroll', onScroll, true);
+    }, [open]);
+
+    const handleToggle = () => {
+        if (!open && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            const dropdownHeight = Math.min(options.length * 38 + 50, 320);
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const openUp = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+            setPos({
+                top: openUp ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+                left: Math.min(rect.left, window.innerWidth - 230),
+                openUp,
+            });
+        }
+        setOpen(o => !o);
+    };
+
     return (
-        <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+        <>
             <button
-                onClick={() => setOpen(o => !o)}
+                ref={buttonRef}
+                onClick={handleToggle}
                 style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
                     background: 'none', border: 'none', cursor: 'pointer', padding: 0,
                     font: 'inherit', fontWeight: 600, fontSize: 12,
-                    color: hasFilter ? 'var(--primary)' : 'var(--text-secondary)',
+                    color: hasFilter ? 'var(--primary)' : 'inherit',
                     textTransform: 'uppercase', letterSpacing: '0.5px',
                     whiteSpace: 'nowrap',
                 }}
@@ -61,55 +94,72 @@ function ColumnFilterDropdown({ label, options, selected, onChange }: {
                 <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
             </button>
             {open && (
-                <div style={{
-                    position: 'absolute', top: '100%', left: 0, zIndex: 100,
-                    marginTop: 6, minWidth: 200, maxHeight: 280, overflowY: 'auto',
-                    background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-                    borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                    padding: '6px 0',
-                }}>
+                <div
+                    ref={dropdownRef}
+                    style={{
+                        position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000,
+                        minWidth: 220, maxHeight: 320, overflowY: 'auto',
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                        borderRadius: 10,
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.22)',
+                        padding: '6px 0',
+                    }}
+                >
                     {hasFilter && (
                         <button
-                            onClick={() => onChange(new Set())}
+                            onClick={() => { onChange(new Set()); setOpen(false); }}
                             style={{
                                 display: 'flex', alignItems: 'center', gap: 6,
-                                width: '100%', padding: '7px 12px', border: 'none',
+                                width: '100%', padding: '8px 14px', border: 'none',
                                 background: 'none', cursor: 'pointer', fontSize: 12,
                                 color: 'var(--danger)', fontWeight: 600, textAlign: 'left',
+                                borderBottom: '1px solid var(--border-color)',
+                                marginBottom: 2,
                             }}
                         >
-                            <X size={12} /> Clear filters
+                            <X size={12} /> Clear all
                         </button>
                     )}
-                    {options.map(opt => (
-                        <label
-                            key={opt.value}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                padding: '7px 12px', cursor: 'pointer', fontSize: 13,
-                                color: 'var(--text-primary)',
-                                background: selected.has(opt.value) ? 'rgba(59,130,246,0.06)' : 'transparent',
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = selected.has(opt.value) ? 'rgba(59,130,246,0.06)' : 'transparent')}
-                        >
-                            <span style={{
-                                width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                                border: `1.5px solid ${selected.has(opt.value) ? 'var(--primary)' : 'var(--border-color)'}`,
-                                background: selected.has(opt.value) ? 'var(--primary)' : 'transparent',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                                {selected.has(opt.value) && <Check size={10} style={{ color: '#fff' }} />}
-                            </span>
-                            {opt.color && (
-                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
-                            )}
-                            <span style={{ fontWeight: selected.has(opt.value) ? 600 : 400 }}>{opt.label}</span>
-                        </label>
-                    ))}
+                    {options.map(opt => {
+                        const isSelected = selected.has(opt.value);
+                        return (
+                            <label
+                                key={opt.value}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    padding: '8px 14px', cursor: 'pointer', fontSize: 13,
+                                    color: 'var(--text-primary)',
+                                    background: isSelected ? 'rgba(59,130,246,0.06)' : 'transparent',
+                                    transition: 'background 0.1s',
+                                }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = isSelected ? 'rgba(59,130,246,0.06)' : 'transparent')}
+                                onClick={() => {
+                                    const next = new Set(selected);
+                                    if (next.has(opt.value)) next.delete(opt.value);
+                                    else next.add(opt.value);
+                                    onChange(next);
+                                }}
+                            >
+                                <span style={{
+                                    width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                                    border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
+                                    background: isSelected ? 'var(--primary)' : 'transparent',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    transition: 'all 0.1s',
+                                }}>
+                                    {isSelected && <Check size={10} style={{ color: '#fff' }} />}
+                                </span>
+                                {opt.color && (
+                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
+                                )}
+                                <span style={{ fontWeight: isSelected ? 600 : 400 }}>{opt.label}</span>
+                            </label>
+                        );
+                    })}
                 </div>
             )}
-        </div>
+        </>
     );
 }
 
@@ -242,7 +292,7 @@ export default function AdminPage() {
                 <TopHeader title="Admin Dashboard" subtitle="System management & analytics" />
                 <div className="page-content page-enter">
                     {/* Section navigation */}
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
                         {sections.map(sec => {
                             const Icon = sec.icon;
                             return (
@@ -252,7 +302,7 @@ export default function AdminPage() {
                                     onClick={() => setActiveSection(sec.id)}
                                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                 >
-                                    <Icon size={14} /> {sec.label}
+                                    <Icon size={14} /> <span className="hide-mobile">{sec.label}</span>
                                 </button>
                             );
                         })}
@@ -264,7 +314,7 @@ export default function AdminPage() {
                             style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                         >
                             <RefreshCw size={14} className={refreshing ? 'spin' : ''} />
-                            {refreshing ? 'Refreshing...' : 'Refresh'}
+                            <span className="hide-mobile">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
                         </button>
                     </div>
 
@@ -294,7 +344,7 @@ export default function AdminPage() {
                                 </div>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 20 }}>
+                            <div style={{ display: 'grid', gap: 20, marginTop: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
                                 {/* Stage distribution */}
                                 <div className="card" style={{ padding: 20 }}>
                                     <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -396,8 +446,8 @@ export default function AdminPage() {
                     {/* All Companies */}
                     {activeSection === 'companies' && (
                         <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                                <div className="header-search" style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                                <div className="header-search" style={{ flex: '1 1 200px', minWidth: 160 }}>
                                     <Search size={16} />
                                     <input
                                         type="text"
@@ -421,7 +471,7 @@ export default function AdminPage() {
                                         <Filter size={12} /> Clear filters
                                     </button>
                                 )}
-                                <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+                                <span style={{ fontSize: 13, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
                                     {filteredCompanies.length} of {companies.length} companies
                                 </span>
                             </div>
@@ -727,7 +777,7 @@ export default function AdminPage() {
                     {activeSection === 'settings' && (
                         <div>
                             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>System Configuration</h2>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
                                 <div className="card" style={{ padding: 20 }}>
                                     <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Pipeline Stages ({pipelineStages.length})</h3>
                                     {pipelineStages.map(s => (
