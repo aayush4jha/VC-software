@@ -2204,3 +2204,525 @@ html, body {
     font-size: 11px;
   }
 }
+
+/* ─── Portfolio Page ───────────────────────────────── */
+.portfolio-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+  width: fit-content;
+}
+
+.portfolio-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+}
+
+.portfolio-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.5);
+}
+
+.portfolio-tab.active {
+  background: var(--bg-secondary);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+/* KPI Grid */
+.portfolio-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.portfolio-kpi-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: box-shadow var(--transition-fast);
+}
+
+.portfolio-kpi-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.portfolio-kpi-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.portfolio-kpi-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.portfolio-kpi-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.portfolio-kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.portfolio-kpi-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Section Card */
+.portfolio-section-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+
+.portfolio-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.portfolio-empty-chart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* Two Column Layout */
+.portfolio-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Portfolio List (recent investments, top performers) */
+.portfolio-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.portfolio-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.portfolio-list-item:last-child {
+  border-bottom: none;
+}
+
+.portfolio-list-item:hover {
+  background: var(--bg-tertiary);
+  margin: 0 -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.portfolio-list-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-bg);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.portfolio-list-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.portfolio-list-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-list-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.portfolio-list-amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.portfolio-list-moic {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Legend */
+.portfolio-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.portfolio-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.portfolio-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.portfolio-legend-label {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-legend-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Companies Tab */
+.portfolio-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.portfolio-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.portfolio-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.portfolio-view-toggle {
+  display: flex;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.portfolio-view-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+}
+
+.portfolio-view-btn.active {
+  background: var(--bg-secondary);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.portfolio-select {
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.portfolio-filter-badge {
+  background: var(--primary);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.portfolio-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* Board View */
+.portfolio-board {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.portfolio-board-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border);
+}
+
+.portfolio-board-group-count {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.portfolio-board-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.portfolio-board-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.portfolio-board-card:hover {
+  border-color: var(--primary-light);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.portfolio-board-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.portfolio-board-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.portfolio-board-card-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.portfolio-board-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.portfolio-board-card-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.portfolio-board-card-stat span:first-child {
+  color: var(--text-tertiary);
+}
+
+.portfolio-board-card-stat span:last-child {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.portfolio-board-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* Analytics Nav */
+.portfolio-analytics-nav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.portfolio-analytics-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+}
+
+.portfolio-analytics-nav-btn:hover {
+  border-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.portfolio-analytics-nav-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .portfolio-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .portfolio-tabs {
+    width: 100%;
+  }
+
+  .portfolio-tab {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .portfolio-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-kpi-value {
+    font-size: 20px;
+  }
+
+  .portfolio-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .portfolio-toolbar-left,
+  .portfolio-toolbar-right {
+    flex-wrap: wrap;
+  }
+
+  .portfolio-analytics-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 12px;
+  }
+
+  .portfolio-analytics-nav-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .portfolio-board-cards {
+    grid-template-columns: 1fr;
+  }
+}

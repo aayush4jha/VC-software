@@ -15,7 +15,8 @@
       "Bash(git commit:*)",
       "Bash(vercel env ls)",
       "Bash(npx next build)",
-      "Bash(ls /Users/aayushjha/Desktop/Dholakia/dealflow-app/supabase/*.sql)"
+      "Bash(ls /Users/aayushjha/Desktop/Dholakia/dealflow-app/supabase/*.sql)",
+      "Bash(npm install:*)"
     ]
   }
 }
