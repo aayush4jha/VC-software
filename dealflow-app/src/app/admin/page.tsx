@@ -2,10 +2,11 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
     Shield, Users, Building2, BarChart3, Settings,
     Plus, Trash2, Search, RefreshCw, AlertTriangle, Eye, Check, X, Edit2,
+    ChevronDown, Filter,
 } from 'lucide-react';
 import { ALL_PAGE_PERMISSIONS, type PagePermission } from '@/types/database';
 import Sidebar from '@/components/layout/Sidebar';
@@ -14,6 +15,103 @@ import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 
 type AdminSection = 'overview' | 'companies' | 'users' | 'settings';
+
+function ColumnFilterDropdown({ label, options, selected, onChange }: {
+    label: string;
+    options: { value: string; label: string; color?: string }[];
+    selected: Set<string>;
+    onChange: (selected: Set<string>) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    const hasFilter = selected.size > 0;
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        if (open) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    return (
+        <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+            <button
+                onClick={() => setOpen(o => !o)}
+                style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                    font: 'inherit', fontWeight: 600, fontSize: 12,
+                    color: hasFilter ? 'var(--primary)' : 'var(--text-secondary)',
+                    textTransform: 'uppercase', letterSpacing: '0.5px',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {label}
+                {hasFilter && (
+                    <span style={{
+                        width: 16, height: 16, borderRadius: '50%',
+                        background: 'var(--primary)', color: '#fff',
+                        fontSize: 10, fontWeight: 700,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        {selected.size}
+                    </span>
+                )}
+                <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+            </button>
+            {open && (
+                <div style={{
+                    position: 'absolute', top: '100%', left: 0, zIndex: 100,
+                    marginTop: 6, minWidth: 200, maxHeight: 280, overflowY: 'auto',
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                    borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                    padding: '6px 0',
+                }}>
+                    {hasFilter && (
+                        <button
+                            onClick={() => onChange(new Set())}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                width: '100%', padding: '7px 12px', border: 'none',
+                                background: 'none', cursor: 'pointer', fontSize: 12,
+                                color: 'var(--danger)', fontWeight: 600, textAlign: 'left',
+                            }}
+                        >
+                            <X size={12} /> Clear filters
+                        </button>
+                    )}
+                    {options.map(opt => (
+                        <label
+                            key={opt.value}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '7px 12px', cursor: 'pointer', fontSize: 13,
+                                color: 'var(--text-primary)',
+                                background: selected.has(opt.value) ? 'rgba(59,130,246,0.06)' : 'transparent',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = selected.has(opt.value) ? 'rgba(59,130,246,0.06)' : 'transparent')}
+                        >
+                            <span style={{
+                                width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                                border: `1.5px solid ${selected.has(opt.value) ? 'var(--primary)' : 'var(--border-color)'}`,
+                                background: selected.has(opt.value) ? 'var(--primary)' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                {selected.has(opt.value) && <Check size={10} style={{ color: '#fff' }} />}
+                            </span>
+                            {opt.color && (
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
+                            )}
+                            <span style={{ fontWeight: selected.has(opt.value) ? 600 : 400 }}>{opt.label}</span>
+                        </label>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function AdminPage() {
     const {
@@ -36,6 +134,13 @@ export default function AdminPage() {
     const [invitePermissions, setInvitePermissions] = useState<PagePermission[]>(['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai']);
     const [inviting, setInviting] = useState(false);
 
+    // Column filters for All Companies
+    const [filterStage, setFilterStage] = useState<Set<string>>(new Set());
+    const [filterIndustry, setFilterIndustry] = useState<Set<string>>(new Set());
+    const [filterRound, setFilterRound] = useState<Set<string>>(new Set());
+    const [filterAnalyst, setFilterAnalyst] = useState<Set<string>>(new Set());
+    const [filterStatus, setFilterStatus] = useState<Set<string>>(new Set());
+
     const handleRefresh = async () => {
         setRefreshing(true);
         await refreshData();
@@ -56,12 +161,51 @@ export default function AdminPage() {
         count: activeCompanies.filter(c => c.pipelineStageId === s.id).length,
     }));
 
+    const ROUND_OPTIONS = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
+    const STATUS_OPTIONS = ['Active', 'Portfolio', 'Rejected', 'Awaiting Response', 'Blocker', 'Next Round Analysis'];
+
+    const stageFilterOptions = useMemo(() =>
+        pipelineStages.map(s => ({ value: s.id, label: s.name, color: s.color })),
+        [pipelineStages]
+    );
+    const industryFilterOptions = useMemo(() =>
+        industries.map(i => ({ value: i.id, label: i.name })),
+        [industries]
+    );
+    const roundFilterOptions = useMemo(() =>
+        ROUND_OPTIONS.map(r => ({ value: r, label: r })),
+        []
+    );
+    const analystFilterOptions = useMemo(() => [
+        { value: '__unassigned__', label: 'Unassigned' },
+        ...users.map(u => ({ value: u.id, label: u.name })),
+    ], [users]);
+    const statusFilterOptions = useMemo(() =>
+        STATUS_OPTIONS.map(s => ({ value: s, label: s })),
+        []
+    );
+
+    const hasAnyFilter = filterStage.size > 0 || filterIndustry.size > 0 || filterRound.size > 0 || filterAnalyst.size > 0 || filterStatus.size > 0;
+
     const filteredCompanies = companies.filter(c => {
-        if (!search) return true;
-        const q = search.toLowerCase();
-        return c.companyName.toLowerCase().includes(q) ||
-            c.founderName.toLowerCase().includes(q) ||
-            c.founderEmail.toLowerCase().includes(q);
+        if (search) {
+            const q = search.toLowerCase();
+            if (!c.companyName.toLowerCase().includes(q) &&
+                !c.founderName.toLowerCase().includes(q) &&
+                !c.founderEmail.toLowerCase().includes(q)) return false;
+        }
+        if (filterStage.size > 0 && !filterStage.has(c.pipelineStageId)) return false;
+        if (filterIndustry.size > 0 && !filterIndustry.has(c.industryId)) return false;
+        if (filterRound.size > 0 && !filterRound.has(c.companyRound)) return false;
+        if (filterAnalyst.size > 0) {
+            const analystKey = c.analystId || '__unassigned__';
+            if (!filterAnalyst.has(analystKey)) return false;
+        }
+        if (filterStatus.size > 0) {
+            const status = c.terminalStatus || 'Active';
+            if (!filterStatus.has(status)) return false;
+        }
+        return true;
     });
 
     const sections: { id: AdminSection; label: string; icon: React.ElementType }[] = [
@@ -262,6 +406,21 @@ export default function AdminPage() {
                                         onChange={e => setSearch(e.target.value)}
                                     />
                                 </div>
+                                {hasAnyFilter && (
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => {
+                                            setFilterStage(new Set());
+                                            setFilterIndustry(new Set());
+                                            setFilterRound(new Set());
+                                            setFilterAnalyst(new Set());
+                                            setFilterStatus(new Set());
+                                        }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--danger)', fontSize: 12 }}
+                                    >
+                                        <Filter size={12} /> Clear filters
+                                    </button>
+                                )}
                                 <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
                                     {filteredCompanies.length} of {companies.length} companies
                                 </span>
@@ -272,13 +431,13 @@ export default function AdminPage() {
                                         <tr>
                                             <th>Company</th>
                                             <th>Founder</th>
-                                            <th>Stage</th>
-                                            <th>Industry</th>
-                                            <th>Round</th>
-                                            <th>Analyst</th>
+                                            <th><ColumnFilterDropdown label="Stage" options={stageFilterOptions} selected={filterStage} onChange={setFilterStage} /></th>
+                                            <th><ColumnFilterDropdown label="Industry" options={industryFilterOptions} selected={filterIndustry} onChange={setFilterIndustry} /></th>
+                                            <th><ColumnFilterDropdown label="Round" options={roundFilterOptions} selected={filterRound} onChange={setFilterRound} /></th>
+                                            <th><ColumnFilterDropdown label="Analyst" options={analystFilterOptions} selected={filterAnalyst} onChange={setFilterAnalyst} /></th>
                                             <th>Days</th>
                                             <th>Raise</th>
-                                            <th>Status</th>
+                                            <th><ColumnFilterDropdown label="Status" options={statusFilterOptions} selected={filterStatus} onChange={setFilterStatus} /></th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>

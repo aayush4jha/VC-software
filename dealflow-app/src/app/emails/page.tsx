@@ -6,6 +6,7 @@ import React, { useState, useCallback } from 'react';
 import {
     Mail, Send, CheckCircle, XCircle, Loader2, Clock, Inbox, Download,
     Search, ArrowRight, Tag, Paperclip, FileText, RefreshCw,
+    ArrowDownLeft, ArrowUpRight,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
@@ -42,6 +43,8 @@ interface WorkspaceEmail {
     isRelevant: boolean;
     relevanceLabel: string;
     derivedCompanyName: string;
+    direction: 'received' | 'sent';
+    recipientEmail: string | null;
     extracted: ExtractedData;
 }
 
@@ -57,7 +60,7 @@ function EmailsContent() {
     const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
     const [workspaceError, setWorkspaceError] = useState<string | null>(null);
     const [workspaceSearch, setWorkspaceSearch] = useState('');
-    const [workspaceFilter, setWorkspaceFilter] = useState<'all' | 'relevant' | 'non-relevant'>('all');
+    const [workspaceFilter, setWorkspaceFilter] = useState<'all' | 'received' | 'sent' | 'relevant'>('all');
     const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
     const [sentIds, setSentIds] = useState<Set<string>>(new Set());
 
@@ -136,21 +139,25 @@ function EmailsContent() {
     }, [refreshData]);
 
     const filteredWorkspaceEmails = workspaceEmails.filter(email => {
-        if (workspaceFilter === 'relevant' && !email.isRelevant) return false;
-        if (workspaceFilter === 'non-relevant' && email.isRelevant) return false;
+        if (workspaceFilter === 'received' && email.direction !== 'received') return false;
+        if (workspaceFilter === 'sent' && email.direction !== 'sent') return false;
+        if (workspaceFilter === 'relevant' && (!email.isRelevant || email.direction === 'sent')) return false;
         if (workspaceSearch) {
             const q = workspaceSearch.toLowerCase();
             return (
                 email.subject.toLowerCase().includes(q) ||
                 email.senderName.toLowerCase().includes(q) ||
                 email.senderEmail.toLowerCase().includes(q) ||
-                email.snippet.toLowerCase().includes(q)
+                email.snippet.toLowerCase().includes(q) ||
+                (email.recipientEmail || '').toLowerCase().includes(q)
             );
         }
         return true;
     });
 
-    const relevantCount = workspaceEmails.filter(e => e.isRelevant).length;
+    const receivedCount = workspaceEmails.filter(e => e.direction === 'received').length;
+    const sentCount = workspaceEmails.filter(e => e.direction === 'sent').length;
+    const relevantCount = workspaceEmails.filter(e => e.isRelevant && e.direction === 'received').length;
 
     return (
         <>
@@ -348,15 +355,19 @@ function EmailsContent() {
                                     border: '1px solid var(--border-color)',
                                 }}>
                                     <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                                        {workspaceEmails.length} emails analyzed
+                                        {workspaceEmails.length} total emails
+                                    </span>
+                                    <span style={{ color: 'var(--border-color)' }}>|</span>
+                                    <span style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>
+                                        {receivedCount} received
+                                    </span>
+                                    <span style={{ color: 'var(--border-color)' }}>|</span>
+                                    <span style={{ fontSize: 13, color: '#8b5cf6', fontWeight: 600 }}>
+                                        {sentCount} sent
                                     </span>
                                     <span style={{ color: 'var(--border-color)' }}>|</span>
                                     <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
                                         {relevantCount} funding-relevant
-                                    </span>
-                                    <span style={{ color: 'var(--border-color)' }}>|</span>
-                                    <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-                                        {workspaceEmails.length - relevantCount} non-relevant
                                     </span>
                                 </div>
 
@@ -371,13 +382,18 @@ function EmailsContent() {
                                             onChange={e => setWorkspaceSearch(e.target.value)}
                                         />
                                     </div>
-                                    {(['all', 'relevant', 'non-relevant'] as const).map(f => (
+                                    {([
+                                        { key: 'all', label: 'All' },
+                                        { key: 'received', label: 'Received' },
+                                        { key: 'sent', label: 'Sent' },
+                                        { key: 'relevant', label: 'Relevant' },
+                                    ] as const).map(f => (
                                         <button
-                                            key={f}
-                                            className={`btn btn-sm ${workspaceFilter === f ? 'btn-primary' : 'btn-secondary'}`}
-                                            onClick={() => setWorkspaceFilter(f)}
+                                            key={f.key}
+                                            className={`btn btn-sm ${workspaceFilter === f.key ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setWorkspaceFilter(f.key)}
                                         >
-                                            {f === 'all' ? 'All' : f === 'relevant' ? 'Relevant' : 'Non-Relevant'}
+                                            {f.label}
                                         </button>
                                     ))}
                                 </div>
@@ -396,11 +412,30 @@ function EmailsContent() {
                                             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                                        {/* Direction indicator */}
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            width: 22,
+                                                            height: 22,
+                                                            borderRadius: 6,
+                                                            background: email.direction === 'sent' ? 'rgba(139,92,246,0.1)' : 'rgba(59,130,246,0.1)',
+                                                            flexShrink: 0,
+                                                        }}>
+                                                            {email.direction === 'sent' ? (
+                                                                <ArrowUpRight size={12} style={{ color: '#8b5cf6' }} />
+                                                            ) : (
+                                                                <ArrowDownLeft size={12} style={{ color: '#3b82f6' }} />
+                                                            )}
+                                                        </span>
                                                         <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-                                                            {email.senderName}
+                                                            {email.direction === 'sent' ? 'To: ' : ''}{email.direction === 'sent' ? (email.recipientEmail || email.senderName) : email.senderName}
                                                         </span>
                                                         <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                                                            &lt;{email.senderEmail}&gt;
+                                                            {email.direction === 'sent'
+                                                                ? (email.recipientEmail ? '' : `<${email.senderEmail}>`)
+                                                                : `<${email.senderEmail}>`}
                                                         </span>
                                                         {email.receivedAt && (
                                                             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 'auto', flexShrink: 0 }}>
@@ -415,18 +450,33 @@ function EmailsContent() {
                                                         {email.snippet}
                                                     </div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                                                        <span
-                                                            className="badge"
-                                                            style={{
-                                                                background: email.isRelevant ? 'rgba(34,197,94,0.1)' : 'rgba(156,163,175,0.1)',
-                                                                color: email.isRelevant ? '#16a34a' : '#9ca3af',
-                                                                fontSize: 11,
-                                                                fontWeight: 600,
-                                                            }}
-                                                        >
-                                                            <Tag size={10} style={{ marginRight: 3 }} />
-                                                            {email.relevanceLabel}
-                                                        </span>
+                                                        {email.direction === 'sent' ? (
+                                                            <span
+                                                                className="badge"
+                                                                style={{
+                                                                    background: 'rgba(139,92,246,0.1)',
+                                                                    color: '#8b5cf6',
+                                                                    fontSize: 11,
+                                                                    fontWeight: 600,
+                                                                }}
+                                                            >
+                                                                <ArrowUpRight size={10} style={{ marginRight: 3 }} />
+                                                                Sent
+                                                            </span>
+                                                        ) : (
+                                                            <span
+                                                                className="badge"
+                                                                style={{
+                                                                    background: email.isRelevant ? 'rgba(34,197,94,0.1)' : 'rgba(156,163,175,0.1)',
+                                                                    color: email.isRelevant ? '#16a34a' : '#9ca3af',
+                                                                    fontSize: 11,
+                                                                    fontWeight: 600,
+                                                                }}
+                                                            >
+                                                                <Tag size={10} style={{ marginRight: 3 }} />
+                                                                {email.relevanceLabel}
+                                                            </span>
+                                                        )}
                                                         {email.hasAttachments && (
                                                             <span className="badge badge-neutral" style={{ fontSize: 11 }}>
                                                                 <Paperclip size={10} style={{ marginRight: 3 }} />
@@ -507,9 +557,13 @@ function EmailsContent() {
                                                     )}
                                                 </div>
                                                 <div style={{ flexShrink: 0 }}>
-                                                    {sentIds.has(email.id) ? (
+                                                    {email.direction === 'sent' ? (
+                                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#8b5cf6', fontWeight: 500 }}>
+                                                            <Send size={12} /> Outbound
+                                                        </span>
+                                                    ) : sentIds.has(email.id) ? (
                                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>
-                                                            <CheckCircle size={14} /> Sent
+                                                            <CheckCircle size={14} /> Added
                                                         </span>
                                                     ) : (
                                                         <button

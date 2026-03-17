@@ -193,6 +193,8 @@ export interface WorkspaceEmail {
     isRelevant: boolean;
     relevanceLabel: string;
     derivedCompanyName: string;
+    direction: 'received' | 'sent';
+    recipientEmail: string | null;
     // AI-extracted fields
     extracted: ExtractedData;
 }
@@ -214,27 +216,46 @@ export async function GET(request: NextRequest) {
 
         // Only fetch emails after connection time
         const connectedAt = request.cookies.get('google_connected_at')?.value;
-        let query = 'in:inbox';
+        let afterFilter = '';
         if (connectedAt) {
             const epochSeconds = Math.floor(new Date(connectedAt).getTime() / 1000);
-            query += ` after:${epochSeconds}`;
+            afterFilter = ` after:${epochSeconds}`;
         }
 
-        const listResponse = await gmail.users.messages.list({
-            userId: 'me',
-            q: query,
-            maxResults: 50,
-        });
+        // Fetch both inbox and sent emails in parallel
+        const [inboxResponse, sentResponse] = await Promise.all([
+            gmail.users.messages.list({
+                userId: 'me',
+                q: `in:inbox${afterFilter}`,
+                maxResults: 50,
+            }),
+            gmail.users.messages.list({
+                userId: 'me',
+                q: `in:sent${afterFilter}`,
+                maxResults: 30,
+            }),
+        ]);
 
-        const messages = listResponse.data.messages || [];
+        const inboxMessages = (inboxResponse.data.messages || []).map(m => ({ ...m, _direction: 'received' as const }));
+        const sentMessages = (sentResponse.data.messages || []).map(m => ({ ...m, _direction: 'sent' as const }));
 
-        if (messages.length === 0) {
+        // Dedup by ID (a message can appear in both inbox and sent if it's a reply)
+        const seenIds = new Set<string>();
+        const allMessages: Array<{ id?: string | null; threadId?: string | null; _direction: 'received' | 'sent' }> = [];
+        for (const msg of [...inboxMessages, ...sentMessages]) {
+            if (msg.id && !seenIds.has(msg.id)) {
+                seenIds.add(msg.id);
+                allMessages.push(msg);
+            }
+        }
+
+        if (allMessages.length === 0) {
             return NextResponse.json({ emails: [] });
         }
 
         const emails: WorkspaceEmail[] = [];
 
-        for (const msg of messages) {
+        for (const msg of allMessages) {
             if (!msg.id) continue;
 
             try {
@@ -247,11 +268,17 @@ export async function GET(request: NextRequest) {
 
                 const headers = fullMsg.data.payload?.headers || [];
                 const fromHeader = headers.find(h => h.name === 'From')?.value || '';
+                const toHeader = headers.find(h => h.name === 'To')?.value || '';
                 const subject = headers.find(h => h.name === 'Subject')?.value || '(No Subject)';
                 const dateHeader = headers.find(h => h.name === 'Date')?.value;
                 const snippet = fullMsg.data.snippet || '';
 
+                // Determine direction from Gmail labels
+                const labels = fullMsg.data.labelIds || [];
+                const direction = labels.includes('SENT') ? 'sent' : msg._direction;
+
                 const { name: senderName, email: senderEmail } = extractSenderInfo(fromHeader);
+                const recipientEmail = toHeader ? extractSenderInfo(toHeader).email : null;
 
                 const parts = fullMsg.data.payload?.parts || [];
                 const attachmentNames = parts
@@ -263,12 +290,10 @@ export async function GET(request: NextRequest) {
 
                 const { isRelevant, label } = detectRelevance(subject, snippet);
 
-                // Extract full body text for AI analysis
-                const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
-
-                // Run AI extraction on relevant emails
+                // Extract full body text for AI analysis (only for received relevant emails)
                 let extracted: ExtractedData;
-                if (isRelevant && GEMINI_API_KEY) {
+                if (direction === 'received' && isRelevant && GEMINI_API_KEY) {
+                    const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
                     extracted = await analyzeEmailWithAI(subject, senderName, senderEmail, bodyText, snippet);
                 } else {
                     extracted = {
@@ -282,7 +307,8 @@ export async function GET(request: NextRequest) {
                 // Use AI-extracted company name, or fall back to subject-based derivation
                 let derivedCompanyName = extracted.companyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim();
                 if (!derivedCompanyName || derivedCompanyName === '(No Subject)') {
-                    const domain = senderEmail.split('@')[1]?.split('.')[0] || 'Unknown';
+                    const targetEmail = direction === 'sent' ? (recipientEmail || '') : senderEmail;
+                    const domain = targetEmail.split('@')[1]?.split('.')[0] || 'Unknown';
                     derivedCompanyName = domain.charAt(0).toUpperCase() + domain.slice(1);
                 }
 
@@ -298,8 +324,10 @@ export async function GET(request: NextRequest) {
                     attachmentNames,
                     hasPitchDeck,
                     isRelevant,
-                    relevanceLabel: label,
+                    relevanceLabel: direction === 'sent' ? 'Sent' : label,
                     derivedCompanyName,
+                    direction,
+                    recipientEmail,
                     extracted,
                 });
             } catch {
@@ -307,9 +335,8 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        // Sort: relevant emails first, then by date
+        // Sort by date (newest first)
         emails.sort((a, b) => {
-            if (a.isRelevant !== b.isRelevant) return a.isRelevant ? -1 : 1;
             return new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime();
         });
 
