@@ -42,26 +42,36 @@ function ColumnFilterDropdown({ label, options, selected, onChange }: {
         return () => document.removeEventListener('mousedown', handler);
     }, [open]);
 
-    // Close on scroll (since position: fixed won't follow)
+    // Reposition on scroll so the dropdown follows the button
+    const updatePosition = React.useCallback(() => {
+        if (!buttonRef.current) return;
+        const rect = buttonRef.current.getBoundingClientRect();
+        const dropdownHeight = Math.min(options.length * 38 + 50, 320);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openUp = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+        setPos({
+            top: openUp ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+            left: Math.min(rect.left, window.innerWidth - 230),
+            openUp,
+        });
+    }, [options.length]);
+
     useEffect(() => {
         if (!open) return;
-        const onScroll = () => setOpen(false);
-        // Capture scroll on any ancestor
+        const onScroll = () => {
+            requestAnimationFrame(updatePosition);
+        };
         window.addEventListener('scroll', onScroll, true);
-        return () => window.removeEventListener('scroll', onScroll, true);
-    }, [open]);
+        window.addEventListener('resize', onScroll);
+        return () => {
+            window.removeEventListener('scroll', onScroll, true);
+            window.removeEventListener('resize', onScroll);
+        };
+    }, [open, updatePosition]);
 
     const handleToggle = () => {
-        if (!open && buttonRef.current) {
-            const rect = buttonRef.current.getBoundingClientRect();
-            const dropdownHeight = Math.min(options.length * 38 + 50, 320);
-            const spaceBelow = window.innerHeight - rect.bottom;
-            const openUp = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
-            setPos({
-                top: openUp ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
-                left: Math.min(rect.left, window.innerWidth - 230),
-                openUp,
-            });
+        if (!open) {
+            updatePosition();
         }
         setOpen(o => !o);
     };
