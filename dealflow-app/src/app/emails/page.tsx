@@ -13,7 +13,6 @@ import TopHeader from '@/components/layout/TopHeader';
 import EmailCompose from '@/components/integrations/EmailCompose';
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
-import { createClient } from '@/lib/supabase/client';
 
 interface ExtractedData {
     companyName: string | null;
@@ -99,15 +98,10 @@ function EmailsContent() {
     const handleSendToKanban = useCallback(async (email: WorkspaceEmail) => {
         setSendingIds(prev => new Set(prev).add(email.id));
         try {
-            const supabase = createClient();
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) throw new Error('Not authenticated');
-
             const res = await fetch('/api/gmail/send-to-kanban', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${session.access_token}`,
                 },
                 body: JSON.stringify({
                     gmailMessageId: email.id,

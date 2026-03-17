@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { getAuthenticatedClient } from '@/lib/google';
+import { getRouteUser } from '@/lib/auth-helpers';
+import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -200,10 +201,13 @@ export interface WorkspaceEmail {
 }
 
 export async function GET(request: NextRequest) {
-    const accessToken = request.cookies.get('google_access_token')?.value;
-    const refreshToken = request.cookies.get('google_refresh_token')?.value;
+    const user = await getRouteUser(request);
+    if (!user) {
+        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
 
-    if (!accessToken) {
+    const authResult = await getAuthenticatedClientForUser(user.id);
+    if (!authResult) {
         return NextResponse.json(
             { error: 'Not authenticated with Google. Please connect your account.' },
             { status: 401 },
@@ -211,14 +215,12 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const oauth2Client = getAuthenticatedClient(accessToken, refreshToken);
-        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
 
         // Only fetch emails after connection time
-        const connectedAt = request.cookies.get('google_connected_at')?.value;
         let afterFilter = '';
-        if (connectedAt) {
-            const epochSeconds = Math.floor(new Date(connectedAt).getTime() / 1000);
+        if (authResult.connectedAt) {
+            const epochSeconds = Math.floor(new Date(authResult.connectedAt).getTime() / 1000);
             afterFilter = ` after:${epochSeconds}`;
         }
 
@@ -343,16 +345,10 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ emails });
     } catch (error: unknown) {
         const err = error as { code?: number; message?: string };
-        if (err.code === 401) {
-            const response = NextResponse.json(
-                { error: 'Google session expired. Please reconnect your account.' },
-                { status: 401 },
-            );
-            response.cookies.delete('google_access_token');
-            response.cookies.delete('google_connected');
-            return response;
-        }
         console.error('[gmail/workspace] error:', error);
-        return NextResponse.json({ error: err.message || 'Failed to fetch emails' }, { status: 500 });
+        return NextResponse.json(
+            { error: err.message || 'Failed to fetch emails' },
+            { status: err.code === 401 ? 401 : 500 },
+        );
     }
 }

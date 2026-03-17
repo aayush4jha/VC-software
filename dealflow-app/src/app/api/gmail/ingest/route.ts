@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { getAuthenticatedClient } from '@/lib/google';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { getRouteUser } from '@/lib/auth-helpers';
+import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 const TARGET_EMAIL = 'pipeline@dholakiaventures.com';
@@ -31,14 +32,6 @@ function detectFundingRelevance(subject: string, snippet: string): { isRelevant:
     return { isRelevant: true, label: 'Startup Relevant' };
 }
 
-function parseJwt(token: string): Record<string, unknown> | null {
-    try {
-        const payload = token.split('.')[1];
-        return JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
-    } catch {
-        return null;
-    }
-}
 
 function extractSenderInfo(fromHeader: string): { name: string; email: string } {
     const match = fromHeader.match(/^(?:"?([^"<]*)"?\s*)?<?([^>]+)>?$/);
@@ -187,24 +180,19 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting, no code blocks, 
 }
 
 export async function POST(request: NextRequest) {
-    const accessToken = request.cookies.get('google_access_token')?.value;
-    const refreshToken = request.cookies.get('google_refresh_token')?.value;
+    const user = await getRouteUser(request);
+    if (!user) {
+        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
 
-    if (!accessToken) {
+    const userId = user.id;
+
+    const authResult = await getAuthenticatedClientForUser(userId);
+    if (!authResult) {
         return NextResponse.json(
             { error: 'Not authenticated with Google. Please connect your account.' },
             { status: 401 },
         );
-    }
-
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const jwt = parseJwt(authHeader.slice(7));
-    const userId = jwt?.sub as string | undefined;
-    if (!userId) {
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -214,8 +202,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const oauth2Client = getAuthenticatedClient(accessToken, refreshToken);
-        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
         const db = createServiceClient(supabaseUrl, serviceRoleKey);
 
         // Get the first pipeline stage by order
@@ -240,7 +227,7 @@ export async function POST(request: NextRequest) {
         const processedIds = new Set((existingEmails || []).map((e: { gmail_message_id: string }) => e.gmail_message_id));
 
         // Only ingest emails received after the account was connected
-        const connectedAt = request.cookies.get('google_connected_at')?.value;
+        const connectedAt = authResult.connectedAt;
         let query = `to:${TARGET_EMAIL}`;
         if (connectedAt) {
             const epochSeconds = Math.floor(new Date(connectedAt).getTime() / 1000);
@@ -487,16 +474,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, processed, skipped, created, errors: errors.length > 0 ? errors : undefined });
     } catch (error: unknown) {
         const err = error as { code?: number; message?: string };
-        if (err.code === 401) {
-            const response = NextResponse.json(
-                { error: 'Google session expired. Please reconnect your account.' },
-                { status: 401 },
-            );
-            response.cookies.delete('google_access_token');
-            response.cookies.delete('google_connected');
-            return response;
-        }
         console.error('[gmail/ingest] error:', error);
-        return NextResponse.json({ error: err.message || 'Failed to ingest emails' }, { status: 500 });
+        return NextResponse.json(
+            { error: err.message || 'Failed to ingest emails' },
+            { status: err.code === 401 ? 401 : 500 },
+        );
     }
 }

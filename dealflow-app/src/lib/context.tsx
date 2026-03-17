@@ -1074,11 +1074,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const syncEmails = useCallback(async () => {
         try {
-            const token = await getToken();
-            if (!token) return null;
             const res = await fetch('/api/gmail/ingest', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                headers: { 'Content-Type': 'application/json' },
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Sync failed');
@@ -1088,7 +1086,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             console.error('Email sync error:', err);
             return null;
         }
-    }, [getToken, user, fetchAllData]);
+    }, [user, fetchAllData]);
 
     const approveCompany = useCallback(async (companyId: string) => {
         await updateCompany(companyId, { needsReview: false });

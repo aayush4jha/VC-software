@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { X, Send, Mail, CheckCircle, AlertCircle, Loader2, LogIn } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
-import { createClient } from '@/lib/supabase/client';
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error' | 'auth-required';
 
@@ -51,17 +50,9 @@ export default function EmailCompose() {
         setStatusMessage('');
 
         try {
-            const supabase = createClient();
-            const { data: { session } } = await supabase.auth.getSession();
-
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (session?.access_token) {
-                headers['Authorization'] = `Bearer ${session.access_token}`;
-            }
-
             const res = await fetch('/api/gmail/send', {
                 method: 'POST',
-                headers,
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     to,
                     subject,

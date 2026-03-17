@@ -1,27 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { getRouteUser } from '@/lib/auth-helpers';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
-function parseJwt(token: string): Record<string, unknown> | null {
-    try {
-        const payload = token.split('.')[1];
-        return JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
-    } catch {
-        return null;
-    }
-}
-
 export async function POST(request: NextRequest) {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const user = await getRouteUser(request);
+    if (!user) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const jwt = parseJwt(authHeader.slice(7));
-    const userId = jwt?.sub as string | undefined;
-    if (!userId) {
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const userId = user.id;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

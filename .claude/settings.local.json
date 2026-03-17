@@ -14,7 +14,8 @@
       "Bash(git add dealflow-app/src/app/api/auth/google/callback/route.ts dealflow-app/src/lib/google.ts)",
       "Bash(git commit:*)",
       "Bash(vercel env ls)",
-      "Bash(npx next build)"
+      "Bash(npx next build)",
+      "Bash(ls /Users/aayushjha/Desktop/Dholakia/dealflow-app/supabase/*.sql)"
     ]
   }
 }

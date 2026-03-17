@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 import { getOAuth2Client } from '@/lib/google';
+import { saveGoogleTokens } from '@/lib/google-tokens';
+
+const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
@@ -7,7 +11,6 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get('error');
 
     if (error) {
-        // User denied access — redirect back to app with error
         return NextResponse.redirect(new URL('/emails?google_auth=error', request.url));
     }
 
@@ -19,43 +22,40 @@ export async function GET(request: NextRequest) {
         const oauth2Client = getOAuth2Client();
         const { tokens } = await oauth2Client.getToken(code);
 
-        // Store tokens in HTTP-only cookies so the client can use them
-        const response = NextResponse.redirect(new URL('/emails?google_auth=success', request.url));
+        // Get the current Supabase user from the session cookie
+        const supabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+                cookies: {
+                    getAll() {
+                        return request.cookies.getAll();
+                    },
+                    setAll() {
+                        // No-op for route handler reads
+                    },
+                },
+            },
+        );
 
-        response.cookies.set('google_access_token', tokens.access_token || '', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: tokens.expiry_date
-                ? Math.floor((tokens.expiry_date - Date.now()) / 1000)
-                : 3600,
-            path: '/',
-        });
+        const { data: { user } } = await supabase.auth.getUser();
 
-        if (tokens.refresh_token) {
-            response.cookies.set('google_refresh_token', tokens.refresh_token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 365, // 1 year
-                path: '/',
+        if (user) {
+            // Store tokens in the database — persists across sessions
+            await saveGoogleTokens(user.id, ORGANIZATION_ID, {
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token,
+                expiry_date: tokens.expiry_date,
             });
         }
 
-        // Also set a non-httpOnly cookie so the client knows auth status
+        // Redirect back — the status route will now check DB
+        const response = NextResponse.redirect(new URL('/emails?google_auth=success', request.url));
+
+        // Keep a lightweight marker cookie so the client can quickly check
+        // without an API call (long expiry, not tied to access token lifetime)
         response.cookies.set('google_connected', 'true', {
             httpOnly: false,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: tokens.expiry_date
-                ? Math.floor((tokens.expiry_date - Date.now()) / 1000)
-                : 3600,
-            path: '/',
-        });
-
-        // Store the connection timestamp so email ingestion only fetches new emails
-        response.cookies.set('google_connected_at', new Date().toISOString(), {
-            httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             maxAge: 60 * 60 * 24 * 365, // 1 year
