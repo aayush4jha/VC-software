@@ -225,6 +225,8 @@ interface AppContextType {
     setShowCalendarInvite: (show: boolean) => void;
     showCompanyForm: boolean;
     setShowCompanyForm: (show: boolean) => void;
+    companyFormPortfolioMode: boolean;
+    setCompanyFormPortfolioMode: (mode: boolean) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     viewMode: 'kanban' | 'table';
@@ -264,6 +266,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [showEmailCompose, setShowEmailCompose] = useState(false);
     const [showCalendarInvite, setShowCalendarInvite] = useState(false);
     const [showCompanyForm, setShowCompanyForm] = useState(false);
+    const [companyFormPortfolioMode, setCompanyFormPortfolioMode] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
     const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
@@ -538,6 +541,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 custom_tags: data.customTags || [],
                 sla_deadline: data.slaDeadline || null,
                 linked_previous_entry_id: data.linkedPreviousEntryId || null,
+                ...(data.terminalStatus ? { terminal_status: data.terminalStatus } : {}),
             },
         });
 
@@ -546,21 +550,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCompanies(prev => [...prev, company]);
 
         if (user) {
+            const isPortfolio = data.terminalStatus === 'Portfolio';
             await apiDb({
                 table: 'activity_logs', operation: 'insert',
                 data: {
                     company_id: company.id, user_id: user.id,
-                    action: 'created', details: `Added ${company.companyName} to pipeline`,
+                    action: isPortfolio ? 'terminal_status_set' : 'created',
+                    details: isPortfolio
+                        ? `Added ${company.companyName} directly to Portfolio`
+                        : `Added ${company.companyName} to pipeline`,
                 },
             });
 
-            // Notify all users about new company entering pipeline
+            // Notify all users
             const notifInserts = users
                 .filter(u => u.id !== user.id)
                 .map(u => ({
-                    user_id: u.id, type: 'new_company' as const,
-                    title: 'New Company',
-                    message: `${company.companyName} has been added to the pipeline`,
+                    user_id: u.id, type: isPortfolio ? 'stage_change' as const : 'new_company' as const,
+                    title: isPortfolio ? 'Portfolio Company' : 'New Company',
+                    message: isPortfolio
+                        ? `${company.companyName} has been added to Portfolio`
+                        : `${company.companyName} has been added to the pipeline`,
                     company_id: company.id,
                 }));
             if (notifInserts.length > 0) {
@@ -1128,6 +1138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         showEmailCompose, setShowEmailCompose,
         showCalendarInvite, setShowCalendarInvite,
         showCompanyForm, setShowCompanyForm,
+        companyFormPortfolioMode, setCompanyFormPortfolioMode,
         searchQuery, setSearchQuery,
         viewMode, setViewMode,
         activeFilters, setActiveFilters,
@@ -1150,7 +1161,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
         syncEmails, approveCompany,
         selectedCompany, editingCompany,
-        showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm,
+        showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,
         searchQuery, viewMode, activeFilters,
     ]);
 

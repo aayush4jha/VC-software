@@ -1,15 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Pencil, Video, Mail, Trash2 } from 'lucide-react';
+import { Pencil, Video, Mail, Trash2, Briefcase } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { Company, PipelineStage } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 function CompanyKanbanCard({ company, index }: { company: Company; index: number }) {
-    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany } = useAppContext();
+    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany, setTerminalStatus } = useAppContext();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showPortfolioConfirm, setShowPortfolioConfirm] = useState(false);
     const analyst = company.analystId ? getUserById(company.analystId) : null;
     const industry = getIndustryById(company.industryId);
     const days = getDaysInPipeline(company.createdAt);
@@ -30,6 +31,22 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
         e.stopPropagation();
         setSelectedCompany(company);
         setShowEmailCompose(true);
+    };
+
+    const handleMoveToPortfolio = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowPortfolioConfirm(true);
+    };
+
+    const confirmMoveToPortfolio = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        await setTerminalStatus(company.id, 'Portfolio');
+        setShowPortfolioConfirm(false);
+    };
+
+    const cancelMoveToPortfolio = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowPortfolioConfirm(false);
     };
 
     const handleDelete = (e: React.MouseEvent) => {
@@ -123,6 +140,14 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                             </button>
                             <button
                                 className="kanban-card-edit-btn"
+                                onClick={handleMoveToPortfolio}
+                                title="Move to Portfolio"
+                                style={{ color: '#10b981' }}
+                            >
+                                <Briefcase size={12} />
+                            </button>
+                            <button
+                                className="kanban-card-edit-btn"
                                 onClick={handleDelete}
                                 title="Delete company"
                                 style={{ color: '#ef4444' }}
@@ -134,6 +159,39 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                             )}
                         </div>
                     </div>
+                    {showPortfolioConfirm && (
+                        <div
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                                marginTop: 8,
+                                padding: '10px 12px',
+                                background: 'rgba(16,185,129,0.08)',
+                                border: '1px solid rgba(16,185,129,0.2)',
+                                borderRadius: 8,
+                                fontSize: 12,
+                            }}
+                        >
+                            <div style={{ fontWeight: 600, color: '#10b981', marginBottom: 6 }}>
+                                Move {company.companyName} to Portfolio?
+                            </div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                    className="btn btn-sm"
+                                    onClick={confirmMoveToPortfolio}
+                                    style={{ background: '#10b981', color: '#fff', border: 'none', fontSize: 11, padding: '4px 10px' }}
+                                >
+                                    Move to Portfolio
+                                </button>
+                                <button
+                                    className="btn btn-sm btn-ghost"
+                                    onClick={cancelMoveToPortfolio}
+                                    style={{ fontSize: 11, padding: '4px 10px' }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {showDeleteConfirm && (
                         <div
                             onClick={e => e.stopPropagation()}

@@ -7,7 +7,7 @@ import {
     Briefcase, Search, TrendingUp, DollarSign, Building2, Award,
     BarChart3, PieChart, MapPin, Calendar, Users, ArrowUpRight,
     ArrowDownRight, ChevronDown, LayoutGrid, List, Filter, X,
-    Target, Clock, AlertTriangle, Shield,
+    Target, Clock, AlertTriangle, Shield, Plus,
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -79,7 +79,13 @@ function PortfolioContent() {
         companies, industries, users,
         getIndustryById, setSelectedCompany,
         searchQuery, setSearchQuery,
+        setShowCompanyForm, setCompanyFormPortfolioMode,
     } = useAppContext();
+
+    const handleAddPortfolioCompany = () => {
+        setCompanyFormPortfolioMode(true);
+        setShowCompanyForm(true);
+    };
 
     const [activeTab, setActiveTab] = useState<PortfolioTab>('dashboard');
     const [companyView, setCompanyView] = useState<CompanyView>('table');
@@ -584,6 +590,13 @@ function PortfolioContent() {
                             style={{ paddingLeft: 32, width: 200 }}
                         />
                     </div>
+                    <button
+                        className="btn btn-primary btn-sm"
+                        onClick={handleAddPortfolioCompany}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                        <Plus size={14} /> Add Company
+                    </button>
                 </div>
             </div>
 

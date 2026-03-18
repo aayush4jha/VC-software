@@ -13,6 +13,7 @@ const shareTypes: ShareType[] = ['Primary', 'Secondary'];
 export default function CompanyForm() {
     const {
         showCompanyForm, setShowCompanyForm, editingCompany, setEditingCompany,
+        companyFormPortfolioMode, setCompanyFormPortfolioMode,
         industries, users, dealSourceNames, pipelineStages,
         createCompany, updateCompany, companies,
     } = useAppContext();
@@ -107,6 +108,7 @@ export default function CompanyForm() {
     const handleClose = () => {
         setShowCompanyForm(false);
         setEditingCompany(null);
+        setCompanyFormPortfolioMode(false);
     };
 
     const handleSubmit = async () => {
@@ -131,6 +133,7 @@ export default function CompanyForm() {
             customTags: form.custom_tags ? form.custom_tags.split(',').map(t => t.trim()).filter(Boolean) : [],
             slaDeadline: form.sla_deadline || null,
             linkedPreviousEntryId: form.linked_previous_entry_id || null,
+            ...(companyFormPortfolioMode && !isEditing ? { terminalStatus: 'Portfolio' } : {}),
         };
         if (isEditing) {
             await updateCompany(editingCompany!.id, data);
@@ -158,7 +161,7 @@ export default function CompanyForm() {
         <div className="modal-overlay" onClick={handleClose}>
             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '90vh' }}>
                 <div className="modal-header">
-                    <div className="modal-title">{isEditing ? 'Edit Company' : 'Add New Company'}</div>
+                    <div className="modal-title">{isEditing ? 'Edit Company' : companyFormPortfolioMode ? 'Add Portfolio Company' : 'Add New Company'}</div>
                     <button className="btn btn-ghost btn-sm" onClick={handleClose}><X size={18} /></button>
                 </div>
                 <div className="modal-body">
