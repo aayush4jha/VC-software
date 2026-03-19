@@ -199,23 +199,22 @@ function PortfolioContent() {
                 const stageCompanies = groupedCompanies[stage] || [];
                 if (stageCompanies.length === 0 && groupBy === 'entry') return null;
                 return (
-                    <div key={stage} className="portfolio-board-group">
-                        <div style={{ padding: '0 8px' }}>
-                            <div className="portfolio-board-group-header">
-                                <span style={{
-                                    display: 'inline-block',
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    backgroundColor: PORTFOLIO_STAGE_COLORS[stage] || '#94a3b8',
-                                    marginRight: 6,
-                                }} />
-                                {stage}
-                                <span className="portfolio-board-group-count">{stageCompanies.length}</span>
+                    <div key={stage} className="portfolio-board-column">
+                        <div className="portfolio-board-column-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span className="col-dot" style={{ backgroundColor: PORTFOLIO_STAGE_COLORS[stage] || '#94a3b8' }} />
+                                <span>{stage}</span>
                             </div>
+                            <span className="portfolio-board-column-count">{stageCompanies.length}</span>
                         </div>
-                        <div className="portfolio-board-cards">
-                            {stageCompanies.map(c => renderBoardCard(c))}
+                        <div className="portfolio-board-column-body">
+                            {stageCompanies.length === 0 ? (
+                                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>
+                                    No companies
+                                </div>
+                            ) : (
+                                stageCompanies.map(c => renderBoardCard(c))
+                            )}
                         </div>
                     </div>
                 );
@@ -333,48 +332,44 @@ function PortfolioContent() {
                     <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                         {/* Filter dropdowns */}
                         <select
-                            className="btn btn-sm"
+                            className="portfolio-select"
                             value={filterIndustry}
                             onChange={e => setFilterIndustry(e.target.value)}
-                            style={{ minWidth: 120 }}
                         >
-                            <option value="all">All Industries</option>
+                            <option value="all">Industry</option>
                             {uniqueIndustries.map(ind => (
                                 <option key={ind.id} value={ind.id}>{ind.name}</option>
                             ))}
                         </select>
 
                         <select
-                            className="btn btn-sm"
+                            className="portfolio-select"
                             value={filterStage}
                             onChange={e => setFilterStage(e.target.value)}
-                            style={{ minWidth: 110 }}
                         >
-                            <option value="all">All Stages</option>
+                            <option value="all">Stage</option>
                             {uniqueStages.map(s => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>
 
                         <select
-                            className="btn btn-sm"
+                            className="portfolio-select"
                             value={filterStatus}
                             onChange={e => setFilterStatus(e.target.value)}
-                            style={{ minWidth: 100 }}
                         >
-                            <option value="all">All Status</option>
+                            <option value="all">Status</option>
                             <option value="Active">Active</option>
                             <option value="Exited">Exited</option>
                             <option value="Written Off">Written Off</option>
                         </select>
 
                         <select
-                            className="btn btn-sm"
+                            className="portfolio-select"
                             value={filterSourcer}
                             onChange={e => setFilterSourcer(e.target.value)}
-                            style={{ minWidth: 120 }}
                         >
-                            <option value="all">All Sourcers</option>
+                            <option value="all">Sourcer</option>
                             {uniqueSourcers.map(src => (
                                 <option key={src.id} value={src.id}>{src.name}</option>
                             ))}
@@ -420,10 +415,10 @@ function PortfolioContent() {
                             <input
                                 className="search-input"
                                 type="text"
-                                placeholder="Search companies..."
+                                placeholder="Search..."
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                style={{ paddingLeft: 32, width: 200 }}
+                                style={{ paddingLeft: 32, width: 160 }}
                             />
                         </div>
 
