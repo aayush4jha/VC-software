@@ -165,6 +165,8 @@ export const companies: Company[] = [
         deckAnalysis: sampleDeckAnalysis, kpiData: sampleKPIData, callTranscript: sampleCallTranscript,
         filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c2', companyName: 'GreenGrid AI', founderName: 'Kavitha Rao', founderEmail: 'kavitha@greengrid.ai',
@@ -177,6 +179,8 @@ export const companies: Company[] = [
         quickSummary: 'AI-driven energy optimization for commercial buildings. Reduces energy costs 25-40%. 45 buildings deployed.',
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c3', companyName: 'LegalEase', founderName: 'Vikrant Joshi', founderEmail: 'vikrant@legalease.in',
@@ -188,6 +192,8 @@ export const companies: Company[] = [
         updatedAt: '2026-02-01T08:00:00Z', slaDeadline: '2026-02-25T00:00:00Z', isOverdue: false,
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c4', companyName: 'ShieldNet', founderName: 'Ravi Kumar', founderEmail: 'ravi@shieldnet.io',
@@ -202,6 +208,8 @@ export const companies: Company[] = [
         filterBrief: 'ShieldNet presents a compelling investment opportunity in the cybersecurity space...',
         icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c5', companyName: 'CropSense', founderName: 'Deepa Agarwal', founderEmail: 'deepa@cropsense.co',
@@ -213,6 +221,8 @@ export const companies: Company[] = [
         updatedAt: '2026-02-05T12:00:00Z', slaDeadline: '2026-03-05T00:00:00Z', isOverdue: false,
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c6', companyName: 'UrbanShift', founderName: 'Sanjay Mehta', founderEmail: 'sanjay@urbanshift.in',
@@ -225,6 +235,8 @@ export const companies: Company[] = [
         quickSummary: 'Marketplace for commercial real estate with AI-powered valuation and discovery.',
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c7', companyName: 'MedTrack Pro', founderName: 'Dr. Anita Singh', founderEmail: 'anita@medtrackpro.com',
@@ -239,6 +251,8 @@ export const companies: Company[] = [
         filterBrief: 'MedTrack Pro is positioned to capture a significant share of the hospital digitization wave...',
         icMemo: '# Investment Committee Memo\n## MedTrack Pro — Pre-Series A\n\n### Company Overview\nMedTrack Pro is a B2B SaaS platform digitizing hospital operations...\n\n### Investment Thesis\n1. Large addressable market (₹45,000Cr+)\n2. Strong founder-market fit\n3. Proven product with 12 hospital deployments\n\n### Risks\n1. Long enterprise sales cycles\n2. Regulatory complexity\n\n### Recommendation\n**Proceed to Due Diligence** with focus on unit economics validation.',
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c8', companyName: 'DevForge', founderName: 'Karthik Nair', founderEmail: 'karthik@devforge.dev',
@@ -251,6 +265,8 @@ export const companies: Company[] = [
         quickSummary: 'Next-gen CI/CD platform with AI-powered test generation and deployment optimization.',
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c9', companyName: 'PayrollStack', founderName: 'Meera Desai', founderEmail: 'meera@payrollstack.in',
@@ -265,6 +281,8 @@ export const companies: Company[] = [
         filterBrief: 'PayrollStack has demonstrated strong product-market fit in the Indian SME payroll space...',
         icMemo: '# IC Memo: PayrollStack\n\nRecommendation: Invest ₹25Cr at ₹100Cr pre-money valuation...',
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c10', companyName: 'DataLens', founderName: 'Akash Trivedi', founderEmail: 'akash@datalens.ai',
@@ -276,6 +294,8 @@ export const companies: Company[] = [
         updatedAt: '2026-02-10T10:00:00Z', slaDeadline: '2026-03-10T00:00:00Z', isOverdue: false,
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c11', companyName: 'CloudArmor', founderName: 'Bharat Patel', founderEmail: 'bharat@cloudarmor.io',
@@ -287,6 +307,8 @@ export const companies: Company[] = [
         updatedAt: '2026-02-09T10:00:00Z', slaDeadline: '2026-03-09T00:00:00Z', isOverdue: false,
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c12', companyName: 'FleetPulse', founderName: 'Nikhil Yadav', founderEmail: 'nikhil@fleetpulse.in',
@@ -298,6 +320,8 @@ export const companies: Company[] = [
         updatedAt: '2026-02-08T10:00:00Z', slaDeadline: '2026-03-08T00:00:00Z', isOverdue: false,
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c13', companyName: 'TokenBridge', founderName: 'Arun Christy', founderEmail: 'arun@tokenbridge.xyz',
@@ -310,6 +334,8 @@ export const companies: Company[] = [
         quickSummary: 'Cross-chain liquidity aggregator bridging DeFi across EVM and non-EVM chains.',
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c14', companyName: 'DefenseOS', founderName: 'Col. Rajesh Verma (Retd.)', founderEmail: 'rajesh@defenseos.in',
@@ -324,6 +350,8 @@ export const companies: Company[] = [
         filterBrief: 'DefenseOS brings a unique combination of military domain expertise and modern tech...',
         icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c15', companyName: 'QuickServe', founderName: 'Tanvi Shah', founderEmail: 'tanvi@quickserve.app',
@@ -335,6 +363,8 @@ export const companies: Company[] = [
         updatedAt: '2026-02-11T06:00:00Z', slaDeadline: '2026-03-11T00:00:00Z', isOverdue: false,
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c16', companyName: 'SalesForge AI', founderName: 'Gaurav Reddy', founderEmail: 'gaurav@salesforge.ai',
@@ -347,6 +377,8 @@ export const companies: Company[] = [
         quickSummary: 'AI-powered sales intelligence platform automating lead scoring, outreach, and pipeline management.',
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c17', companyName: 'TaskFlow', founderName: 'Ishaan Bose', founderEmail: 'ishaan@taskflow.co',
@@ -361,6 +393,8 @@ export const companies: Company[] = [
         filterBrief: 'TaskFlow has built a strong wedge in workflow automation...',
         icMemo: '# IC Memo: TaskFlow\n\nRecommendation: Proceed with caution. Strong product, competitive market.',
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
     {
         id: 'c18', companyName: 'SecurID', founderName: 'Ananya Kapoor', founderEmail: 'ananya@securid.io',
@@ -375,6 +409,8 @@ export const companies: Company[] = [
         filterBrief: 'SecurID has demonstrated exceptional technical capabilities...',
         icMemo: '# IC Memo: SecurID\n\nStrong buy recommendation. Market-leading accuracy in identity verification.',
         needsReview: false, ingestionSource: null,
+        initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '',
     },
 ];
 

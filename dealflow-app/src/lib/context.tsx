@@ -9,7 +9,7 @@ import type {
     User, Company, PipelineStage, Industry, DealSourceName,
     RejectionReasonCategory, RejectionSubReason, Notification,
     Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
-    PagePermission,
+    PagePermission, FollowOnRound,
 } from '@/types/database';
 
 // ──────────────────────────────────────────────────
@@ -77,6 +77,35 @@ function mapCompany(r: any): Company {
         callTranscript: r.call_transcript ?? null,
         filterBrief: r.filter_brief ?? null,
         icMemo: r.ic_memo ?? null,
+        initialInvestment: r.initial_investment ?? null,
+        entryValuation: r.entry_valuation ?? null,
+        entryOwnership: r.entry_ownership != null ? Number(r.entry_ownership) : null,
+        currentOwnership: r.current_ownership != null ? Number(r.current_ownership) : null,
+        latestValuation: r.latest_valuation ?? null,
+        portfolioStatus: r.portfolio_status ?? 'Active',
+        exitValue: r.exit_value ?? null,
+        exitDate: r.exit_date ?? null,
+        hqLocation: r.hq_location ?? '',
+        notes: r.notes ?? '',
+    };
+}
+
+function mapFollowOn(r: any): FollowOnRound {
+    return {
+        id: r.id,
+        companyId: r.company_id,
+        organizationId: r.organization_id,
+        roundName: r.round_name ?? '',
+        roundDate: r.round_date ?? '',
+        totalRaised: r.total_raised ?? null,
+        ourInvestment: r.our_investment ?? null,
+        didWeInvest: r.did_we_invest ?? false,
+        roundValuation: r.round_valuation ?? null,
+        ownershipAfter: r.ownership_after != null ? Number(r.ownership_after) : null,
+        investorNames: r.investor_names ?? '',
+        notes: r.notes ?? '',
+        createdAt: r.created_at ?? '',
+        updatedAt: r.updated_at ?? '',
     };
 }
 
@@ -202,6 +231,12 @@ interface AppContextType {
     inviteUser: (email: string, role: UserRole, permissions?: PagePermission[]) => Promise<void>;
     updateUserPermissions: (userId: string, permissions: PagePermission[]) => Promise<void>;
     updateUserRole: (userId: string, role: string) => Promise<void>;
+
+    // Follow-on rounds
+    fetchFollowOns: (companyId: string) => Promise<FollowOnRound[]>;
+    addFollowOn: (data: Record<string, unknown>) => Promise<FollowOnRound | null>;
+    updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<void>;
+    deleteFollowOn: (id: string) => Promise<void>;
 
     // Email ingestion
     syncEmails: () => Promise<{ processed: number; skipped: number; created: { companyName: string; companyId: string }[]; errors?: string[] } | null>;
@@ -542,6 +577,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 sla_deadline: data.slaDeadline || null,
                 linked_previous_entry_id: data.linkedPreviousEntryId || null,
                 ...(data.terminalStatus ? { terminal_status: data.terminalStatus } : {}),
+                ...(data.initialInvestment != null ? { initial_investment: data.initialInvestment } : {}),
+                ...(data.entryValuation != null ? { entry_valuation: data.entryValuation } : {}),
+                ...(data.entryOwnership != null ? { entry_ownership: data.entryOwnership } : {}),
+                ...(data.currentOwnership != null ? { current_ownership: data.currentOwnership } : {}),
+                ...(data.latestValuation != null ? { latest_valuation: data.latestValuation } : {}),
+                ...(data.portfolioStatus ? { portfolio_status: data.portfolioStatus } : {}),
+                ...(data.exitValue != null ? { exit_value: data.exitValue } : {}),
+                ...(data.exitDate ? { exit_date: data.exitDate } : {}),
+                ...(data.hqLocation ? { hq_location: data.hqLocation } : {}),
+                ...(data.notes ? { notes: data.notes } : {}),
             },
         });
 
@@ -595,6 +640,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             callTranscript: 'call_transcript', filterBrief: 'filter_brief', icMemo: 'ic_memo',
             linkedPreviousEntryId: 'linked_previous_entry_id',
             needsReview: 'needs_review', ingestionSource: 'ingestion_source',
+            initialInvestment: 'initial_investment', entryValuation: 'entry_valuation',
+            entryOwnership: 'entry_ownership', currentOwnership: 'current_ownership',
+            latestValuation: 'latest_valuation', portfolioStatus: 'portfolio_status',
+            exitValue: 'exit_value', exitDate: 'exit_date',
+            hqLocation: 'hq_location', notes: 'notes',
         };
         for (const [key, val] of Object.entries(data)) {
             const dbKey = fieldMap[key] || key;
@@ -807,6 +857,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
             },
         });
     }, [apiDb, user, companies, pipelineStages]);
+
+    // ─── Follow-on Rounds CRUD ─────────────────────
+
+    const fetchFollowOns = useCallback(async (companyId: string): Promise<FollowOnRound[]> => {
+        const { data: rows, error } = await apiDb({
+            table: 'portfolio_follow_ons', operation: 'select',
+            match: { company_id: companyId },
+            order: 'round_date',
+        });
+        if (error || !rows) return [];
+        return (Array.isArray(rows) ? rows : [rows]).map(mapFollowOn);
+    }, [apiDb]);
+
+    const addFollowOn = useCallback(async (data: Record<string, unknown>): Promise<FollowOnRound | null> => {
+        const { data: row, error } = await apiDb({
+            table: 'portfolio_follow_ons', operation: 'insert',
+            data: {
+                company_id: data.companyId,
+                organization_id: ORGANIZATION_ID,
+                round_name: data.roundName || '',
+                round_date: data.roundDate || new Date().toISOString(),
+                total_raised: data.totalRaised || null,
+                our_investment: data.ourInvestment || null,
+                did_we_invest: data.didWeInvest || false,
+                round_valuation: data.roundValuation || null,
+                ownership_after: data.ownershipAfter || null,
+                investor_names: data.investorNames || '',
+                notes: data.notes || '',
+            },
+        });
+        if (error || !row) { console.error('addFollowOn error:', error); return null; }
+        return mapFollowOn(row);
+    }, [apiDb]);
+
+    const updateFollowOn = useCallback(async (id: string, data: Record<string, unknown>) => {
+        const dbData: Record<string, unknown> = {};
+        if (data.roundName !== undefined) dbData.round_name = data.roundName;
+        if (data.roundDate !== undefined) dbData.round_date = data.roundDate;
+        if (data.totalRaised !== undefined) dbData.total_raised = data.totalRaised;
+        if (data.ourInvestment !== undefined) dbData.our_investment = data.ourInvestment;
+        if (data.didWeInvest !== undefined) dbData.did_we_invest = data.didWeInvest;
+        if (data.roundValuation !== undefined) dbData.round_valuation = data.roundValuation;
+        if (data.ownershipAfter !== undefined) dbData.ownership_after = data.ownershipAfter;
+        if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
+        if (data.notes !== undefined) dbData.notes = data.notes;
+        await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } });
+    }, [apiDb]);
+
+    const deleteFollowOn = useCallback(async (id: string) => {
+        await apiDb({ table: 'portfolio_follow_ons', operation: 'delete', match: { id } });
+    }, [apiDb]);
 
     // ─── AI Generation Mutations ────────────────────
 
@@ -1130,6 +1231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
+        fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
         syncEmails, approveCompany,
         selectedCompany, setSelectedCompany,
         editingCompany, setEditingCompany,
@@ -1159,6 +1261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
+        fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
         syncEmails, approveCompany,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,

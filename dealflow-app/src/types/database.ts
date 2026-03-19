@@ -137,6 +137,36 @@ export interface Company {
   callTranscript: CallTranscript | null;
   filterBrief: string | null;
   icMemo: string | null;
+  // Portfolio-specific fields
+  initialInvestment: number | null;
+  entryValuation: number | null;
+  entryOwnership: number | null;
+  currentOwnership: number | null;
+  latestValuation: number | null;
+  portfolioStatus: PortfolioStatus;
+  exitValue: number | null;
+  exitDate: string | null;
+  hqLocation: string;
+  notes: string;
+}
+
+export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
+
+export interface FollowOnRound {
+  id: string;
+  companyId: string;
+  organizationId: string;
+  roundName: string;
+  roundDate: string;
+  totalRaised: number | null;
+  ourInvestment: number | null;
+  didWeInvest: boolean;
+  roundValuation: number | null;
+  ownershipAfter: number | null;
+  investorNames: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DeckAnalysis {
