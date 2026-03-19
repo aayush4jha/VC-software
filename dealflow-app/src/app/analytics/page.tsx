@@ -342,8 +342,25 @@ function AnalyticsContent() {
         return (
             <>
                 <TopHeader title="Analytics & Insights" />
-                <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>
-                    Loading analytics data...
+                <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Loading analytics data...</div>
+                </div>
+            </>
+        );
+    }
+
+    if (portfolioCompanies.length === 0) {
+        return (
+            <>
+                <TopHeader title="Analytics & Insights" />
+                <div className="page-content page-enter">
+                    <div className="empty-state" style={{ height: '60vh' }}>
+                        <div className="empty-state-icon"><span style={{ fontSize: 28 }}>📊</span></div>
+                        <div className="empty-state-title">No Portfolio Data Yet</div>
+                        <div className="empty-state-text">
+                            Add companies to your Portfolio to see analytics. Go to the Portfolio page and add companies, or move companies from the Deal Flow pipeline.
+                        </div>
+                    </div>
                 </div>
             </>
         );
@@ -352,7 +369,7 @@ function AnalyticsContent() {
     return (
         <>
             <TopHeader title="Analytics & Insights" />
-            <div style={{ padding: '24px 28px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
+            <div className="page-content page-enter">
 
                 {/* ═══ Filter Analytics ═══ */}
                 <div className="portfolio-section-card" style={{ marginBottom: 24 }}>
