@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { to, subject, body, from, companyId } = await request.json();
+        const { to, subject, body, companyId } = await request.json();
 
         if (!to || !subject || !body) {
             return NextResponse.json(
@@ -30,8 +30,17 @@ export async function POST(request: NextRequest) {
 
         const gmail = google.gmail({ version: 'v1', auth: result.oauth2Client });
 
+        // Get the connected Google account's email address
+        let senderEmail = 'me';
+        try {
+            const profile = await gmail.users.getProfile({ userId: 'me' });
+            senderEmail = profile.data.emailAddress || 'me';
+        } catch {
+            // fallback to 'me' which lets Gmail use the authenticated account
+        }
+
         const messageParts = [
-            `From: ${from || 'me'}`,
+            `From: ${senderEmail}`,
             `To: ${to}`,
             `Subject: ${subject}`,
             'Content-Type: text/plain; charset="UTF-8"',
