@@ -45,6 +45,7 @@ interface WorkspaceEmail {
     direction: 'received' | 'sent';
     recipientEmail: string | null;
     extracted: ExtractedData;
+    emailBody: string;
 }
 
 function EmailsContent() {
@@ -116,6 +117,7 @@ function EmailsContent() {
                     relevanceLabel: email.relevanceLabel,
                     derivedCompanyName: email.derivedCompanyName,
                     extracted: email.extracted,
+                    emailBody: email.emailBody || '',
                 }),
             });
             const data = await res.json();

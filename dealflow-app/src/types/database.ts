@@ -177,9 +177,16 @@ export interface DeckAnalysis {
   businessModel: string;
   traction: string;
   team: string;
+  competitiveLandscape?: string;
+  financialProjection?: string;
+  investmentThesis?: string;
   strengths: string[];
+  risks?: string[];
   redFlags: string[];
-  suggestedQuestions: string[];
+  suggestedQuestions?: string[];
+  dueDiligenceQuestions?: string[];
+  verdict?: string;
+  confidenceScore?: number;
 }
 
 export interface KPIData {

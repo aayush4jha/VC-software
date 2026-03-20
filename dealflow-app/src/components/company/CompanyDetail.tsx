@@ -430,8 +430,8 @@ export default function CompanyDetail() {
                 <div className="detail-panel-body">
                     {activeTab === 'overview' && (
                         <div>
-                            {/* Quick Summary */}
-                            {c.quickSummary ? (
+                            {/* Quick Summary — only show if not raw email pitch */}
+                            {c.quickSummary && !c.quickSummary.startsWith('[Email Pitch]') && (
                                 <div className="ai-card" style={{ marginBottom: 20 }}>
                                     <div className="ai-card-header">
                                         <div className="ai-card-icon"><Sparkles size={14} /></div>
@@ -439,15 +439,6 @@ export default function CompanyDetail() {
                                     </div>
                                     <div className="ai-card-body">{c.quickSummary}</div>
                                 </div>
-                            ) : (
-                                <button
-                                    className="btn btn-secondary btn-sm"
-                                    style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}
-                                    onClick={handleGenerateSummary}
-                                    disabled={generatingSummary}
-                                >
-                                    {generatingSummary ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Sparkles size={14} /> Generate AI Summary</>}
-                                </button>
                             )}
 
                             {/* Linked Previous Entry */}
@@ -677,158 +668,143 @@ export default function CompanyDetail() {
 
                     {activeTab === 'ai' && (
                         <div>
-                            {/* AI Actions Row */}
-                            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-                                <button className="btn btn-secondary btn-sm" onClick={handleGenerateSummary} disabled={generatingSummary}>
-                                    {generatingSummary ? <><Loader2 size={12} className="spin" /> Summary...</> : <><Sparkles size={12} /> Quick Summary</>}
-                                </button>
-                                <button className="btn btn-secondary btn-sm" onClick={handleAnalyzeDeck} disabled={analyzingDeck}>
-                                    {analyzingDeck ? <><Loader2 size={12} className="spin" /> Analyzing...</> : <><FileSearch size={12} /> Deck Analysis</>}
-                                </button>
-                                <button className="btn btn-secondary btn-sm" onClick={handleGenerateBrief} disabled={generatingBrief}>
-                                    {generatingBrief ? <><Loader2 size={12} className="spin" /> Brief...</> : <><FileText size={12} /> Filter Brief</>}
-                                </button>
-                                <button className="btn btn-secondary btn-sm" onClick={handleGenerateMemo} disabled={generatingMemo}>
-                                    {generatingMemo ? <><Loader2 size={12} className="spin" /> Memo...</> : <><FileText size={12} /> IC Memo</>}
-                                </button>
-                            </div>
-
-                            {/* Quick Summary */}
-                            {c.quickSummary && (
-                                <div className="ai-card" style={{ marginBottom: 16 }}>
-                                    <div className="ai-card-header">
-                                        <div className="ai-card-icon"><Sparkles size={14} /></div>
-                                        <span className="ai-card-title">AI Quick Summary</span>
-                                    </div>
-                                    <div className="ai-card-body">{c.quickSummary}</div>
+                            {/* Single Analyze Button */}
+                            {!c.deckAnalysis && !analyzingDeck && (
+                                <div style={{ marginBottom: 20 }}>
+                                    <button className="btn btn-primary" onClick={handleAnalyzeDeck} disabled={analyzingDeck} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <FileSearch size={14} /> Analyze Deck / Summary
+                                    </button>
+                                    <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                                        Generates a comprehensive investment analysis report using AI based on the pitch email and company data.
+                                    </p>
                                 </div>
                             )}
 
-                            {/* Deck Analysis */}
-                            {c.deckAnalysis ? (
-                                <div className="ai-card" style={{ marginBottom: 16 }}>
-                                    <div className="ai-card-header">
-                                        <div className="ai-card-icon"><Sparkles size={14} /></div>
-                                        <span className="ai-card-title">Full Deck Analysis</span>
-                                    </div>
-                                    <div className="ai-card-body">
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Summary</div>
-                                            <p>{c.deckAnalysis.summary}</p>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Problem</div>
-                                            <p>{c.deckAnalysis.problem}</p>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Solution</div>
-                                            <p>{c.deckAnalysis.solution}</p>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Market</div>
-                                            <p>{c.deckAnalysis.market}</p>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Business Model</div>
-                                            <p>{c.deckAnalysis.businessModel}</p>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Traction</div>
-                                            <p>{c.deckAnalysis.traction}</p>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Team</div>
-                                            <p>{c.deckAnalysis.team}</p>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Strengths</div>
-                                            <ul className="ai-list">
-                                                {c.deckAnalysis.strengths.map((s, i) => <li key={i}>{s}</li>)}
-                                            </ul>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Red Flags</div>
-                                            <ul className="ai-list red-flags">
-                                                {c.deckAnalysis.redFlags.map((f, i) => <li key={i}>{f}</li>)}
-                                            </ul>
-                                        </div>
-                                        <div className="ai-section">
-                                            <div className="ai-section-title">Suggested Call Questions</div>
-                                            <ul className="ai-list">
-                                                {c.deckAnalysis.suggestedQuestions.map((q, i) => <li key={i}>{q}</li>)}
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : analyzingDeck ? (
+                            {/* Loading state */}
+                            {analyzingDeck && (
                                 <div className="ai-card" style={{ marginBottom: 16, textAlign: 'center', padding: 40 }}>
                                     <Loader2 size={24} className="spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
-                                    <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Analyzing deck with AI...</div>
-                                </div>
-                            ) : null}
-
-                            {/* KPI Benchmarks */}
-                            {c.kpiData && (
-                                <div className="ai-card" style={{ marginBottom: 16 }}>
-                                    <div className="ai-card-header">
-                                        <div className="ai-card-icon"><BarChart3 size={14} /></div>
-                                        <span className="ai-card-title">KPI Benchmarking — {c.kpiData.businessModel}</span>
-                                    </div>
-                                    <table className="kpi-table">
-                                        <thead>
-                                            <tr>
-                                                <th>KPI</th>
-                                                <th>Value</th>
-                                                <th>Benchmark</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {c.kpiData.kpis.map((kpi, i) => (
-                                                <tr key={i}>
-                                                    <td style={{ fontWeight: 600 }}>{kpi.name}</td>
-                                                    <td>{kpi.value}</td>
-                                                    <td style={{ color: 'var(--text-tertiary)' }}>{kpi.benchmark}</td>
-                                                    <td>
-                                                        <span className={`kpi-status ${kpi.status}`}>
-                                                            {kpi.status === 'above' ? '↑ Above' : kpi.status === 'below' ? '↓ Below' : '— On Par'}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                    <div style={{ fontSize: 14, fontWeight: 600 }}>Generating Investment Analysis Report...</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>This may take 10-15 seconds</div>
                                 </div>
                             )}
 
-                            {/* Filter Brief */}
-                            {c.filterBrief && (
-                                <div className="ai-card" style={{ marginBottom: 16 }}>
-                                    <div className="ai-card-header">
-                                        <div className="ai-card-icon"><FileText size={14} /></div>
-                                        <span className="ai-card-title">Filter Discussion Brief</span>
+                            {/* Full Analysis Report */}
+                            {c.deckAnalysis && (
+                                <div>
+                                    {/* Verdict Banner */}
+                                    {c.deckAnalysis.verdict && (
+                                        <div style={{
+                                            padding: '12px 16px', borderRadius: 8, marginBottom: 16,
+                                            background: c.deckAnalysis.verdict?.includes('INVEST') ? 'rgba(16,185,129,0.1)' : c.deckAnalysis.verdict?.includes('PASS') ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)',
+                                            border: `1px solid ${c.deckAnalysis.verdict?.includes('INVEST') ? 'rgba(16,185,129,0.3)' : c.deckAnalysis.verdict?.includes('PASS') ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                        }}>
+                                            <div>
+                                                <div style={{ fontWeight: 700, fontSize: 14, color: c.deckAnalysis.verdict?.includes('INVEST') ? '#10b981' : c.deckAnalysis.verdict?.includes('PASS') ? '#ef4444' : '#f59e0b' }}>
+                                                    Verdict: {c.deckAnalysis.verdict}
+                                                </div>
+                                            </div>
+                                            {(c.deckAnalysis.confidenceScore ?? 0) > 0 && (
+                                                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                    Confidence: <strong>{c.deckAnalysis.confidenceScore}%</strong>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="ai-card" style={{ marginBottom: 16 }}>
+                                        <div className="ai-card-header">
+                                            <div className="ai-card-icon"><Sparkles size={14} /></div>
+                                            <span className="ai-card-title">Investment Analysis Report</span>
+                                            <button className="btn btn-ghost btn-sm" onClick={handleAnalyzeDeck} disabled={analyzingDeck} style={{ marginLeft: 'auto', fontSize: 11 }}>
+                                                Re-analyze
+                                            </button>
+                                        </div>
+                                        <div className="ai-card-body">
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Executive Summary</div>
+                                                <p>{c.deckAnalysis.summary}</p>
+                                            </div>
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Problem Analysis</div>
+                                                <p>{c.deckAnalysis.problem}</p>
+                                            </div>
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Solution & Product</div>
+                                                <p>{c.deckAnalysis.solution}</p>
+                                            </div>
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Market Opportunity (TAM/SAM/SOM)</div>
+                                                <p>{c.deckAnalysis.market}</p>
+                                            </div>
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Business Model & Unit Economics</div>
+                                                <p>{c.deckAnalysis.businessModel}</p>
+                                            </div>
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Traction & Metrics</div>
+                                                <p>{c.deckAnalysis.traction}</p>
+                                            </div>
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Team Assessment</div>
+                                                <p>{c.deckAnalysis.team}</p>
+                                            </div>
+                                            {c.deckAnalysis.competitiveLandscape && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title">Competitive Landscape</div>
+                                                    <p>{c.deckAnalysis.competitiveLandscape}</p>
+                                                </div>
+                                            )}
+                                            {c.deckAnalysis.financialProjection && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title">Financial Projections</div>
+                                                    <p>{c.deckAnalysis.financialProjection}</p>
+                                                </div>
+                                            )}
+                                            {c.deckAnalysis.investmentThesis && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title">Investment Thesis</div>
+                                                    <p>{c.deckAnalysis.investmentThesis}</p>
+                                                </div>
+                                            )}
+                                            <div className="ai-section">
+                                                <div className="ai-section-title" style={{ color: '#10b981' }}>Strengths</div>
+                                                <ul className="ai-list">
+                                                    {(c.deckAnalysis.strengths || []).map((s: string, i: number) => <li key={i}>{s}</li>)}
+                                                </ul>
+                                            </div>
+                                            {(c.deckAnalysis.risks || []).length > 0 && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title" style={{ color: '#f59e0b' }}>Risks</div>
+                                                    <ul className="ai-list">
+                                                        {(c.deckAnalysis.risks ?? []).map((r: string, i: number) => <li key={i}>{r}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            <div className="ai-section">
+                                                <div className="ai-section-title" style={{ color: '#ef4444' }}>Red Flags</div>
+                                                <ul className="ai-list red-flags">
+                                                    {(c.deckAnalysis.redFlags || []).map((f: string, i: number) => <li key={i}>{f}</li>)}
+                                                </ul>
+                                            </div>
+                                            <div className="ai-section">
+                                                <div className="ai-section-title">Due Diligence Questions</div>
+                                                <ul className="ai-list">
+                                                    {(c.deckAnalysis.dueDiligenceQuestions || c.deckAnalysis.suggestedQuestions || []).map((q: string, i: number) => <li key={i}>{q}</li>)}
+                                                </ul>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="ai-card-body" style={{ whiteSpace: 'pre-wrap' }}>{c.filterBrief}</div>
                                 </div>
                             )}
 
-                            {/* IC Memo */}
-                            {c.icMemo && (
-                                <div className="ai-card" style={{ marginBottom: 16 }}>
-                                    <div className="ai-card-header">
-                                        <div className="ai-card-icon"><FileText size={14} /></div>
-                                        <span className="ai-card-title">IC Memo</span>
-                                    </div>
-                                    <div className="ai-card-body" style={{ whiteSpace: 'pre-wrap' }}>{c.icMemo}</div>
-                                </div>
-                            )}
-
-                            {/* Empty state when no AI data at all */}
-                            {!c.quickSummary && !c.deckAnalysis && !c.kpiData && !c.filterBrief && !c.icMemo && !analyzingDeck && (
-                                <div className="empty-state">
-                                    <div className="empty-state-icon"><Sparkles size={24} /></div>
-                                    <div className="empty-state-title">No AI Analysis Yet</div>
-                                    <div className="empty-state-text">Use the buttons above to generate AI-powered analysis</div>
+                            {/* Empty state */}
+                            {!c.deckAnalysis && !analyzingDeck && (
+                                <div className="empty-state" style={{ marginTop: 20 }}>
+                                    <div className="empty-state-icon"><FileSearch size={24} /></div>
+                                    <div className="empty-state-title">No Analysis Yet</div>
+                                    <div className="empty-state-text">Click &quot;Analyze Deck / Summary&quot; above to generate a detailed AI-powered investment report</div>
                                 </div>
                             )}
                         </div>

@@ -198,6 +198,7 @@ export interface WorkspaceEmail {
     recipientEmail: string | null;
     // AI-extracted fields
     extracted: ExtractedData;
+    emailBody: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -292,10 +293,10 @@ export async function GET(request: NextRequest) {
 
                 const { isRelevant, label } = detectRelevance(subject, snippet);
 
-                // Extract full body text for AI analysis (only for received relevant emails)
+                // Extract full body text for AI analysis
+                const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
                 let extracted: ExtractedData;
                 if (direction === 'received' && isRelevant && GEMINI_API_KEY) {
-                    const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
                     extracted = await analyzeEmailWithAI(subject, senderName, senderEmail, bodyText, snippet);
                 } else {
                     extracted = {
@@ -331,6 +332,7 @@ export async function GET(request: NextRequest) {
                     direction,
                     recipientEmail,
                     extracted,
+                    emailBody: bodyText.slice(0, 5000),
                 });
             } catch {
                 // Skip individual message errors

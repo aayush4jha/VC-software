@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
         hasPitchDeck, relevanceLabel, derivedCompanyName,
         // AI-extracted fields
         extracted,
+        emailBody,
     } = body;
 
     if (!senderEmail || !subject) {
@@ -131,7 +132,12 @@ export async function POST(request: NextRequest) {
         if (totalFundRaise !== null) companyInsert.total_fund_raise = totalFundRaise;
         if (valuation !== null) companyInsert.valuation = valuation;
         if (industryId) companyInsert.industry_id = industryId;
-        if (ai.summary) companyInsert.quick_summary = ai.summary;
+        // Store email body as quick_summary so Analyze Deck can use it
+        if (emailBody) {
+            companyInsert.quick_summary = `[Email Pitch]\n${emailBody.slice(0, 4000)}`;
+        } else if (ai.summary) {
+            companyInsert.quick_summary = ai.summary;
+        }
 
         const { data: newCompany, error: companyError } = await db
             .from('companies')
