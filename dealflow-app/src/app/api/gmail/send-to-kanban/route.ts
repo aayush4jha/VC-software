@@ -46,19 +46,26 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No pipeline stages configured' }, { status: 400 });
         }
 
-        // Check if company with this founder email already exists
-        const { data: existingCompany } = await db
-            .from('companies')
-            .select('id, company_name')
-            .eq('organization_id', ORGANIZATION_ID)
-            .eq('founder_email', senderEmail)
-            .limit(1);
+        // Use AI-extracted company name for dedup (not just email)
+        const aiData = extracted || {};
+        const derivedName = aiData.companyName || derivedCompanyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim() || '';
 
-        if (existingCompany && existingCompany.length > 0) {
-            return NextResponse.json({
-                error: `Company already exists for ${senderEmail}: ${existingCompany[0].company_name}`,
-                existingCompanyId: existingCompany[0].id,
-            }, { status: 409 });
+        // Check if a company with the same name AND same founder email already exists
+        if (derivedName) {
+            const { data: existingCompany } = await db
+                .from('companies')
+                .select('id, company_name')
+                .eq('organization_id', ORGANIZATION_ID)
+                .eq('founder_email', senderEmail)
+                .ilike('company_name', derivedName)
+                .limit(1);
+
+            if (existingCompany && existingCompany.length > 0) {
+                return NextResponse.json({
+                    error: `Company "${existingCompany[0].company_name}" already exists from ${senderEmail}`,
+                    existingCompanyId: existingCompany[0].id,
+                }, { status: 409 });
+            }
         }
 
         // Check dedup
@@ -76,8 +83,8 @@ export async function POST(request: NextRequest) {
         }
 
         // Use AI-extracted data if available, with sensible fallbacks
-        const ai = extracted || {};
-        const companyName = ai.companyName || derivedCompanyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim() || 'Unknown';
+        const ai = aiData;
+        const companyName = derivedName || 'Unknown';
         const founderName = ai.founderName || senderName || senderEmail.split('@')[0];
         const companyRound = ai.companyRound || 'Seed';
         const priorityLevel = ai.priorityLevel || 'Medium';
