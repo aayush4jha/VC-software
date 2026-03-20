@@ -948,7 +948,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!res.ok) { console.error('generateDeckAnalysis error:', await res.text()); return; }
         const { analysis } = await res.json();
         await apiDb({ table: 'companies', operation: 'update', data: { deck_analysis: analysis }, match: { id: companyId } });
-    }, [apiDb, companies, industries]);
+        // Update local state so the UI re-renders with the analysis
+        const updated = { ...company, deckAnalysis: analysis };
+        setCompanies(prev => prev.map(c => c.id === companyId ? updated : c));
+        setSelectedCompany(updated);
+    }, [apiDb, companies, industries, setSelectedCompany]);
 
     const generateFilterBrief = useCallback(async (companyId: string) => {
         const company = companies.find(c => c.id === companyId);
