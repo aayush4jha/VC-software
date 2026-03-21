@@ -6,10 +6,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, LayoutGrid, List, Plus } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
-import CompanyDetail from '@/components/company/CompanyDetail';
-import RejectionFlow from '@/components/company/RejectionFlow';
-import EmailCompose from '@/components/integrations/EmailCompose';
-import CalendarInvite from '@/components/integrations/CalendarInvite';
+import PortfolioCompanyDetail from '@/components/company/PortfolioCompanyDetail';
 import CompanyForm from '@/components/company/CompanyForm';
 import PortfolioCompanyForm from '@/components/company/PortfolioCompanyForm';
 import { useAppContext } from '@/lib/context';
@@ -460,10 +457,7 @@ export default function PortfolioPage() {
             <main className="main-content">
                 <PortfolioContent />
             </main>
-            <CompanyDetail />
-            <RejectionFlow />
-            <EmailCompose />
-            <CalendarInvite />
+            <PortfolioCompanyDetail />
             <CompanyForm />
             <PortfolioCompanyForm />
         </div>
