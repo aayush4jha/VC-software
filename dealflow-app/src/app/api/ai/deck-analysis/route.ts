@@ -1,5 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+async function callGemini(apiKey: string, prompt: string): Promise<string> {
+    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+    const body = JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
+    });
+
+    for (const model of models) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        // Try up to 2 times per model (in case of rate limit with retry)
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body,
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                    if (text) return text;
+                }
+
+                const errBody = await res.json().catch(() => ({ error: { code: res.status } }));
+                const code = errBody?.error?.code;
+
+                // Rate limited — wait and retry
+                if (code === 429) {
+                    const retryDelay = errBody?.error?.details?.find(
+                        (d: { retryDelay?: string }) => d.retryDelay
+                    )?.retryDelay;
+                    const waitMs = retryDelay ? parseInt(retryDelay) * 1000 : 20000;
+                    console.log(`Rate limited on ${model}, waiting ${waitMs}ms...`);
+                    await new Promise(r => setTimeout(r, Math.min(waitMs, 30000)));
+                    continue;
+                }
+
+                // Model not found — try next model
+                if (code === 404) break;
+
+                // Other error — try next model
+                console.error(`Gemini ${model} error (${code}):`, JSON.stringify(errBody.error?.message || '').slice(0, 100));
+                break;
+            } catch (e) {
+                console.error(`Gemini ${model} fetch error:`, (e as Error).message);
+                break;
+            }
+        }
+    }
+
+    throw new Error('All Gemini models failed or quota exhausted. Please try again in a few minutes.');
+}
+
 export async function POST(request: NextRequest) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) {
@@ -52,52 +107,7 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
 }`;
 
     try {
-        // Try both v1beta and v1 API versions with multiple models
-        const attempts = [
-            { version: 'v1beta', model: 'gemini-2.0-flash' },
-            { version: 'v1beta', model: 'gemini-1.5-flash' },
-            { version: 'v1', model: 'gemini-1.5-flash' },
-            { version: 'v1beta', model: 'gemini-1.5-pro' },
-            { version: 'v1', model: 'gemini-1.5-pro' },
-            { version: 'v1', model: 'gemini-pro' },
-            { version: 'v1beta', model: 'gemini-pro' },
-        ];
-
-        let res: Response | null = null;
-        let lastError = '';
-
-        const requestBody = JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
-        });
-
-        for (const { version, model } of attempts) {
-            const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-            try {
-                res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: requestBody,
-                });
-                if (res.ok) {
-                    console.log(`Gemini success with ${version}/${model}`);
-                    break;
-                }
-                lastError = await res.text();
-                console.error(`Gemini ${version}/${model} failed:`, lastError.slice(0, 100));
-                res = null;
-            } catch (e) {
-                lastError = (e as Error).message;
-                res = null;
-            }
-        }
-
-        if (!res || !res.ok) {
-            return NextResponse.json({ error: `All AI models failed. Last error: ${lastError.slice(0, 300)}` }, { status: 502 });
-        }
-
-        const data = await res.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+        const rawText = await callGemini(GEMINI_API_KEY, prompt);
 
         let analysis;
         try {
@@ -116,6 +126,6 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
         return NextResponse.json({ analysis });
     } catch (err) {
         console.error('AI deck-analysis error:', err);
-        return NextResponse.json({ error: (err as Error).message || 'AI generation failed' }, { status: 500 });
+        return NextResponse.json({ error: (err as Error).message }, { status: 502 });
     }
 }
