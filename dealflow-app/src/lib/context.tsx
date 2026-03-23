@@ -945,7 +945,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 googleDriveLink: company.googleDriveLink,
             }),
         });
-        if (!res.ok) { console.error('generateDeckAnalysis error:', await res.text()); return; }
+        if (!res.ok) {
+            const errText = await res.text();
+            console.error('generateDeckAnalysis error:', errText);
+            throw new Error(`AI analysis failed (${res.status}): ${errText.slice(0, 200)}`);
+        }
         const { analysis } = await res.json();
         await apiDb({ table: 'companies', operation: 'update', data: { deck_analysis: analysis }, match: { id: companyId } });
         // Update local state so the UI re-renders with the analysis

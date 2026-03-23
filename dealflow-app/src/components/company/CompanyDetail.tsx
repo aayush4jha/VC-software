@@ -147,7 +147,11 @@ export default function CompanyDetail() {
     const handleAnalyzeDeck = async () => {
         setAnalyzingDeck(true);
         setActiveTab('ai');
-        await generateDeckAnalysis(c.id);
+        try {
+            await generateDeckAnalysis(c.id);
+        } catch (err) {
+            alert('Analysis failed: ' + (err as Error).message);
+        }
         setAnalyzingDeck(false);
     };
 
@@ -668,15 +672,17 @@ export default function CompanyDetail() {
 
                     {activeTab === 'ai' && (
                         <div>
-                            {/* Single Analyze Button */}
-                            {!c.deckAnalysis && !analyzingDeck && (
+                            {/* Analyze Button — always visible */}
+                            {!analyzingDeck && (
                                 <div style={{ marginBottom: 20 }}>
                                     <button className="btn btn-primary" onClick={handleAnalyzeDeck} disabled={analyzingDeck} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <FileSearch size={14} /> Analyze Deck / Summary
+                                        <FileSearch size={14} /> {c.deckAnalysis ? 'Re-analyze' : 'Analyze Deck / Summary'}
                                     </button>
-                                    <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                                        Generates a comprehensive investment analysis report using AI based on the pitch email and company data.
-                                    </p>
+                                    {!c.deckAnalysis && (
+                                        <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                                            Generates a comprehensive investment analysis report using AI based on the pitch email and company data.
+                                        </p>
+                                    )}
                                 </div>
                             )}
 
