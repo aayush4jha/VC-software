@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
 export async function POST(request: NextRequest) {
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) {
         return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
 
     const { companyName, founderName, industry, subIndustry, companyRound, totalFundRaise, valuation, quickSummary, googleDriveLink } = await request.json();
 
-    // Check if quickSummary contains the original email pitch
     const hasEmailPitch = quickSummary && quickSummary.startsWith('[Email Pitch]');
     const emailContent = hasEmailPitch ? quickSummary.replace('[Email Pitch]\n', '') : '';
 
@@ -54,36 +52,48 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
 }`;
 
     try {
-        // Try models in order of preference
-        const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+        // Try both v1beta and v1 API versions with multiple models
+        const attempts = [
+            { version: 'v1beta', model: 'gemini-2.0-flash' },
+            { version: 'v1beta', model: 'gemini-1.5-flash' },
+            { version: 'v1', model: 'gemini-1.5-flash' },
+            { version: 'v1beta', model: 'gemini-1.5-pro' },
+            { version: 'v1', model: 'gemini-1.5-pro' },
+            { version: 'v1', model: 'gemini-pro' },
+            { version: 'v1beta', model: 'gemini-pro' },
+        ];
+
         let res: Response | null = null;
         let lastError = '';
 
-        for (const model of models) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+        const requestBody = JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
+        });
+
+        for (const { version, model } of attempts) {
+            const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
             try {
                 res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
-                    }),
+                    body: requestBody,
                 });
-                if (res.ok) break;
+                if (res.ok) {
+                    console.log(`Gemini success with ${version}/${model}`);
+                    break;
+                }
                 lastError = await res.text();
-                console.error(`Gemini model ${model} failed:`, lastError);
+                console.error(`Gemini ${version}/${model} failed:`, lastError.slice(0, 100));
                 res = null;
             } catch (e) {
                 lastError = (e as Error).message;
-                console.error(`Gemini model ${model} error:`, lastError);
                 res = null;
             }
         }
 
         if (!res || !res.ok) {
-            console.error('All Gemini models failed. Last error:', lastError);
-            return NextResponse.json({ error: `AI generation failed: ${lastError.slice(0, 200)}` }, { status: 502 });
+            return NextResponse.json({ error: `All AI models failed. Last error: ${lastError.slice(0, 300)}` }, { status: 502 });
         }
 
         const data = await res.json();
@@ -95,11 +105,10 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
             analysis = JSON.parse(jsonStr);
         } catch {
             analysis = {
-                summary: rawText.substring(0, 500),
-                problem: 'Unable to parse structured response',
-                solution: '', market: '', businessModel: '', traction: '', team: '',
+                summary: rawText.substring(0, 2000),
+                problem: '', solution: '', market: '', businessModel: '', traction: '', team: '',
                 competitiveLandscape: '', financialProjection: '', investmentThesis: '',
-                strengths: [], risks: [], redFlags: ['AI response parsing failed - review manually'],
+                strengths: [], risks: [], redFlags: [],
                 dueDiligenceQuestions: [], verdict: 'NEED MORE INFO', confidenceScore: 0,
             };
         }
@@ -107,6 +116,6 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
         return NextResponse.json({ analysis });
     } catch (err) {
         console.error('AI deck-analysis error:', err);
-        return NextResponse.json({ error: 'AI generation failed' }, { status: 500 });
+        return NextResponse.json({ error: (err as Error).message || 'AI generation failed' }, { status: 500 });
     }
 }

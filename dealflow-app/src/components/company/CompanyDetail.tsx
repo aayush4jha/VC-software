@@ -5,7 +5,7 @@ import {
     X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock,
     AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
     XCircle, ArrowRight, Loader2, Link2, Shield, Pause, RotateCcw,
-    FileText, BarChart3, FileSearch, Briefcase,
+    FileText, BarChart3, FileSearch, Briefcase, Download,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
@@ -698,6 +698,47 @@ export default function CompanyDetail() {
                             {/* Full Analysis Report */}
                             {c.deckAnalysis && (
                                 <div>
+                                    {/* Download Button */}
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                            onClick={() => {
+                                                const d = c.deckAnalysis!;
+                                                const sections = [
+                                                    `INVESTMENT ANALYSIS REPORT — ${c.companyName}`,
+                                                    `Generated: ${new Date().toLocaleDateString()}`,
+                                                    `\n${'='.repeat(60)}`,
+                                                    `\nVERDICT: ${d.verdict || 'N/A'}`,
+                                                    d.confidenceScore ? `Confidence: ${d.confidenceScore}%` : '',
+                                                    `\n${'='.repeat(60)}`,
+                                                    `\nEXECUTIVE SUMMARY\n${d.summary || 'N/A'}`,
+                                                    `\nPROBLEM\n${d.problem || 'N/A'}`,
+                                                    `\nSOLUTION\n${d.solution || 'N/A'}`,
+                                                    `\nMARKET\n${d.market || 'N/A'}`,
+                                                    `\nBUSINESS MODEL\n${d.businessModel || 'N/A'}`,
+                                                    `\nTRACTION\n${d.traction || 'N/A'}`,
+                                                    `\nTEAM\n${d.team || 'N/A'}`,
+                                                    d.competitiveLandscape ? `\nCOMPETITIVE LANDSCAPE\n${d.competitiveLandscape}` : '',
+                                                    d.financialProjection ? `\nFINANCIAL PROJECTION\n${d.financialProjection}` : '',
+                                                    d.investmentThesis ? `\nINVESTMENT THESIS\n${d.investmentThesis}` : '',
+                                                    d.strengths?.length ? `\nSTRENGTHS\n${d.strengths.map((s, i) => `${i + 1}. ${s}`).join('\n')}` : '',
+                                                    d.risks?.length ? `\nRISKS\n${d.risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}` : '',
+                                                    d.redFlags?.length ? `\nRED FLAGS\n${d.redFlags.map((r, i) => `${i + 1}. ${r}`).join('\n')}` : '',
+                                                    d.dueDiligenceQuestions?.length ? `\nDUE DILIGENCE QUESTIONS\n${d.dueDiligenceQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : '',
+                                                ].filter(Boolean).join('\n');
+                                                const blob = new Blob([sections], { type: 'text/plain' });
+                                                const url = URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = url;
+                                                a.download = `${c.companyName.replace(/[^a-zA-Z0-9]/g, '_')}_Analysis_Report.txt`;
+                                                a.click();
+                                                URL.revokeObjectURL(url);
+                                            }}
+                                        >
+                                            <Download size={14} /> Download Report
+                                        </button>
+                                    </div>
                                     {/* Verdict Banner */}
                                     {c.deckAnalysis.verdict && (
                                         <div style={{
