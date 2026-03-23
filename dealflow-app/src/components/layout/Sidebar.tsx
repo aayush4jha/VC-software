@@ -31,7 +31,14 @@ export default function Sidebar() {
 
     const userPerms = user?.permissions;
 
+    const closeMobileSidebar = () => {
+        document.querySelector('.sidebar')?.classList.remove('mobile-open');
+        document.querySelector('.sidebar-overlay')?.classList.remove('active');
+    };
+
     return (
+        <>
+        <div className="sidebar-overlay" onClick={closeMobileSidebar} />
         <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
             <div className="sidebar-brand">
                 {!collapsed && (
@@ -55,6 +62,7 @@ export default function Sidebar() {
                                 href={item.href}
                                 className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
                                 title={collapsed ? item.label : undefined}
+                                onClick={closeMobileSidebar}
                             >
                                 <Icon />
                                 {!collapsed && item.label}
@@ -67,6 +75,7 @@ export default function Sidebar() {
                         href="/admin"
                         className={`sidebar-nav-item ${pathname.startsWith('/admin') ? 'active' : ''}`}
                         title={collapsed ? 'Admin' : undefined}
+                        onClick={closeMobileSidebar}
                     >
                         <Shield />
                         {!collapsed && 'Admin'}
@@ -81,6 +90,7 @@ export default function Sidebar() {
                         href="/settings"
                         className={`sidebar-nav-item ${pathname === '/settings' ? 'active' : ''}`}
                         title={collapsed ? 'Settings' : undefined}
+                        onClick={closeMobileSidebar}
                     >
                         <Settings />
                         {!collapsed && 'Settings'}
@@ -106,5 +116,6 @@ export default function Sidebar() {
                 )}
             </div>
         </aside>
+        </>
     );
 }
