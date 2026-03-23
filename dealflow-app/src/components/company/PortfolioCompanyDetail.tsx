@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, FileText, Loader2 } from 'lucide-react';
+import { X, Plus, Trash2, FileText, Loader2, Pencil, Check } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
     getTotalInvested, getLatestValuation, getCurrentOwnership,
@@ -35,6 +35,8 @@ export default function PortfolioCompanyDetail() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [notesValue, setNotesValue] = useState('');
     const [notesDirty, setNotesDirty] = useState(false);
+    const [editField, setEditField] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState('');
 
     // New round form
     const [roundForm, setRoundForm] = useState({
@@ -81,6 +83,28 @@ export default function PortfolioCompanyDetail() {
     const initials = c.companyName?.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'NA';
 
     const handleClose = () => setSelectedCompany(null);
+
+    const startEdit = (field: string, currentValue: string | number | null) => {
+        setEditField(field);
+        setEditValue(currentValue?.toString() || '');
+    };
+
+    const saveField = async () => {
+        if (!editField) return;
+        const data: Record<string, unknown> = {};
+        // Map field names to DB column names
+        const numericFields = ['initialInvestment', 'entryValuation', 'entryOwnership', 'currentOwnership', 'latestValuation', 'exitValue'];
+        if (numericFields.includes(editField)) {
+            data[editField] = editValue ? parseFloat(editValue) : null;
+        } else {
+            data[editField] = editValue || null;
+        }
+        await updateCompany(c.id, data);
+        setEditField(null);
+        setEditValue('');
+    };
+
+    const cancelEdit = () => { setEditField(null); setEditValue(''); };
 
     const handleEdit = () => {
         setCompanyFormPortfolioMode(true);
@@ -201,19 +225,28 @@ export default function PortfolioCompanyDetail() {
                         <div>
                             <h3 style={sectionTitleStyle}>Investment Details</h3>
                             <div style={detailCardStyle}>
-                                <DetailRow label="Entry Date" value={entryDate} />
-                                <DetailRow label="Entry Stage" value={c.companyRound || '--'} />
-                                <DetailRow label="Initial Investment" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : (c.totalFundRaise ? formatPortfolioCurrency(c.totalFundRaise) : '--')} />
+                                <EditableRow label="Entry Date" value={entryDate} field="createdAt" type="date" rawValue={c.createdAt?.split('T')[0] || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Entry Stage" value={c.companyRound || '--'} field="companyRound" rawValue={c.companyRound || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Initial Investment" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : '--'} field="initialInvestment" type="number" rawValue={c.initialInvestment?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Entry Valuation" value={c.entryValuation ? formatPortfolioCurrency(c.entryValuation) : '--'} field="entryValuation" type="number" rawValue={c.entryValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Entry Ownership %" value={c.entryOwnership ? `${c.entryOwnership}%` : '--'} field="entryOwnership" type="number" rawValue={c.entryOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Current Ownership %" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'} field="currentOwnership" type="number" rawValue={c.currentOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <DetailRow label="MOIC" value={totalInvested > 0 ? formatMOIC(moic) : '--'} />
                             </div>
                         </div>
                         <div>
-                            <h3 style={sectionTitleStyle}>Team</h3>
+                            <h3 style={sectionTitleStyle}>Team & Info</h3>
                             <div style={detailCardStyle}>
+                                <EditableRow label="Founder" value={c.founderName || '--'} field="founderName" rawValue={c.founderName || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Email" value={c.founderEmail || '--'} field="founderEmail" rawValue={c.founderEmail || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'} field="latestValuation" type="number" rawValue={c.latestValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Status" value={status} field="portfolioStatus" rawValue={status} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Active', 'Exited', 'Written Off']} />
+                                {status === 'Exited' && (
+                                    <EditableRow label="Exit Value" value={c.exitValue ? formatPortfolioCurrency(c.exitValue) : '--'} field="exitValue" type="number" rawValue={c.exitValue?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                )}
                                 <DetailRow label="Deal Sourcer" value={sourcer || '--'} />
                                 <DetailRow label="Analyst" value={analyst || '--'} />
-                                <DetailRow label="Founder" value={c.founderName || '--'} />
-                                <DetailRow label="Email" value={c.founderEmail || '--'} />
                             </div>
                         </div>
                     </div>
@@ -402,6 +435,72 @@ function DetailRow({ label, value }: { label: string; value: string }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-light)' }}>
             <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{label}</span>
             <span style={{ fontWeight: 500, fontSize: 13 }}>{value}</span>
+        </div>
+    );
+}
+
+interface EditableRowProps {
+    label: string;
+    value: string;
+    field: string;
+    rawValue: string;
+    editField: string | null;
+    editValue: string;
+    type?: string;
+    selectOptions?: string[];
+    onStart: (field: string, val: string) => void;
+    onChange: (val: string) => void;
+    onSave: () => void;
+    onCancel: () => void;
+}
+
+function EditableRow({ label, value, field, rawValue, editField, editValue, type, selectOptions, onStart, onChange, onSave, onCancel }: EditableRowProps) {
+    const isEditing = editField === field;
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8 }}>
+            <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flexShrink: 0 }}>{label}</span>
+            {isEditing ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {selectOptions ? (
+                        <select
+                            className="form-select"
+                            value={editValue}
+                            onChange={e => onChange(e.target.value)}
+                            style={{ fontSize: 12, padding: '3px 6px', height: 28 }}
+                        >
+                            {selectOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                    ) : (
+                        <input
+                            className="form-input"
+                            type={type || 'text'}
+                            value={editValue}
+                            onChange={e => onChange(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+                            autoFocus
+                            style={{ fontSize: 12, padding: '3px 6px', height: 28, width: 130 }}
+                        />
+                    )}
+                    <button onClick={onSave} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                        <Check size={14} style={{ color: 'var(--success)' }} />
+                    </button>
+                    <button onClick={onCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                        <X size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                </div>
+            ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontWeight: 500, fontSize: 13 }}>{value}</span>
+                    <button
+                        onClick={() => onStart(field, rawValue)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, opacity: 0.4 }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                    >
+                        <Pencil size={12} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
