@@ -272,9 +272,9 @@ function EmailsContent() {
                 </div>
 
                 {/* Email list + detail split */}
-                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                <div className="email-split-view" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                     {/* Email list */}
-                    <div style={{
+                    <div className="email-list-pane" style={{
                         width: selectedEmail ? '40%' : '100%',
                         borderRight: selectedEmail ? '1px solid var(--border)' : 'none',
                         overflowY: 'auto',
@@ -347,7 +347,7 @@ function EmailsContent() {
 
                     {/* Email detail pane */}
                     {selectedEmail && (
-                        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                        <div className="email-detail-pane" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                                 <div style={{ flex: 1 }}>
                                     <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>

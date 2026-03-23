@@ -2718,7 +2718,9 @@ html, body {
   border-color: var(--primary);
 }
 
-/* Responsive */
+/* ─── Comprehensive Responsive ─────────────────── */
+
+/* Tablet — max 1024px */
 @media (max-width: 1024px) {
   .portfolio-two-col {
     grid-template-columns: 1fr;
@@ -2727,8 +2729,36 @@ html, body {
   .portfolio-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  /* Portfolio board columns narrower */
+  .portfolio-board-column {
+    min-width: 240px;
+    max-width: 240px;
+  }
+
+  /* Analytics side-by-side tables stack */
+  .portfolio-section-card .data-table {
+    font-size: 12px;
+  }
+
+  /* Email split view — list takes more space */
+  .email-detail-pane {
+    min-width: 300px;
+  }
+
+  /* Modals narrower */
+  .modal {
+    max-width: 90vw !important;
+  }
+
+  /* Form rows stack on tablet */
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
 }
 
+/* Mobile — max 768px */
 @media (max-width: 768px) {
   .portfolio-tabs {
     width: 100%;
@@ -2772,5 +2802,198 @@ html, body {
 
   .portfolio-board-cards {
     grid-template-columns: 1fr;
+  }
+
+  /* Portfolio board — scroll horizontally, narrower columns */
+  .portfolio-board {
+    height: calc(100vh - 220px);
+  }
+
+  .portfolio-board-column {
+    min-width: 220px;
+    max-width: 220px;
+  }
+
+  /* Toolbar wrapping */
+  .toolbar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .view-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Portfolio select full width */
+  .portfolio-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Search input full width */
+  .search-input {
+    width: 100% !important;
+  }
+
+  /* Modal full width */
+  .modal {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    margin: 5vh auto;
+  }
+
+  .modal-body {
+    padding: 12px 16px;
+  }
+
+  /* Metric cards in portfolio detail — 2 cols */
+  .portfolio-detail-metrics {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Portfolio detail — stack investment+team */
+  .portfolio-detail-two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Email workspace — no split view, stack */
+  .email-split-view {
+    flex-direction: column !important;
+  }
+
+  .email-list-pane {
+    width: 100% !important;
+    max-height: 40vh;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .email-detail-pane {
+    width: 100% !important;
+  }
+
+  /* Analytics filter bar wraps */
+  .analytics-filters {
+    flex-wrap: wrap;
+  }
+
+  .analytics-filters select {
+    flex: 1;
+    min-width: 100px;
+  }
+
+  /* Stat cards single column */
+  .stat-card-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Dashboard grid */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Table horizontal scroll */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 600px;
+  }
+
+  /* Header */
+  .top-header {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+}
+
+/* Small mobile — max 480px */
+@media (max-width: 480px) {
+  /* Portfolio board even narrower */
+  .portfolio-board-column {
+    min-width: 200px;
+    max-width: 200px;
+  }
+
+  .portfolio-board-card {
+    padding: 10px;
+  }
+
+  .portfolio-board-card-name {
+    font-size: 13px;
+  }
+
+  /* KPI cards compact */
+  .portfolio-kpi-card {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .portfolio-kpi-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .portfolio-kpi-value {
+    font-size: 18px;
+  }
+
+  .portfolio-kpi-label {
+    font-size: 10px;
+  }
+
+  /* Section titles smaller */
+  .portfolio-section-title {
+    font-size: 13px;
+  }
+
+  /* View toggle compact */
+  .view-toggle-btn {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  /* Analytics nav scrollable */
+  .portfolio-analytics-nav {
+    gap: 4px;
+  }
+
+  .portfolio-analytics-nav-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  /* Buttons compact */
+  .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  /* Legend items compact */
+  .portfolio-legend-item {
+    font-size: 11px;
+  }
+
+  /* Team performance cards */
+  .team-perf-grid {
+    grid-template-columns: 1fr !important;
   }
 }

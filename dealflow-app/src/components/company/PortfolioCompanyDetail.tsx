@@ -169,7 +169,7 @@ export default function PortfolioCompanyDetail() {
                     </div>
 
                     {/* 4 Metric Cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+                    <div className="portfolio-detail-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
                         <div style={metricCardStyle}>
                             <div style={metricLabelStyle}>Total Invested</div>
                             <div style={{ ...metricValueStyle, color: '#10b981' }}>{totalInvested > 0 ? formatPortfolioCurrency(totalInvested) : '--'}</div>
@@ -197,7 +197,7 @@ export default function PortfolioCompanyDetail() {
                     </div>
 
                     {/* Investment Details + Team */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
+                    <div className="portfolio-detail-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
                         <div>
                             <h3 style={sectionTitleStyle}>Investment Details</h3>
                             <div style={detailCardStyle}>
