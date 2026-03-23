@@ -125,19 +125,48 @@ export default function PortfolioCompanyDetail() {
     const handleAddRound = async () => {
         if (!roundForm.round_name || !roundForm.round_date) return;
         setSavingRound(true);
+
+        const ourInv = roundForm.our_investment ? parseFloat(roundForm.our_investment) : null;
+        const roundVal = roundForm.round_valuation ? parseFloat(roundForm.round_valuation) : null;
+        const ownerAfter = roundForm.ownership_after ? parseFloat(roundForm.ownership_after) : null;
+
         await addFollowOn({
             companyId: c.id,
             organizationId: ORGANIZATION_ID,
             roundName: roundForm.round_name,
             roundDate: roundForm.round_date,
             totalRaised: roundForm.total_raised ? parseFloat(roundForm.total_raised) : null,
-            ourInvestment: roundForm.our_investment ? parseFloat(roundForm.our_investment) : null,
+            ourInvestment: ourInv,
             didWeInvest: roundForm.did_we_invest,
-            roundValuation: roundForm.round_valuation ? parseFloat(roundForm.round_valuation) : null,
-            ownershipAfter: roundForm.ownership_after ? parseFloat(roundForm.ownership_after) : null,
+            roundValuation: roundVal,
+            ownershipAfter: ownerAfter,
             investorNames: roundForm.investor_names,
             notes: roundForm.notes,
         });
+
+        // Auto-update company fields based on the new round
+        const companyUpdates: Record<string, unknown> = {};
+
+        // Update latest valuation from round's post-money valuation
+        if (roundVal && roundVal > 0) {
+            companyUpdates.latestValuation = roundVal;
+        }
+
+        // Update current ownership if provided
+        if (ownerAfter != null) {
+            companyUpdates.currentOwnership = ownerAfter;
+        }
+
+        // Update current stage to match the round name if it's a known stage
+        const knownStages = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
+        if (knownStages.includes(roundForm.round_name)) {
+            companyUpdates.companyRound = roundForm.round_name;
+        }
+
+        if (Object.keys(companyUpdates).length > 0) {
+            await updateCompany(c.id, companyUpdates);
+        }
+
         setRoundForm({ round_name: '', round_date: '', total_raised: '', our_investment: '', did_we_invest: true, round_valuation: '', ownership_after: '', investor_names: '', notes: '' });
         setShowAddRound(false);
         setSavingRound(false);
@@ -192,30 +221,36 @@ export default function PortfolioCompanyDetail() {
                         }}>{status === 'Active' ? '\u25CF ' : ''}{status}</span>
                     </div>
 
-                    {/* 4 Metric Cards */}
+                    {/* 4 Metric Cards — clickable to edit */}
                     <div className="portfolio-detail-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
-                        <div style={metricCardStyle}>
-                            <div style={metricLabelStyle}>Total Invested</div>
-                            <div style={{ ...metricValueStyle, color: '#10b981' }}>{totalInvested > 0 ? formatPortfolioCurrency(totalInvested) : '--'}</div>
-                        </div>
-                        <div style={metricCardStyle}>
-                            <div style={metricLabelStyle}>Latest Valuation</div>
-                            <div style={metricValueStyle}>{latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                                {latestVal === (c.entryValuation || c.valuation || 0) ? 'Entry valuation' : 'Post follow-on'}
-                            </div>
-                        </div>
-                        <div style={metricCardStyle}>
-                            <div style={metricLabelStyle}>Current Ownership</div>
-                            <div style={metricValueStyle}>{ownership > 0 ? `${ownership.toFixed(2)}%` : '--'}</div>
-                        </div>
+                        <MetricCard
+                            label="Total Invested" value={totalInvested > 0 ? formatPortfolioCurrency(totalInvested) : '--'}
+                            color="#10b981" sub={followOns.length > 0 ? `Initial + ${followOns.filter(f => f.didWeInvest).length} follow-ons` : 'Set initial investment below'}
+                            field="initialInvestment" rawValue={c.initialInvestment?.toString() || ''} type="number"
+                            editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit}
+                            editLabel="Initial Investment (₹)"
+                        />
+                        <MetricCard
+                            label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'}
+                            sub={followOns.length > 0 ? 'From latest round' : 'Entry valuation'}
+                            field="latestValuation" rawValue={(c.latestValuation || c.entryValuation || '')?.toString()} type="number"
+                            editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit}
+                            editLabel="Latest Valuation (₹)"
+                        />
+                        <MetricCard
+                            label="Current Ownership" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'}
+                            sub={followOns.length > 0 ? 'After dilution' : 'Entry ownership'}
+                            field="currentOwnership" rawValue={(c.currentOwnership || c.entryOwnership || '')?.toString()} type="number"
+                            editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit}
+                            editLabel="Current Ownership (%)"
+                        />
                         <div style={metricCardStyle}>
                             <div style={metricLabelStyle}>IRR</div>
                             <div style={{ ...metricValueStyle, color: irr && irr >= 0 ? '#10b981' : irr && irr < 0 ? '#ef4444' : 'var(--text-primary)' }}>
                                 {formatXIRR(irr)}
                             </div>
                             <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                                As of {new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                MOIC: {totalInvested > 0 ? formatMOIC(moic) : '--'}
                             </div>
                         </div>
                     </div>
@@ -500,6 +535,62 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
                         <Pencil size={12} style={{ color: 'var(--text-tertiary)' }} />
                     </button>
                 </div>
+            )}
+        </div>
+    );
+}
+
+interface MetricCardProps {
+    label: string;
+    value: string;
+    color?: string;
+    sub?: string;
+    field: string;
+    rawValue: string;
+    type?: string;
+    editLabel?: string;
+    editField: string | null;
+    editValue: string;
+    onStart: (field: string, val: string) => void;
+    onChange: (val: string) => void;
+    onSave: () => void;
+    onCancel: () => void;
+}
+
+function MetricCard({ label, value, color, sub, field, rawValue, type, editLabel, editField: ef, editValue: ev, onStart, onChange, onSave, onCancel }: MetricCardProps) {
+    const isEditing = ef === field;
+    return (
+        <div style={{ ...metricCardStyle, cursor: isEditing ? 'default' : 'pointer', position: 'relative' }}
+            onClick={() => { if (!isEditing) onStart(field, rawValue); }}
+        >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={metricLabelStyle}>{label}</div>
+                {!isEditing && (
+                    <Pencil size={11} style={{ color: 'var(--text-tertiary)', opacity: 0.4 }} />
+                )}
+            </div>
+            {isEditing ? (
+                <div style={{ marginTop: 4 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 2 }}>{editLabel || label}</div>
+                    <input
+                        className="form-input"
+                        type={type || 'text'}
+                        value={ev}
+                        onChange={e => onChange(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+                        autoFocus
+                        style={{ fontSize: 13, padding: '4px 8px', height: 30, width: '100%' }}
+                    />
+                    <div style={{ display: 'flex', gap: 4, marginTop: 4, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-ghost" onClick={onCancel} style={{ fontSize: 11, padding: '2px 8px' }}>Cancel</button>
+                        <button className="btn btn-primary" onClick={onSave} style={{ fontSize: 11, padding: '2px 8px' }}>Save</button>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    <div style={{ ...metricValueStyle, color: color || 'var(--text-primary)' }}>{value}</div>
+                    {sub && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{sub}</div>}
+                </>
             )}
         </div>
     );
