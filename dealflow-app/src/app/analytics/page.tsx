@@ -821,26 +821,26 @@ function AnalyticsContent() {
                 </div>
 
                 {/* ═══ Top Investments + Unrealized Gains (Side by Side) ═══ */}
-                <div className="portfolio-two-col" style={{ marginBottom: 24 }}>
-                    <div className="portfolio-section-card">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+                    <div className="portfolio-section-card" style={{ overflow: 'hidden', minWidth: 0 }}>
                         <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Top Investments by Amount</div>
-                        <div className="table-container">
-                            <table className="data-table">
+                        <div style={{ overflowX: 'auto' }}>
+                            <table className="data-table" style={{ minWidth: 0, width: '100%' }}>
                                 <thead>
                                     <tr>
-                                        <th>#</th>
+                                        <th style={{ width: 30 }}>#</th>
                                         <th>Company</th>
                                         <th>Industry</th>
-                                        <th>Invested</th>
+                                        <th style={{ textAlign: 'right' }}>Invested</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {topInvestments.map((inv, i) => (
                                         <tr key={i}>
                                             <td>{i + 1}</td>
-                                            <td>{inv.companyName}</td>
+                                            <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.companyName}</td>
                                             <td>{inv.industry}</td>
-                                            <td>{formatPortfolioCurrency(inv.invested)}</td>
+                                            <td style={{ textAlign: 'right' }}>{formatPortfolioCurrency(inv.invested)}</td>
                                         </tr>
                                     ))}
                                     {topInvestments.length === 0 && (
@@ -850,25 +850,25 @@ function AnalyticsContent() {
                             </table>
                         </div>
                     </div>
-                    <div className="portfolio-section-card">
+                    <div className="portfolio-section-card" style={{ overflow: 'hidden', minWidth: 0 }}>
                         <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Unrealized Gains</div>
-                        <div className="table-container">
-                            <table className="data-table">
+                        <div style={{ overflowX: 'auto' }}>
+                            <table className="data-table" style={{ minWidth: 0, width: '100%' }}>
                                 <thead>
                                     <tr>
-                                        <th>#</th>
+                                        <th style={{ width: 30 }}>#</th>
                                         <th>Company</th>
-                                        <th>Gain</th>
-                                        <th>MOIC</th>
+                                        <th style={{ textAlign: 'right' }}>Gain</th>
+                                        <th style={{ textAlign: 'right' }}>MOIC</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {topUnrealizedGains.map((g, i) => (
                                         <tr key={i}>
                                             <td>{i + 1}</td>
-                                            <td>{g.companyName}</td>
-                                            <td style={{ color: g.gain >= 0 ? '#10b981' : '#ef4444' }}>{formatPortfolioCurrency(g.gain)}</td>
-                                            <td>{formatMOIC(g.moic)}</td>
+                                            <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.companyName}</td>
+                                            <td style={{ textAlign: 'right', color: g.gain >= 0 ? '#10b981' : '#ef4444' }}>{formatPortfolioCurrency(g.gain)}</td>
+                                            <td style={{ textAlign: 'right' }}>{formatMOIC(g.moic)}</td>
                                         </tr>
                                     ))}
                                     {topUnrealizedGains.length === 0 && (
