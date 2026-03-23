@@ -2,15 +2,14 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-    Mail, Send, CheckCircle, XCircle, Loader2, Clock, Inbox, Download,
+    Mail, Send, CheckCircle, XCircle, Loader2, Inbox,
     Search, ArrowRight, Tag, Paperclip, FileText, RefreshCw,
-    ArrowDownLeft, ArrowUpRight,
+    ArrowDownLeft, ArrowUpRight, ChevronDown, X,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
-import EmailCompose from '@/components/integrations/EmailCompose';
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 
@@ -49,61 +48,59 @@ interface WorkspaceEmail {
 }
 
 function EmailsContent() {
-    const { setShowEmailCompose, setSelectedCompany, syncEmails, refreshData } = useAppContext();
+    const { refreshData } = useAppContext();
     const { isConnected, isChecking, connect, disconnect } = useGoogleAuth();
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [syncResult, setSyncResult] = useState<{ processed: number; skipped: number } | null>(null);
-    const [syncError, setSyncError] = useState<string | null>(null);
 
-    // Workspace state
-    const [workspaceEmails, setWorkspaceEmails] = useState<WorkspaceEmail[]>([]);
-    const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
-    const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-    const [workspaceSearch, setWorkspaceSearch] = useState('');
-    const [workspaceFilter, setWorkspaceFilter] = useState<'all' | 'received' | 'sent' | 'relevant'>('all');
+    const [emails, setEmails] = useState<WorkspaceEmail[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filter, setFilter] = useState<'all' | 'received' | 'sent' | 'relevant'>('all');
     const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
     const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+    const [selectedEmail, setSelectedEmail] = useState<WorkspaceEmail | null>(null);
+    const [showCompose, setShowCompose] = useState(false);
+    const [composeTo, setComposeTo] = useState('');
+    const [composeSubject, setComposeSubject] = useState('');
+    const [composeBody, setComposeBody] = useState('');
+    const [sending, setSending] = useState(false);
+    const loaded = useRef(false);
 
-    const handleCompose = () => {
-        setSelectedCompany(null);
-        setShowEmailCompose(true);
-    };
-
-    const handleSync = async () => {
-        setIsSyncing(true);
-        setSyncResult(null);
-        setSyncError(null);
-        const result = await syncEmails();
-        if (result) {
-            setSyncResult({ processed: result.processed, skipped: result.skipped });
-        } else {
-            setSyncError('Failed to sync emails. Please check your Google connection.');
-        }
-        setIsSyncing(false);
-    };
-
-    const loadWorkspace = useCallback(async () => {
-        setIsLoadingWorkspace(true);
-        setWorkspaceError(null);
+    // Auto-fetch emails when connected
+    const fetchEmails = useCallback(async () => {
+        setLoading(true);
+        setError(null);
         try {
             const res = await fetch('/api/gmail/workspace');
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to fetch emails');
-            setWorkspaceEmails(data.emails || []);
+            setEmails(data.emails || []);
         } catch (err) {
-            setWorkspaceError((err as Error).message);
+            setError((err as Error).message);
         }
-        setIsLoadingWorkspace(false);
+        setLoading(false);
     }, []);
+
+    useEffect(() => {
+        if (isConnected && !isChecking && !loaded.current) {
+            loaded.current = true;
+            fetchEmails();
+        }
+    }, [isConnected, isChecking, fetchEmails]);
+
+    // Auto-refresh every 60 seconds
+    useEffect(() => {
+        if (!isConnected) return;
+        const interval = setInterval(fetchEmails, 60000);
+        return () => clearInterval(interval);
+    }, [isConnected, fetchEmails]);
 
     const handleSendToKanban = useCallback(async (email: WorkspaceEmail) => {
         setSendingIds(prev => new Set(prev).add(email.id));
         try {
             const res = await fetch('/api/gmail/send-to-kanban', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     gmailMessageId: email.id,
                     gmailThreadId: email.threadId,
@@ -121,537 +118,351 @@ function EmailsContent() {
                 }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to send to Kanban');
+            if (!res.ok) throw new Error(data.error || 'Failed');
             setSentIds(prev => new Set(prev).add(email.id));
             await refreshData();
         } catch (err) {
             alert((err as Error).message);
         }
-        setSendingIds(prev => {
-            const next = new Set(prev);
-            next.delete(email.id);
-            return next;
-        });
+        setSendingIds(prev => { const n = new Set(prev); n.delete(email.id); return n; });
     }, [refreshData]);
 
-    const filteredWorkspaceEmails = workspaceEmails.filter(email => {
-        if (workspaceFilter === 'received' && email.direction !== 'received') return false;
-        if (workspaceFilter === 'sent' && email.direction !== 'sent') return false;
-        if (workspaceFilter === 'relevant' && (!email.isRelevant || email.direction === 'sent')) return false;
-        if (workspaceSearch) {
-            const q = workspaceSearch.toLowerCase();
-            return (
-                email.subject.toLowerCase().includes(q) ||
-                email.senderName.toLowerCase().includes(q) ||
-                email.senderEmail.toLowerCase().includes(q) ||
-                email.snippet.toLowerCase().includes(q) ||
-                (email.recipientEmail || '').toLowerCase().includes(q)
-            );
+    const handleSendEmail = async () => {
+        if (!composeTo || !composeSubject || !composeBody) return;
+        setSending(true);
+        try {
+            const res = await fetch('/api/gmail/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ to: composeTo, subject: composeSubject, body: composeBody }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to send');
+            setShowCompose(false);
+            setComposeTo('');
+            setComposeSubject('');
+            setComposeBody('');
+            // Refresh to show new sent email
+            setTimeout(fetchEmails, 2000);
+        } catch (err) {
+            alert((err as Error).message);
+        }
+        setSending(false);
+    };
+
+    // Filters
+    const filtered = emails.filter(e => {
+        if (filter === 'received' && e.direction !== 'received') return false;
+        if (filter === 'sent' && e.direction !== 'sent') return false;
+        if (filter === 'relevant' && (!e.isRelevant || e.direction === 'sent')) return false;
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            return e.subject.toLowerCase().includes(q) ||
+                e.senderName.toLowerCase().includes(q) ||
+                e.senderEmail.toLowerCase().includes(q) ||
+                e.snippet.toLowerCase().includes(q);
         }
         return true;
     });
 
-    const receivedCount = workspaceEmails.filter(e => e.direction === 'received').length;
-    const sentCount = workspaceEmails.filter(e => e.direction === 'sent').length;
-    const relevantCount = workspaceEmails.filter(e => e.isRelevant && e.direction === 'received').length;
+    const receivedCount = emails.filter(e => e.direction === 'received').length;
+    const sentCount = emails.filter(e => e.direction === 'sent').length;
+    const relevantCount = emails.filter(e => e.isRelevant && e.direction === 'received').length;
+
+    // Not connected
+    if (!isConnected && !isChecking) {
+        return (
+            <>
+                <TopHeader title="Email Workspace" subtitle="Connect Google to view emails" />
+                <div className="page-content page-enter">
+                    <div className="empty-state" style={{ height: '60vh' }}>
+                        <div className="empty-state-icon"><Mail size={28} /></div>
+                        <div className="empty-state-title">Connect Your Google Account</div>
+                        <div className="empty-state-text" style={{ marginBottom: 16 }}>
+                            Connect your Google account to view, send, and manage emails directly.
+                        </div>
+                        <button className="btn btn-primary" onClick={connect}>
+                            <Mail size={14} /> Connect Google Account
+                        </button>
+                    </div>
+                </div>
+            </>
+        );
+    }
 
     return (
         <>
-            <TopHeader title="Email Workspace" subtitle="Analyze, filter, and ingest emails into the deal pipeline" />
-            <div className="page-content page-enter">
-                {/* Google Connection Status Card */}
+            <TopHeader title="Email Workspace" subtitle={`${emails.length} emails`} />
+            <div className="page-content page-enter" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', padding: 0 }}>
+                {/* Top Bar */}
                 <div style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 12,
-                    padding: 24,
-                    marginBottom: 24,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 24px', borderBottom: '1px solid var(--border)',
+                    background: 'var(--bg-secondary)', gap: 12, flexWrap: 'wrap',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '1 1 auto', minWidth: 0 }}>
-                            <div style={{
-                                width: 44,
-                                height: 44,
-                                borderRadius: 10,
-                                background: isConnected ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                            }}>
-                                {isChecking ? (
-                                    <Loader2 size={20} style={{ color: 'var(--text-tertiary)', animation: 'spin 1s linear infinite' }} />
-                                ) : isConnected ? (
-                                    <CheckCircle size={20} style={{ color: '#22c55e' }} />
-                                ) : (
-                                    <XCircle size={20} style={{ color: '#ef4444' }} />
-                                )}
-                            </div>
-                            <div>
-                                <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
-                                    Google Workspace
-                                </div>
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                    {isChecking
-                                        ? 'Checking connection status...'
-                                        : isConnected
-                                            ? 'Connected -- You can send emails and create calendar events.'
-                                            : 'Not connected -- Connect your Google account to send emails directly.'}
-                                </div>
-                            </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 auto' }}>
+                        {/* Search */}
+                        <div style={{ position: 'relative', flex: '1 1 300px', maxWidth: 400 }}>
+                            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                            <input
+                                className="search-input"
+                                placeholder="Search emails..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                style={{ paddingLeft: 32, width: '100%' }}
+                            />
                         </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            {isChecking ? null : isConnected ? (
-                                <>
-                                    <button className="btn btn-ghost" onClick={disconnect}>
-                                        Disconnect
-                                    </button>
-                                    <button className="btn btn-primary" onClick={handleCompose}>
-                                        <Send size={14} /> Compose
-                                    </button>
-                                </>
-                            ) : (
-                                <button className="btn btn-primary" onClick={connect}>
-                                    <Mail size={14} /> Connect Google Account
+                        {/* Tabs */}
+                        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-tertiary)', borderRadius: 6, padding: 2 }}>
+                            {([
+                                { key: 'all' as const, label: `All (${emails.length})` },
+                                { key: 'received' as const, label: `Inbox (${receivedCount})` },
+                                { key: 'sent' as const, label: `Sent (${sentCount})` },
+                                { key: 'relevant' as const, label: `Deals (${relevantCount})` },
+                            ]).map(f => (
+                                <button
+                                    key={f.key}
+                                    onClick={() => setFilter(f.key)}
+                                    style={{
+                                        padding: '6px 12px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                                        borderRadius: 4, fontFamily: 'var(--font-sans)',
+                                        background: filter === f.key ? 'var(--bg-secondary)' : 'transparent',
+                                        color: filter === f.key ? 'var(--primary)' : 'var(--text-secondary)',
+                                        boxShadow: filter === f.key ? 'var(--shadow-sm)' : 'none',
+                                    }}
+                                >
+                                    {f.label}
                                 </button>
-                            )}
+                            ))}
                         </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={fetchEmails} disabled={loading} title="Refresh">
+                            <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => setShowCompose(true)}>
+                            <Send size={13} /> Compose
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={disconnect} style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            Disconnect
+                        </button>
                     </div>
                 </div>
 
-                {/* Auto Sync Inbound Emails */}
-                {isConnected && (
+                {/* Email list + detail split */}
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                    {/* Email list */}
                     <div style={{
-                        background: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: 12,
-                        padding: 24,
-                        marginBottom: 24,
+                        width: selectedEmail ? '40%' : '100%',
+                        borderRight: selectedEmail ? '1px solid var(--border)' : 'none',
+                        overflowY: 'auto',
+                        transition: 'width 0.2s',
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                <div style={{
-                                    width: 44,
-                                    height: 44,
-                                    borderRadius: 10,
-                                    background: 'rgba(139,92,246,0.1)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}>
-                                    <Download size={20} style={{ color: '#8b5cf6' }} />
-                                </div>
-                                <div>
-                                    <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
-                                        Auto-Sync Inbound Emails
+                        {loading && emails.length === 0 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: 8, color: 'var(--text-tertiary)' }}>
+                                <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Loading emails...
+                            </div>
+                        ) : error ? (
+                            <div style={{ padding: 24, textAlign: 'center', color: 'var(--danger)' }}>{error}</div>
+                        ) : filtered.length === 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', color: 'var(--text-tertiary)' }}>
+                                <Inbox size={32} style={{ marginBottom: 8 }} />
+                                <div style={{ fontWeight: 600 }}>No emails</div>
+                            </div>
+                        ) : (
+                            filtered.map(email => (
+                                <div
+                                    key={email.id}
+                                    onClick={() => setSelectedEmail(email)}
+                                    style={{
+                                        padding: '12px 20px',
+                                        borderBottom: '1px solid var(--border-light)',
+                                        cursor: 'pointer',
+                                        background: selectedEmail?.id === email.id ? 'var(--primary-bg)' :
+                                            sentIds.has(email.id) ? 'rgba(34,197,94,0.04)' : 'transparent',
+                                        transition: 'background 0.15s',
+                                    }}
+                                    onMouseEnter={e => { if (selectedEmail?.id !== email.id) (e.currentTarget.style.background = 'var(--bg-tertiary)'); }}
+                                    onMouseLeave={e => { if (selectedEmail?.id !== email.id) (e.currentTarget.style.background = sentIds.has(email.id) ? 'rgba(34,197,94,0.04)' : 'transparent'); }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                                        <span style={{
+                                            width: 18, height: 18, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                            background: email.direction === 'sent' ? 'rgba(139,92,246,0.1)' : 'rgba(59,130,246,0.1)',
+                                        }}>
+                                            {email.direction === 'sent' ? <ArrowUpRight size={10} style={{ color: '#8b5cf6' }} /> : <ArrowDownLeft size={10} style={{ color: '#3b82f6' }} />}
+                                        </span>
+                                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {email.direction === 'sent' ? (email.recipientEmail || email.senderName) : email.senderName}
+                                        </span>
+                                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>
+                                            {email.receivedAt ? new Date(email.receivedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                                        </span>
                                     </div>
-                                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                        Pull emails to pipeline@dholakiaventures.com, filter by funding keywords, and auto-create draft companies.
+                                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+                                        {email.subject || '(no subject)'}
+                                    </div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {email.snippet}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                                        {email.isRelevant && email.direction === 'received' && (
+                                            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontWeight: 600 }}>
+                                                {email.relevanceLabel}
+                                            </span>
+                                        )}
+                                        {email.hasAttachments && (
+                                            <Paperclip size={11} style={{ color: 'var(--text-tertiary)' }} />
+                                        )}
+                                        {sentIds.has(email.id) && (
+                                            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontWeight: 600 }}>Added</span>
+                                        )}
                                     </div>
                                 </div>
-                            </div>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleSync}
-                                disabled={isSyncing}
-                                style={{ background: '#8b5cf6', borderColor: '#8b5cf6' }}
-                            >
-                                {isSyncing ? (
-                                    <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Syncing...</>
-                                ) : (
-                                    <><Download size={14} /> Sync Now</>
-                                )}
-                            </button>
-                        </div>
-                        {syncResult && (
-                            <div style={{
-                                marginTop: 12,
-                                padding: '8px 12px',
-                                borderRadius: 8,
-                                background: 'rgba(34,197,94,0.1)',
-                                fontSize: 13,
-                                color: '#16a34a',
-                            }}>
-                                {syncResult.processed > 0
-                                    ? `${syncResult.processed} new ${syncResult.processed === 1 ? 'company' : 'companies'} created (funding-relevant only), ${syncResult.skipped} skipped.`
-                                    : `No new funding-relevant emails. ${syncResult.skipped} skipped.`}
-                            </div>
-                        )}
-                        {syncError && (
-                            <div style={{
-                                marginTop: 12,
-                                padding: '8px 12px',
-                                borderRadius: 8,
-                                background: 'rgba(239,68,68,0.1)',
-                                fontSize: 13,
-                                color: '#dc2626',
-                            }}>
-                                {syncError}
-                            </div>
+                            ))
                         )}
                     </div>
-                )}
 
-                {/* Email Workspace */}
-                {isConnected && (
-                    <div style={{
-                        background: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: 12,
-                        padding: 24,
-                        marginBottom: 24,
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                            <div>
-                                <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
-                                    Email Workspace
-                                </div>
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                    Analyze your inbox and manually send relevant emails to the Kanban board.
-                                </div>
-                            </div>
-                            <button
-                                className="btn btn-primary"
-                                onClick={loadWorkspace}
-                                disabled={isLoadingWorkspace}
-                            >
-                                {isLoadingWorkspace ? (
-                                    <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Loading...</>
-                                ) : workspaceEmails.length > 0 ? (
-                                    <><RefreshCw size={14} /> Refresh</>
-                                ) : (
-                                    <><Search size={14} /> Analyze Inbox</>
-                                )}
-                            </button>
-                        </div>
-
-                        {workspaceError && (
-                            <div style={{
-                                padding: '8px 12px',
-                                borderRadius: 8,
-                                background: 'rgba(239,68,68,0.1)',
-                                fontSize: 13,
-                                color: '#dc2626',
-                                marginBottom: 12,
-                            }}>
-                                {workspaceError}
-                            </div>
-                        )}
-
-                        {workspaceEmails.length > 0 && (
-                            <>
-                                {/* Stats bar */}
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 12,
-                                    marginBottom: 12,
-                                    padding: '8px 12px',
-                                    background: 'var(--bg-primary)',
-                                    borderRadius: 8,
-                                    border: '1px solid var(--border-color)',
-                                    flexWrap: 'wrap',
-                                }}>
-                                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                                        {workspaceEmails.length} total emails
-                                    </span>
-                                    <span style={{ color: 'var(--border-color)' }}>|</span>
-                                    <span style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>
-                                        {receivedCount} received
-                                    </span>
-                                    <span style={{ color: 'var(--border-color)' }}>|</span>
-                                    <span style={{ fontSize: 13, color: '#8b5cf6', fontWeight: 600 }}>
-                                        {sentCount} sent
-                                    </span>
-                                    <span style={{ color: 'var(--border-color)' }}>|</span>
-                                    <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
-                                        {relevantCount} funding-relevant
-                                    </span>
-                                </div>
-
-                                {/* Filter & search */}
-                                <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                                    <div className="header-search" style={{ flex: '1 1 200px', minWidth: 140 }}>
-                                        <Search size={16} />
-                                        <input
-                                            type="text"
-                                            placeholder="Search emails..."
-                                            value={workspaceSearch}
-                                            onChange={e => setWorkspaceSearch(e.target.value)}
-                                        />
+                    {/* Email detail pane */}
+                    {selectedEmail && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                                <div style={{ flex: 1 }}>
+                                    <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+                                        {selectedEmail.subject || '(no subject)'}
+                                    </h2>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                                        <span style={{ fontWeight: 600 }}>
+                                            {selectedEmail.direction === 'sent' ? 'To: ' : 'From: '}
+                                        </span>
+                                        <span>{selectedEmail.direction === 'sent' ? (selectedEmail.recipientEmail || '') : selectedEmail.senderName}</span>
+                                        <span style={{ color: 'var(--text-tertiary)' }}>
+                                            &lt;{selectedEmail.direction === 'sent' ? (selectedEmail.recipientEmail || '') : selectedEmail.senderEmail}&gt;
+                                        </span>
                                     </div>
-                                    {([
-                                        { key: 'all', label: 'All' },
-                                        { key: 'received', label: 'Received' },
-                                        { key: 'sent', label: 'Sent' },
-                                        { key: 'relevant', label: 'Relevant' },
-                                    ] as const).map(f => (
-                                        <button
-                                            key={f.key}
-                                            className={`btn btn-sm ${workspaceFilter === f.key ? 'btn-primary' : 'btn-secondary'}`}
-                                            onClick={() => setWorkspaceFilter(f.key)}
-                                        >
-                                            {f.label}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Email list */}
-                                <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-                                    {filteredWorkspaceEmails.map(email => (
-                                        <div
-                                            key={email.id}
-                                            style={{
-                                                padding: '14px 16px',
-                                                borderBottom: '1px solid var(--border-color)',
-                                                background: sentIds.has(email.id) ? 'rgba(34,197,94,0.04)' : undefined,
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                                        {/* Direction indicator */}
-                                                        <span style={{
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            width: 22,
-                                                            height: 22,
-                                                            borderRadius: 6,
-                                                            background: email.direction === 'sent' ? 'rgba(139,92,246,0.1)' : 'rgba(59,130,246,0.1)',
-                                                            flexShrink: 0,
-                                                        }}>
-                                                            {email.direction === 'sent' ? (
-                                                                <ArrowUpRight size={12} style={{ color: '#8b5cf6' }} />
-                                                            ) : (
-                                                                <ArrowDownLeft size={12} style={{ color: '#3b82f6' }} />
-                                                            )}
-                                                        </span>
-                                                        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-                                                            {email.direction === 'sent' ? 'To: ' : ''}{email.direction === 'sent' ? (email.recipientEmail || email.senderName) : email.senderName}
-                                                        </span>
-                                                        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                                                            {email.direction === 'sent'
-                                                                ? (email.recipientEmail ? '' : `<${email.senderEmail}>`)
-                                                                : `<${email.senderEmail}>`}
-                                                        </span>
-                                                        {email.receivedAt && (
-                                                            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 'auto', flexShrink: 0 }}>
-                                                                {new Date(email.receivedAt).toLocaleDateString()} {new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 4 }}>
-                                                        {email.subject}
-                                                    </div>
-                                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {email.snippet}
-                                                    </div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                                                        {email.direction === 'sent' ? (
-                                                            <span
-                                                                className="badge"
-                                                                style={{
-                                                                    background: 'rgba(139,92,246,0.1)',
-                                                                    color: '#8b5cf6',
-                                                                    fontSize: 11,
-                                                                    fontWeight: 600,
-                                                                }}
-                                                            >
-                                                                <ArrowUpRight size={10} style={{ marginRight: 3 }} />
-                                                                Sent
-                                                            </span>
-                                                        ) : (
-                                                            <span
-                                                                className="badge"
-                                                                style={{
-                                                                    background: email.isRelevant ? 'rgba(34,197,94,0.1)' : 'rgba(156,163,175,0.1)',
-                                                                    color: email.isRelevant ? '#16a34a' : '#9ca3af',
-                                                                    fontSize: 11,
-                                                                    fontWeight: 600,
-                                                                }}
-                                                            >
-                                                                <Tag size={10} style={{ marginRight: 3 }} />
-                                                                {email.relevanceLabel}
-                                                            </span>
-                                                        )}
-                                                        {email.hasAttachments && (
-                                                            <span className="badge badge-neutral" style={{ fontSize: 11 }}>
-                                                                <Paperclip size={10} style={{ marginRight: 3 }} />
-                                                                {email.attachmentNames.length} attachment{email.attachmentNames.length !== 1 ? 's' : ''}
-                                                            </span>
-                                                        )}
-                                                        {email.hasPitchDeck && (
-                                                            <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 11 }}>
-                                                                <FileText size={10} style={{ marginRight: 3 }} />
-                                                                Pitch Deck
-                                                            </span>
-                                                        )}
-                                                        {email.derivedCompanyName && email.isRelevant && (
-                                                            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                                                                Company: <strong>{email.derivedCompanyName}</strong>
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {/* AI-Extracted Details */}
-                                                    {email.isRelevant && email.extracted && (email.extracted.companyName || email.extracted.summary) && (
-                                                        <div style={{
-                                                            marginTop: 10,
-                                                            padding: '10px 12px',
-                                                            background: 'var(--bg-primary)',
-                                                            border: '1px solid var(--border-color)',
-                                                            borderRadius: 8,
-                                                            fontSize: 12,
-                                                        }}>
-                                                            <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--primary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                                                AI-Extracted Details
-                                                            </div>
-                                                            {email.extracted.summary && (
-                                                                <div style={{ color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>
-                                                                    {email.extracted.summary}
-                                                                </div>
-                                                            )}
-                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
-                                                                {email.extracted.companyName && (
-                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
-                                                                        Company: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.companyName}</strong>
-                                                                    </span>
-                                                                )}
-                                                                {email.extracted.founderName && (
-                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
-                                                                        Founder: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.founderName}</strong>
-                                                                    </span>
-                                                                )}
-                                                                {email.extracted.companyRound && (
-                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
-                                                                        Round: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.companyRound}</strong>
-                                                                    </span>
-                                                                )}
-                                                                {email.extracted.industry && (
-                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
-                                                                        Industry: <strong style={{ color: 'var(--text-primary)' }}>{email.extracted.industry}</strong>
-                                                                    </span>
-                                                                )}
-                                                                {email.extracted.totalFundRaise !== null && (
-                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
-                                                                        Raising: <strong style={{ color: 'var(--text-primary)' }}>{'\u20B9'}{email.extracted.totalFundRaise}Cr</strong>
-                                                                    </span>
-                                                                )}
-                                                                {email.extracted.valuation !== null && (
-                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
-                                                                        Valuation: <strong style={{ color: 'var(--text-primary)' }}>{'\u20B9'}{email.extracted.valuation}Cr</strong>
-                                                                    </span>
-                                                                )}
-                                                                {email.extracted.priorityLevel && (
-                                                                    <span style={{ color: 'var(--text-tertiary)' }}>
-                                                                        Priority: <strong style={{
-                                                                            color: email.extracted.priorityLevel === 'High' ? '#ef4444' :
-                                                                                   email.extracted.priorityLevel === 'Medium' ? '#f59e0b' : 'var(--text-primary)'
-                                                                        }}>{email.extracted.priorityLevel}</strong>
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div style={{ flexShrink: 0 }}>
-                                                    {email.direction === 'sent' ? (
-                                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#8b5cf6', fontWeight: 500 }}>
-                                                            <Send size={12} /> Outbound
-                                                        </span>
-                                                    ) : sentIds.has(email.id) ? (
-                                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>
-                                                            <CheckCircle size={14} /> Added
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            className="btn btn-sm btn-primary"
-                                                            onClick={() => handleSendToKanban(email)}
-                                                            disabled={sendingIds.has(email.id)}
-                                                            style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
-                                                        >
-                                                            {sendingIds.has(email.id) ? (
-                                                                <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Sending...</>
-                                                            ) : (
-                                                                <><ArrowRight size={12} /> Send to Kanban</>
-                                                            )}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {filteredWorkspaceEmails.length === 0 && (
-                                        <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-                                            No emails match your filter.
+                                    {selectedEmail.receivedAt && (
+                                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                                            {new Date(selectedEmail.receivedAt).toLocaleString()}
                                         </div>
                                     )}
                                 </div>
-                            </>
-                        )}
+                                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedEmail(null)}><X size={16} /></button>
+                            </div>
 
-                        {workspaceEmails.length === 0 && !isLoadingWorkspace && !workspaceError && (
-                            <div className="empty-state" style={{ height: '20vh' }}>
-                                <div className="empty-state-icon"><Inbox size={24} /></div>
-                                <div className="empty-state-title">No Emails Loaded</div>
-                                <div className="empty-state-text">
-                                    Click &quot;Analyze Inbox&quot; to scan your emails for funding-related opportunities.
+                            {/* Tags */}
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+                                {selectedEmail.isRelevant && (
+                                    <span className="badge" style={{ background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontSize: 11 }}>
+                                        <Tag size={10} style={{ marginRight: 3 }} /> {selectedEmail.relevanceLabel}
+                                    </span>
+                                )}
+                                {selectedEmail.hasAttachments && (
+                                    <span className="badge badge-neutral" style={{ fontSize: 11 }}>
+                                        <Paperclip size={10} style={{ marginRight: 3 }} /> {selectedEmail.attachmentNames.length} attachment{selectedEmail.attachmentNames.length !== 1 ? 's' : ''}
+                                    </span>
+                                )}
+                                {selectedEmail.hasPitchDeck && (
+                                    <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 11 }}>
+                                        <FileText size={10} style={{ marginRight: 3 }} /> Pitch Deck
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* AI Extracted */}
+                            {selectedEmail.isRelevant && selectedEmail.extracted && (selectedEmail.extracted.companyName || selectedEmail.extracted.summary) && (
+                                <div style={{
+                                    padding: 14, background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                                    borderRadius: 10, marginBottom: 16, fontSize: 12,
+                                }}>
+                                    <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--primary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                        AI-Extracted Details
+                                    </div>
+                                    {selectedEmail.extracted.summary && (
+                                        <div style={{ color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>{selectedEmail.extracted.summary}</div>
+                                    )}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+                                        {selectedEmail.extracted.companyName && <span style={{ color: 'var(--text-tertiary)' }}>Company: <strong style={{ color: 'var(--text-primary)' }}>{selectedEmail.extracted.companyName}</strong></span>}
+                                        {selectedEmail.extracted.founderName && <span style={{ color: 'var(--text-tertiary)' }}>Founder: <strong style={{ color: 'var(--text-primary)' }}>{selectedEmail.extracted.founderName}</strong></span>}
+                                        {selectedEmail.extracted.companyRound && <span style={{ color: 'var(--text-tertiary)' }}>Round: <strong style={{ color: 'var(--text-primary)' }}>{selectedEmail.extracted.companyRound}</strong></span>}
+                                        {selectedEmail.extracted.industry && <span style={{ color: 'var(--text-tertiary)' }}>Industry: <strong style={{ color: 'var(--text-primary)' }}>{selectedEmail.extracted.industry}</strong></span>}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Email body */}
+                            <div style={{
+                                padding: 20, background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                                borderRadius: 10, fontSize: 14, lineHeight: 1.7, color: 'var(--text-primary)',
+                                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                            }}>
+                                {selectedEmail.emailBody || selectedEmail.snippet || '(no content)'}
+                            </div>
+
+                            {/* Action buttons */}
+                            {selectedEmail.direction === 'received' && (
+                                <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+                                    {sentIds.has(selectedEmail.id) ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
+                                            <CheckCircle size={16} /> Added to Kanban
+                                        </span>
+                                    ) : (
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={() => handleSendToKanban(selectedEmail)}
+                                            disabled={sendingIds.has(selectedEmail.id)}
+                                        >
+                                            {sendingIds.has(selectedEmail.id) ? (
+                                                <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Sending...</>
+                                            ) : (
+                                                <><ArrowRight size={14} /> Send to Kanban</>
+                                            )}
+                                        </button>
+                                    )}
+                                    <button className="btn btn-ghost" onClick={() => {
+                                        setComposeTo(selectedEmail.senderEmail);
+                                        setComposeSubject(`Re: ${selectedEmail.subject}`);
+                                        setComposeBody('');
+                                        setShowCompose(true);
+                                    }}>
+                                        Reply
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Compose Modal */}
+                {showCompose && (
+                    <div className="modal-overlay" onClick={() => setShowCompose(false)}>
+                        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600, maxHeight: '80vh' }}>
+                            <div className="modal-header">
+                                <div className="modal-title">Compose Email</div>
+                                <button className="btn btn-ghost btn-sm" onClick={() => setShowCompose(false)}><X size={18} /></button>
+                            </div>
+                            <div className="modal-body">
+                                <div className="form-group">
+                                    <label className="form-label">To</label>
+                                    <input className="form-input" value={composeTo} onChange={e => setComposeTo(e.target.value)} placeholder="recipient@email.com" />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Subject</label>
+                                    <input className="form-input" value={composeSubject} onChange={e => setComposeSubject(e.target.value)} placeholder="Subject" />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Message</label>
+                                    <textarea className="form-input" rows={10} value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder="Write your email..." style={{ resize: 'vertical' }} />
                                 </div>
                             </div>
-                        )}
+                            <div className="modal-footer">
+                                <button className="btn btn-ghost" onClick={() => setShowCompose(false)}>Discard</button>
+                                <button className="btn btn-primary" onClick={handleSendEmail} disabled={sending || !composeTo || !composeSubject || !composeBody}>
+                                    {sending ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Sending...</> : <><Send size={14} /> Send</>}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
-
-                {/* Email Features Info */}
-                <div style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 12,
-                    padding: 24,
-                }}>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', marginBottom: 16 }}>
-                        Email Features
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-                        {[
-                            {
-                                icon: <Search size={18} style={{ color: 'var(--primary)' }} />,
-                                title: 'Smart Analysis',
-                                desc: 'AI keyword detection identifies funding-relevant emails automatically.',
-                            },
-                            {
-                                icon: <Tag size={18} style={{ color: '#16a34a' }} />,
-                                title: 'Auto Labeling',
-                                desc: 'Emails are classified as Startup Pitch, Funding Relevant, or Investor Opportunity.',
-                            },
-                            {
-                                icon: <ArrowRight size={18} style={{ color: '#8b5cf6' }} />,
-                                title: 'Manual Ingestion',
-                                desc: 'Send any email to the Kanban board with one click for deal tracking.',
-                            },
-                            {
-                                icon: <Clock size={18} style={{ color: 'var(--primary)' }} />,
-                                title: 'Activity Tracking',
-                                desc: 'All ingested emails are logged in the company timeline for visibility.',
-                            },
-                        ].map((feature, i) => (
-                            <div key={i} style={{
-                                background: 'var(--bg-primary)',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: 8,
-                                padding: 16,
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                                    {feature.icon}
-                                    <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{feature.title}</span>
-                                </div>
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                    {feature.desc}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
             </div>
         </>
     );
@@ -664,7 +475,6 @@ export default function EmailsPage() {
             <main className="main-content">
                 <EmailsContent />
             </main>
-            <EmailCompose />
         </div>
     );
 }
