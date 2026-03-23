@@ -384,7 +384,12 @@ export async function POST(request: NextRequest) {
                 if (ai.totalFundRaise !== null) companyInsert.total_fund_raise = ai.totalFundRaise;
                 if (ai.valuation !== null) companyInsert.valuation = ai.valuation;
                 if (industryId) companyInsert.industry_id = industryId;
-                if (ai.summary) companyInsert.quick_summary = ai.summary;
+                // Store email body so Analyze Deck can use the pitch content
+                if (bodyText) {
+                    companyInsert.quick_summary = `[Email Pitch]\n${bodyText.slice(0, 4000)}`;
+                } else if (ai.summary) {
+                    companyInsert.quick_summary = ai.summary;
+                }
 
                 const { data: newCompany, error: companyError } = await db
                     .from('companies')
