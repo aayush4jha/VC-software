@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 export async function POST(request: NextRequest) {
     if (!GEMINI_API_KEY) {
@@ -56,19 +54,36 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
 }`;
 
     try {
-        const res = await fetch(GEMINI_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
-            }),
-        });
+        // Try models in order of preference
+        const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+        let res: Response | null = null;
+        let lastError = '';
 
-        if (!res.ok) {
-            const err = await res.text();
-            console.error('Gemini API error:', err);
-            return NextResponse.json({ error: 'AI generation failed' }, { status: 502 });
+        for (const model of models) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+            try {
+                res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
+                    }),
+                });
+                if (res.ok) break;
+                lastError = await res.text();
+                console.error(`Gemini model ${model} failed:`, lastError);
+                res = null;
+            } catch (e) {
+                lastError = (e as Error).message;
+                console.error(`Gemini model ${model} error:`, lastError);
+                res = null;
+            }
+        }
+
+        if (!res || !res.ok) {
+            console.error('All Gemini models failed. Last error:', lastError);
+            return NextResponse.json({ error: `AI generation failed: ${lastError.slice(0, 200)}` }, { status: 502 });
         }
 
         const data = await res.json();
