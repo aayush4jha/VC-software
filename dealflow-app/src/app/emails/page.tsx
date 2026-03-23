@@ -63,7 +63,9 @@ function EmailsContent() {
     const [composeTo, setComposeTo] = useState('');
     const [composeSubject, setComposeSubject] = useState('');
     const [composeBody, setComposeBody] = useState('');
+    const [composeFiles, setComposeFiles] = useState<File[]>([]);
     const [sending, setSending] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const loaded = useRef(false);
 
     // Auto-fetch emails when connected
@@ -131,10 +133,19 @@ function EmailsContent() {
         if (!composeTo || !composeSubject || !composeBody) return;
         setSending(true);
         try {
+            // Convert files to base64
+            const attachments = await Promise.all(
+                composeFiles.map(async (file) => {
+                    const buffer = await file.arrayBuffer();
+                    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                    return { filename: file.name, mimeType: file.type || 'application/octet-stream', data: base64 };
+                })
+            );
+
             const res = await fetch('/api/gmail/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ to: composeTo, subject: composeSubject, body: composeBody }),
+                body: JSON.stringify({ to: composeTo, subject: composeSubject, body: composeBody, attachments }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to send');
@@ -142,12 +153,23 @@ function EmailsContent() {
             setComposeTo('');
             setComposeSubject('');
             setComposeBody('');
-            // Refresh to show new sent email
+            setComposeFiles([]);
             setTimeout(fetchEmails, 2000);
         } catch (err) {
             alert((err as Error).message);
         }
         setSending(false);
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setComposeFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const removeFile = (index: number) => {
+        setComposeFiles(prev => prev.filter((_, i) => i !== index));
     };
 
     // Filters
@@ -453,9 +475,45 @@ function EmailsContent() {
                                     <label className="form-label">Message</label>
                                     <textarea className="form-input" rows={10} value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder="Write your email..." style={{ resize: 'vertical' }} />
                                 </div>
+                                {/* Attachments */}
+                                <div className="form-group">
+                                    <label className="form-label">Attachments</label>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        multiple
+                                        onChange={handleFileSelect}
+                                        style={{ display: 'none' }}
+                                    />
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                    >
+                                        <Paperclip size={13} /> Attach Files
+                                    </button>
+                                    {composeFiles.length > 0 && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                                            {composeFiles.map((file, i) => (
+                                                <div key={i} style={{
+                                                    display: 'flex', alignItems: 'center', gap: 6,
+                                                    padding: '4px 10px', background: 'var(--bg-tertiary)',
+                                                    borderRadius: 6, fontSize: 12, border: '1px solid var(--border)',
+                                                }}>
+                                                    <Paperclip size={11} style={{ color: 'var(--text-tertiary)' }} />
+                                                    <span style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                                                    <span style={{ color: 'var(--text-tertiary)', fontSize: 10 }}>({(file.size / 1024).toFixed(0)}KB)</span>
+                                                    <button onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                                                        <X size={12} style={{ color: 'var(--danger)' }} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="modal-footer">
-                                <button className="btn btn-ghost" onClick={() => setShowCompose(false)}>Discard</button>
+                                <button className="btn btn-ghost" onClick={() => { setShowCompose(false); setComposeFiles([]); }}>Discard</button>
                                 <button className="btn btn-primary" onClick={handleSendEmail} disabled={sending || !composeTo || !composeSubject || !composeBody}>
                                     {sending ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Sending...</> : <><Send size={14} /> Send</>}
                                 </button>

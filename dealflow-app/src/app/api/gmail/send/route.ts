@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { to, subject, body, companyId } = await request.json();
+        const { to, subject, body, companyId, attachments } = await request.json();
 
         if (!to || !subject || !body) {
             return NextResponse.json(
@@ -36,19 +36,51 @@ export async function POST(request: NextRequest) {
             const profile = await gmail.users.getProfile({ userId: 'me' });
             senderEmail = profile.data.emailAddress || 'me';
         } catch {
-            // fallback to 'me' which lets Gmail use the authenticated account
+            // fallback to 'me'
         }
 
-        const messageParts = [
-            `From: ${senderEmail}`,
-            `To: ${to}`,
-            `Subject: ${subject}`,
-            'Content-Type: text/plain; charset="UTF-8"',
-            'MIME-Version: 1.0',
-            '',
-            body,
-        ];
-        const message = messageParts.join('\n');
+        let message: string;
+        const hasAttachments = attachments && Array.isArray(attachments) && attachments.length > 0;
+
+        if (hasAttachments) {
+            const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const parts: string[] = [
+                `From: ${senderEmail}`,
+                `To: ${to}`,
+                `Subject: ${subject}`,
+                'MIME-Version: 1.0',
+                `Content-Type: multipart/mixed; boundary="${boundary}"`,
+                '',
+                `--${boundary}`,
+                'Content-Type: text/plain; charset="UTF-8"',
+                '',
+                body,
+            ];
+
+            for (const att of attachments as { filename: string; mimeType: string; data: string }[]) {
+                parts.push(
+                    `--${boundary}`,
+                    `Content-Type: ${att.mimeType}; name="${att.filename}"`,
+                    `Content-Disposition: attachment; filename="${att.filename}"`,
+                    'Content-Transfer-Encoding: base64',
+                    '',
+                    att.data,
+                );
+            }
+
+            parts.push(`--${boundary}--`);
+            message = parts.join('\n');
+        } else {
+            message = [
+                `From: ${senderEmail}`,
+                `To: ${to}`,
+                `Subject: ${subject}`,
+                'Content-Type: text/plain; charset="UTF-8"',
+                'MIME-Version: 1.0',
+                '',
+                body,
+            ].join('\n');
+        }
 
         const encodedMessage = Buffer.from(message)
             .toString('base64')
