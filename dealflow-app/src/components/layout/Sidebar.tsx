@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    Home, LayoutGrid, Briefcase, Users, Mail, Sparkles, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield, BarChart3
+    Home, LayoutGrid, Briefcase, Users, Mail, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield, BarChart3
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { PagePermission } from '@/types/database';
@@ -16,7 +16,6 @@ const navItems: { label: string; href: string; icon: React.ElementType; permissi
     { label: 'Analytics', href: '/analytics', icon: BarChart3, permission: 'portfolio' },
     { label: 'Contacts', href: '/contacts', icon: Users, permission: 'contacts' },
     { label: 'Email Workspace', href: '/emails', icon: Mail, permission: 'emails' },
-    { label: 'Dealflow AI', href: '/ai', icon: Sparkles, permission: 'ai' },
 ];
 
 function hasPermission(userPermissions: PagePermission[] | undefined, required: PagePermission): boolean {
