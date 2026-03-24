@@ -26,6 +26,7 @@ export default function PortfolioCompanyDetail() {
         getIndustryById, getDealSourceNameById, getUserById,
         fetchFollowOns, addFollowOn, deleteFollowOn, updateCompany, deleteCompany,
         setEditingCompany, setShowCompanyForm, setCompanyFormPortfolioMode,
+        dealSourceNames, users,
     } = useAppContext();
 
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
@@ -92,7 +93,6 @@ export default function PortfolioCompanyDetail() {
     const saveField = async () => {
         if (!editField) return;
         const data: Record<string, unknown> = {};
-        // Map field names to DB column names
         const numericFields = ['initialInvestment', 'entryValuation', 'entryOwnership', 'currentOwnership', 'latestValuation', 'exitValue'];
         if (numericFields.includes(editField)) {
             data[editField] = editValue ? parseFloat(editValue) : null;
@@ -100,6 +100,8 @@ export default function PortfolioCompanyDetail() {
             data[editField] = editValue || null;
         }
         await updateCompany(c.id, data);
+        // Update selectedCompany so the modal reflects changes immediately
+        setSelectedCompany({ ...c, ...data } as Company);
         setEditField(null);
         setEditValue('');
     };
@@ -280,8 +282,20 @@ export default function PortfolioCompanyDetail() {
                                 {status === 'Exited' && (
                                     <EditableRow label="Exit Value" value={c.exitValue ? formatPortfolioCurrency(c.exitValue) : '--'} field="exitValue" type="number" rawValue={c.exitValue?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 )}
-                                <DetailRow label="Deal Sourcer" value={sourcer || '--'} />
-                                <DetailRow label="Analyst" value={analyst || '--'} />
+                                <EditableRow
+                                    label="Deal Sourcer" value={sourcer || '--'} field="dealSourceNameId"
+                                    rawValue={c.dealSourceNameId || ''} editField={editField} editValue={editValue}
+                                    onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit}
+                                    selectOptions={dealSourceNames.map(d => d.id)}
+                                    selectLabels={Object.fromEntries(dealSourceNames.map(d => [d.id, d.name]))}
+                                />
+                                <EditableRow
+                                    label="Analyst" value={analyst || '--'} field="analystId"
+                                    rawValue={c.analystId || ''} editField={editField} editValue={editValue}
+                                    onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit}
+                                    selectOptions={users.map(u => u.id)}
+                                    selectLabels={Object.fromEntries(users.map(u => [u.id, u.name]))}
+                                />
                             </div>
                         </div>
                     </div>
@@ -483,13 +497,14 @@ interface EditableRowProps {
     editValue: string;
     type?: string;
     selectOptions?: string[];
+    selectLabels?: Record<string, string>;
     onStart: (field: string, val: string) => void;
     onChange: (val: string) => void;
     onSave: () => void;
     onCancel: () => void;
 }
 
-function EditableRow({ label, value, field, rawValue, editField, editValue, type, selectOptions, onStart, onChange, onSave, onCancel }: EditableRowProps) {
+function EditableRow({ label, value, field, rawValue, editField, editValue, type, selectOptions, selectLabels, onStart, onChange, onSave, onCancel }: EditableRowProps) {
     const isEditing = editField === field;
     return (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8 }}>
@@ -501,9 +516,13 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
                             className="form-select"
                             value={editValue}
                             onChange={e => onChange(e.target.value)}
+                            autoFocus
                             style={{ fontSize: 12, padding: '3px 6px', height: 28 }}
                         >
-                            {selectOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                            <option value="">-- None --</option>
+                            {selectOptions.map(o => (
+                                <option key={o} value={o}>{selectLabels ? selectLabels[o] || o : o}</option>
+                            ))}
                         </select>
                     ) : (
                         <input
