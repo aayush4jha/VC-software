@@ -231,18 +231,20 @@ ${googleDriveLink ? `Data Room: ${googleDriveLink}` : ''}
 
 Generate a comprehensive, detailed, descriptive, and data-oriented investment analysis report.${hasAttachment ? ' Use ACTUAL data, numbers, and metrics extracted from the pitch deck — do NOT make up numbers when real data is available in the document.' : ' Be thorough and specific. Use actual numbers, percentages, and market data where possible. If specific data is not available, provide reasonable industry benchmarks and estimates.'}
 
+IMPORTANT: Every field below (except verdict and confidenceScore) MUST be an ARRAY of concise bullet-point strings. Each bullet should be one clear, specific point — not a paragraph. Aim for 4-8 bullets per section.
+
 Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON):
 {
-    "summary": "Detailed executive summary (4-6 sentences covering what the company does, market positioning, competitive advantage, and investment thesis)",
-    "problem": "Deep analysis of the problem being solved — market pain points, current alternatives, why existing solutions fail, size of the problem with data points",
-    "solution": "Detailed description of the solution, technology stack, product differentiation, unique value proposition, IP/moat analysis",
-    "market": "TAM/SAM/SOM analysis with specific numbers, market growth rate, key trends driving the market, competitive landscape overview, regulatory environment",
-    "businessModel": "Revenue model breakdown, unit economics (CAC, LTV, margins), pricing strategy, scalability analysis, path to profitability",
-    "traction": "Current metrics assessment — revenue run rate, growth rate, user/customer count, retention rates, key milestones achieved, runway analysis based on raise amount",
-    "team": "Founder background assessment, team completeness, domain expertise evaluation, advisory board, key hires needed",
-    "competitiveLandscape": "Direct and indirect competitors, market share distribution, competitive advantages and disadvantages, barriers to entry",
-    "financialProjection": "Expected trajectory over 3-5 years based on round stage, burn rate estimation, break-even timeline, exit potential and comparable exits in the space",
-    "investmentThesis": "Why this is or isn't a good investment for Dholakia Ventures — risk-reward analysis, expected MOIC, alignment with portfolio strategy",
+    "summary": ["Bullet 1: what the company does and its core value prop", "Bullet 2: market positioning", "Bullet 3: competitive advantage / moat", "Bullet 4: investment thesis in one line"],
+    "problem": ["Pain point 1 with data", "Pain point 2", "Why existing solutions fail", "Size of the problem with numbers"],
+    "solution": ["Core product description", "Key technology / tech stack", "Unique differentiator", "IP / defensibility moat"],
+    "market": ["TAM with specific number", "SAM with specific number", "SOM with specific number", "Market growth rate (CAGR)", "Key trends driving growth", "Regulatory considerations"],
+    "businessModel": ["Revenue model (SaaS/transactional/etc.)", "Pricing strategy", "Unit economics — CAC", "Unit economics — LTV", "Gross margins", "Path to profitability"],
+    "traction": ["Revenue run rate or GMV", "Growth rate (MoM/YoY)", "User/customer count", "Retention / churn metrics", "Key milestones achieved", "Runway analysis"],
+    "team": ["Founder 1 background", "Founder 2 background (if applicable)", "Team size and key hires", "Domain expertise assessment", "Advisory board / notable backers", "Key gaps to fill"],
+    "competitiveLandscape": ["Competitor 1 and positioning", "Competitor 2 and positioning", "Key competitive advantage", "Barriers to entry", "Market share context"],
+    "financialProjection": ["Year 1 revenue projection", "Year 3 revenue projection", "Burn rate estimate", "Break-even timeline", "Exit potential and comparable exits"],
+    "investmentThesis": ["Core reason to invest / pass", "Risk-reward assessment", "Expected MOIC range", "Portfolio strategy alignment"],
     "strengths": ["Strength 1 with specific reasoning", "Strength 2", "Strength 3", "Strength 4", "Strength 5"],
     "risks": ["Risk 1 with mitigation suggestion", "Risk 2", "Risk 3", "Risk 4"],
     "redFlags": ["Red flag 1 that needs attention", "Red flag 2"],

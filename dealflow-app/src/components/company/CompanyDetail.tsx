@@ -773,48 +773,48 @@ export default function CompanyDetail() {
                                         <div className="ai-card-body">
                                             <div className="ai-section">
                                                 <div className="ai-section-title">Executive Summary</div>
-                                                <p>{c.deckAnalysis.summary}</p>
+                                                {Array.isArray(c.deckAnalysis.summary) ? <ul className="ai-list">{c.deckAnalysis.summary.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.summary}</p>}
                                             </div>
                                             <div className="ai-section">
                                                 <div className="ai-section-title">Problem Analysis</div>
-                                                <p>{c.deckAnalysis.problem}</p>
+                                                {Array.isArray(c.deckAnalysis.problem) ? <ul className="ai-list">{c.deckAnalysis.problem.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.problem}</p>}
                                             </div>
                                             <div className="ai-section">
                                                 <div className="ai-section-title">Solution & Product</div>
-                                                <p>{c.deckAnalysis.solution}</p>
+                                                {Array.isArray(c.deckAnalysis.solution) ? <ul className="ai-list">{c.deckAnalysis.solution.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.solution}</p>}
                                             </div>
                                             <div className="ai-section">
                                                 <div className="ai-section-title">Market Opportunity (TAM/SAM/SOM)</div>
-                                                <p>{c.deckAnalysis.market}</p>
+                                                {Array.isArray(c.deckAnalysis.market) ? <ul className="ai-list">{c.deckAnalysis.market.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.market}</p>}
                                             </div>
                                             <div className="ai-section">
                                                 <div className="ai-section-title">Business Model & Unit Economics</div>
-                                                <p>{c.deckAnalysis.businessModel}</p>
+                                                {Array.isArray(c.deckAnalysis.businessModel) ? <ul className="ai-list">{c.deckAnalysis.businessModel.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.businessModel}</p>}
                                             </div>
                                             <div className="ai-section">
                                                 <div className="ai-section-title">Traction & Metrics</div>
-                                                <p>{c.deckAnalysis.traction}</p>
+                                                {Array.isArray(c.deckAnalysis.traction) ? <ul className="ai-list">{c.deckAnalysis.traction.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.traction}</p>}
                                             </div>
                                             <div className="ai-section">
                                                 <div className="ai-section-title">Team Assessment</div>
-                                                <p>{c.deckAnalysis.team}</p>
+                                                {Array.isArray(c.deckAnalysis.team) ? <ul className="ai-list">{c.deckAnalysis.team.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.team}</p>}
                                             </div>
-                                            {c.deckAnalysis.competitiveLandscape && (
+                                            {c.deckAnalysis.competitiveLandscape && (Array.isArray(c.deckAnalysis.competitiveLandscape) ? c.deckAnalysis.competitiveLandscape.length > 0 : true) && (
                                                 <div className="ai-section">
                                                     <div className="ai-section-title">Competitive Landscape</div>
-                                                    <p>{c.deckAnalysis.competitiveLandscape}</p>
+                                                    {Array.isArray(c.deckAnalysis.competitiveLandscape) ? <ul className="ai-list">{c.deckAnalysis.competitiveLandscape.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.competitiveLandscape}</p>}
                                                 </div>
                                             )}
-                                            {c.deckAnalysis.financialProjection && (
+                                            {c.deckAnalysis.financialProjection && (Array.isArray(c.deckAnalysis.financialProjection) ? c.deckAnalysis.financialProjection.length > 0 : true) && (
                                                 <div className="ai-section">
                                                     <div className="ai-section-title">Financial Projections</div>
-                                                    <p>{c.deckAnalysis.financialProjection}</p>
+                                                    {Array.isArray(c.deckAnalysis.financialProjection) ? <ul className="ai-list">{c.deckAnalysis.financialProjection.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.financialProjection}</p>}
                                                 </div>
                                             )}
-                                            {c.deckAnalysis.investmentThesis && (
+                                            {c.deckAnalysis.investmentThesis && (Array.isArray(c.deckAnalysis.investmentThesis) ? c.deckAnalysis.investmentThesis.length > 0 : true) && (
                                                 <div className="ai-section">
                                                     <div className="ai-section-title">Investment Thesis</div>
-                                                    <p>{c.deckAnalysis.investmentThesis}</p>
+                                                    {Array.isArray(c.deckAnalysis.investmentThesis) ? <ul className="ai-list">{c.deckAnalysis.investmentThesis.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul> : <p>{c.deckAnalysis.investmentThesis}</p>}
                                                 </div>
                                             )}
                                             <div className="ai-section">
