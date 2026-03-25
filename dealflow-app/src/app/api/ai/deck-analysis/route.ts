@@ -30,17 +30,19 @@ async function callGeminiMultimodal(apiKey: string, parts: GeminiPart[]): Promis
                     body,
                 });
 
+                const data = await res.json().catch(() => ({ error: { code: res.status } }));
+
                 if (res.ok) {
-                    const data = await res.json();
                     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
                     if (text) return text;
+                    // No text in response — try next model
+                    break;
                 }
 
-                const errBody = await res.json().catch(() => ({ error: { code: res.status } }));
-                const code = errBody?.error?.code;
+                const code = data?.error?.code;
 
                 if (code === 429) {
-                    const retryDelay = errBody?.error?.details?.find(
+                    const retryDelay = data?.error?.details?.find(
                         (d: { retryDelay?: string }) => d.retryDelay
                     )?.retryDelay;
                     const waitMs = retryDelay ? parseInt(retryDelay) * 1000 : 20000;
@@ -51,7 +53,7 @@ async function callGeminiMultimodal(apiKey: string, parts: GeminiPart[]): Promis
 
                 if (code === 404) break;
 
-                console.error(`Gemini ${model} error (${code}):`, JSON.stringify(errBody.error?.message || '').slice(0, 100));
+                console.error(`Gemini ${model} error (${code}):`, JSON.stringify(data.error?.message || '').slice(0, 100));
                 break;
             } catch (e) {
                 console.error(`Gemini ${model} fetch error:`, (e as Error).message);
@@ -264,9 +266,24 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
 
         let analysis;
         try {
-            const jsonStr = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            // Try multiple strategies to extract JSON from the response
+            let jsonStr = rawText.trim();
+
+            // Strategy 1: Strip markdown code blocks
+            jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+
+            // Strategy 2: If it still doesn't start with {, find the first { and last }
+            if (!jsonStr.startsWith('{')) {
+                const firstBrace = jsonStr.indexOf('{');
+                const lastBrace = jsonStr.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace > firstBrace) {
+                    jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+                }
+            }
+
             analysis = JSON.parse(jsonStr);
-        } catch {
+        } catch (parseErr) {
+            console.error('[deck-analysis] JSON parse failed:', (parseErr as Error).message, 'Raw text (first 500 chars):', rawText.substring(0, 500));
             analysis = {
                 summary: rawText.substring(0, 2000),
                 problem: '', solution: '', market: '', businessModel: '', traction: '', team: '',
