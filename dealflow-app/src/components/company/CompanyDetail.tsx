@@ -27,6 +27,7 @@ export default function CompanyDetail() {
         setTerminalStatus, resolveTerminalStatus,
         generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
         approveCompany,
+        rejectionRecords, rejectionReasonCategories,
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('overview');
@@ -72,6 +73,7 @@ export default function CompanyDetail() {
         { id: 'ai', label: 'AI Analysis' },
         { id: 'calls', label: 'Calls' },
         { id: 'activity', label: 'Activity' },
+        ...(c.terminalStatus === 'Rejected' ? [{ id: 'rejection', label: 'Rejection Reasons' }] : []),
     ];
 
     const startEdit = (field: string, currentValue: string) => {
@@ -946,6 +948,110 @@ export default function CompanyDetail() {
                             </div>
                         </div>
                     )}
+
+                    {activeTab === 'rejection' && c.terminalStatus === 'Rejected' && (() => {
+                        const record = rejectionRecords.find(r => r.companyId === c.id);
+                        const rejectedAtStage = record ? getStageById(record.rejectionStageId) : null;
+
+                        // Group reasons by category
+                        const reasonsByCategory: { categoryName: string; subReasons: string[] }[] = [];
+                        if (record?.reasons) {
+                            for (const r of record.reasons) {
+                                const cat = rejectionReasonCategories.find(rc => rc.id === r.categoryId);
+                                if (cat) {
+                                    const subNames = r.subReasonIds
+                                        .map(sid => cat.subReasons.find(sr => sr.id === sid)?.name)
+                                        .filter(Boolean) as string[];
+                                    if (subNames.length > 0) {
+                                        reasonsByCategory.push({ categoryName: cat.name, subReasons: subNames });
+                                    }
+                                }
+                            }
+                        }
+
+                        return (
+                            <div>
+                                {/* Rejection metadata */}
+                                <div style={{
+                                    display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap',
+                                }}>
+                                    {rejectedAtStage && (
+                                        <div style={{
+                                            padding: '8px 14px', background: 'rgba(239,68,68,0.06)',
+                                            border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8,
+                                            fontSize: 12,
+                                        }}>
+                                            <span style={{ color: 'var(--text-tertiary)' }}>Rejected at: </span>
+                                            <span style={{ fontWeight: 600, color: '#ef4444' }}>{rejectedAtStage.name}</span>
+                                        </div>
+                                    )}
+                                    {record && (
+                                        <div style={{
+                                            padding: '8px 14px', background: 'var(--bg-tertiary)',
+                                            border: '1px solid var(--border)', borderRadius: 8,
+                                            fontSize: 12,
+                                        }}>
+                                            <span style={{ color: 'var(--text-tertiary)' }}>Communication: </span>
+                                            <span style={{ fontWeight: 600 }}>{record.communicationMethod}</span>
+                                        </div>
+                                    )}
+                                    {record && (
+                                        <div style={{
+                                            padding: '8px 14px', background: 'var(--bg-tertiary)',
+                                            border: '1px solid var(--border)', borderRadius: 8,
+                                            fontSize: 12,
+                                        }}>
+                                            <span style={{ color: 'var(--text-tertiary)' }}>Date: </span>
+                                            <span style={{ fontWeight: 600 }}>{new Date(record.createdAt).toLocaleDateString('en-IN')}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Reasons by category */}
+                                {reasonsByCategory.length > 0 ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                        {reasonsByCategory.map((group, i) => (
+                                            <div key={i} style={{
+                                                padding: '14px 16px',
+                                                background: 'var(--bg-secondary)',
+                                                border: '1px solid var(--border)',
+                                                borderRadius: 10,
+                                            }}>
+                                                <div style={{
+                                                    fontWeight: 700, fontSize: 13, marginBottom: 10,
+                                                    color: 'var(--text-primary)',
+                                                    paddingBottom: 8,
+                                                    borderBottom: '2px solid var(--primary)',
+                                                }}>
+                                                    {group.categoryName}
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                    {group.subReasons.map((reason, j) => (
+                                                        <div key={j} style={{
+                                                            display: 'flex', alignItems: 'center', gap: 8,
+                                                            padding: '6px 10px',
+                                                            background: 'rgba(239,68,68,0.06)',
+                                                            borderRadius: 6,
+                                                            fontSize: 13,
+                                                            color: 'var(--text-secondary)',
+                                                        }}>
+                                                            <XCircle size={14} style={{ color: '#ef4444', flexShrink: 0 }} />
+                                                            {reason}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="empty-state">
+                                        <div className="empty-state-title">No rejection reasons recorded</div>
+                                        <div className="empty-state-text">Rejection reasons were not captured for this company</div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {/* Sticky Action Bar */}

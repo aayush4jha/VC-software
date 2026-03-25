@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
         db.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
         db.from('profiles').select('*').eq('organization_id', ORGANIZATION_ID),
         db.from('saved_views').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
-        db.from('rejection_records').select('*').eq('organization_id', ORGANIZATION_ID).order('created_at', { ascending: false }),
+        db.from('rejection_records').select('*').order('created_at', { ascending: false }),
     ]);
 
     const errors: Record<string, unknown> = {};
