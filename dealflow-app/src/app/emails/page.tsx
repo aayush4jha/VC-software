@@ -389,6 +389,36 @@ function EmailsContent() {
                                     </span>
                                 )}
                             </div>
+                            {/* Clickable attachment list */}
+                            {selectedEmail.hasAttachments && selectedEmail.attachmentNames.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                                    {selectedEmail.attachmentNames.map((name, i) => (
+                                        <a
+                                            key={i}
+                                            href={`/api/gmail/attachment?messageId=${encodeURIComponent(selectedEmail.id)}&filename=${encodeURIComponent(name)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                                display: 'inline-flex', alignItems: 'center', gap: 8,
+                                                padding: '8px 12px',
+                                                background: 'var(--bg-tertiary)',
+                                                border: '1px solid var(--border)',
+                                                borderRadius: 8,
+                                                fontSize: 12, fontWeight: 500,
+                                                color: 'var(--primary)',
+                                                textDecoration: 'none',
+                                                cursor: 'pointer',
+                                                transition: 'background 0.15s, border-color 0.15s',
+                                            }}
+                                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-tertiary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                                        >
+                                            <FileText size={14} />
+                                            {name}
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* AI Extracted */}
                             {selectedEmail.isRelevant && selectedEmail.extracted && (selectedEmail.extracted.companyName || selectedEmail.extracted.summary) && (
