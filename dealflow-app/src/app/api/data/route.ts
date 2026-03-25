@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         { data: notifications, error: e7 },
         { data: profiles, error: e8 },
         { data: savedViews, error: e9 },
+        { data: rejectionRecords, error: e10 },
     ] = await Promise.all([
         db.from('companies').select('*').eq('organization_id', ORGANIZATION_ID).order('created_at', { ascending: false }),
         db.from('pipeline_stages').select('*').eq('organization_id', ORGANIZATION_ID).order('order'),
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
         db.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
         db.from('profiles').select('*').eq('organization_id', ORGANIZATION_ID),
         db.from('saved_views').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        db.from('rejection_records').select('*').eq('organization_id', ORGANIZATION_ID).order('created_at', { ascending: false }),
     ]);
 
     const errors: Record<string, unknown> = {};
@@ -66,6 +68,7 @@ export async function GET(request: NextRequest) {
     if (e7) errors.notifications = e7.message;
     if (e8) errors.profiles = e8.message;
     if (e9) errors.savedViews = e9.message;
+    if (e10) errors.rejectionRecords = e10.message;
 
     if (Object.keys(errors).length > 0) {
         console.error('[/api/data] errors:', errors);
@@ -81,5 +84,6 @@ export async function GET(request: NextRequest) {
         notifications: notifications || [],
         profiles: profiles || [],
         savedViews: savedViews || [],
+        rejectionRecords: rejectionRecords || [],
     });
 }

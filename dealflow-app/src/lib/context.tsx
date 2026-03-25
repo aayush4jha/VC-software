@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { createClient } from '@/lib/supabase/client';
 import type {
     User, Company, PipelineStage, Industry, DealSourceName,
-    RejectionReasonCategory, RejectionSubReason, Notification,
+    RejectionReasonCategory, RejectionSubReason, RejectionRecord, Notification,
     Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
     PagePermission, FollowOnRound,
 } from '@/types/database';
@@ -169,6 +169,7 @@ interface AppContextType {
     industries: Industry[];
     dealSourceNames: DealSourceName[];
     rejectionReasonCategories: RejectionReasonCategory[];
+    rejectionRecords: RejectionRecord[];
     notifications: Notification[];
     savedViews: SavedView[];
 
@@ -290,6 +291,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [industries, setIndustries] = useState<Industry[]>([]);
     const [dealSourceNames, setDealSourceNames] = useState<DealSourceName[]>([]);
     const [rejectionReasonCategories, setRejectionReasonCategories] = useState<RejectionReasonCategory[]>([]);
+    const [rejectionRecords, setRejectionRecords] = useState<RejectionRecord[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [savedViews, setSavedViews] = useState<SavedView[]>([]);
 
@@ -365,6 +367,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     })),
             }));
             setRejectionReasonCategories(cats);
+
+            // Rejection records
+            setRejectionRecords((json.rejectionRecords || []).map((r: any): RejectionRecord => ({
+                id: r.id,
+                companyId: r.company_id,
+                reasons: r.reasons || [],
+                rejectionStageId: r.rejection_stage_id,
+                communicationMethod: r.communication_method,
+                rejectionEmailRecipient: r.rejection_email_recipient || '',
+                rejectionEmailDraft: r.rejection_email_draft || '',
+                rejectionEmailSent: r.rejection_email_sent || false,
+                createdAt: r.created_at,
+            })));
         } catch (err) {
             console.error('[fetchAllData] error:', err);
         }
@@ -1223,7 +1238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // ─── Context Value ──────────────────────────────
     const value = useMemo<AppContextType>(() => ({
         user, isLoading, signOut,
-        users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, notifications,
+        users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, rejectionRecords, notifications,
         savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
@@ -1254,7 +1269,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         activeFilters, setActiveFilters,
     }), [
         user, isLoading, signOut,
-        users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, notifications,
+        users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, rejectionRecords, notifications,
         savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,

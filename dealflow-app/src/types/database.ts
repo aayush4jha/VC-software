@@ -104,6 +104,18 @@ export interface RejectionSubReason {
   categoryId: string;
 }
 
+export interface RejectionRecord {
+  id: string;
+  companyId: string;
+  reasons: { categoryId: string; subReasonIds: string[] }[];
+  rejectionStageId: string;
+  communicationMethod: string;
+  rejectionEmailRecipient: string;
+  rejectionEmailDraft: string;
+  rejectionEmailSent: boolean;
+  createdAt: string;
+}
+
 export interface Company {
   id: string;
   companyName: string;
