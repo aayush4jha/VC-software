@@ -217,18 +217,6 @@ export interface CallTranscript {
   redFlags: string[];
 }
 
-export interface RejectionRecord {
-  id: string;
-  companyId: string;
-  reasons: { categoryId: string; subReasonIds: string[] }[];
-  rejectionStageId: string;
-  communicationMethod: CommunicationMethod;
-  rejectionEmailRecipient: string;
-  rejectionEmailDraft: string;
-  rejectionEmailSent: boolean;
-  createdAt: string;
-}
-
 export interface Comment {
   id: string;
   companyId: string;

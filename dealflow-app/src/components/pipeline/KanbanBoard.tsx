@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Pencil, Video, Mail, Trash2, Briefcase } from 'lucide-react';
+import { Pencil, Video, Mail, Trash2, Briefcase, XCircle } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
-import { Company, PipelineStage } from '@/types/database';
+import { Company, PipelineStage, RejectionRecord } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 function CompanyKanbanCard({ company, index }: { company: Company; index: number }) {
@@ -231,8 +231,106 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
     );
 }
 
+function RejectedCompanyCard({ company, rejectionRecord }: { company: Company; rejectionRecord?: RejectionRecord }) {
+    const { setSelectedCompany, getUserById, getIndustryById, rejectionReasonCategories } = useAppContext();
+    const analyst = company.analystId ? getUserById(company.analystId) : null;
+    const industry = getIndustryById(company.industryId);
+    const days = getDaysInPipeline(company.createdAt);
+
+    // Resolve rejection reason names from category/sub-reason IDs
+    const reasonNames: string[] = [];
+    if (rejectionRecord?.reasons) {
+        for (const r of rejectionRecord.reasons) {
+            const cat = rejectionReasonCategories.find(c => c.id === r.categoryId);
+            if (cat) {
+                const subNames = r.subReasonIds
+                    .map(sid => cat.subReasons.find(sr => sr.id === sid)?.name)
+                    .filter(Boolean) as string[];
+                if (subNames.length > 0) {
+                    reasonNames.push(...subNames);
+                } else {
+                    reasonNames.push(cat.name);
+                }
+            }
+        }
+    }
+
+    return (
+        <div
+            className="kanban-card"
+            onClick={() => setSelectedCompany(company)}
+            style={{ borderLeft: '3px solid #ef4444' }}
+        >
+            <div className="kanban-card-header">
+                <span className="kanban-card-name">{company.companyName}</span>
+                <span className={`priority-dot ${company.priorityLevel.toLowerCase()}`} title={company.priorityLevel} />
+            </div>
+            <div className="kanban-card-founder">{company.founderName}</div>
+            <div className="kanban-card-tags">
+                {industry && <span className="badge badge-primary">{industry.name}</span>}
+                <span className="badge badge-neutral">{company.companyRound}</span>
+            </div>
+            {reasonNames.length > 0 && (
+                <div style={{
+                    marginTop: 6,
+                    padding: '6px 8px',
+                    background: 'rgba(239,68,68,0.06)',
+                    border: '1px solid rgba(239,68,68,0.15)',
+                    borderRadius: 6,
+                    fontSize: 11,
+                }}>
+                    <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: 3, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                        Rejection Reasons
+                    </div>
+                    {reasonNames.map((name, i) => (
+                        <div key={i} style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                            • {name}
+                        </div>
+                    ))}
+                </div>
+            )}
+            <div className="kanban-card-footer">
+                <div className="kanban-card-meta">
+                    {analyst ? (
+                        <div className="kanban-card-avatar" title={analyst.name}>
+                            {analyst.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                    ) : (
+                        <span className="badge badge-warning" style={{ fontSize: '10px', padding: '2px 6px' }}>Unassigned</span>
+                    )}
+                    <span className="kanban-card-days">{days}d</span>
+                </div>
+                {company.totalFundRaise && (
+                    <span className="kanban-card-amount">{formatCurrency(company.totalFundRaise)}</span>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function KanbanBoard() {
-    const { searchQuery, activeFilters, companies, pipelineStages, getIndustryById, moveCompanyStage } = useAppContext();
+    const { searchQuery, activeFilters, companies, pipelineStages, getIndustryById, moveCompanyStage, rejectionRecords } = useAppContext();
+
+    // Rejected companies for the Rejected column
+    const rejectedCompanies = companies.filter(c => {
+        if (c.terminalStatus !== 'Rejected') return false;
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            const industry = getIndustryById(c.industryId);
+            if (
+                !c.companyName.toLowerCase().includes(q) &&
+                !c.founderName.toLowerCase().includes(q) &&
+                !c.founderEmail.toLowerCase().includes(q) &&
+                !(industry?.name.toLowerCase().includes(q)) &&
+                !c.subIndustry.toLowerCase().includes(q) &&
+                !c.customTags.some(t => t.toLowerCase().includes(q))
+            ) return false;
+        }
+        return true;
+    });
+
+    // Build a map of companyId -> rejection record for quick lookup
+    const rejectionRecordMap = new Map(rejectionRecords.map(r => [r.companyId, r]));
 
     const filteredCompanies = companies.filter(c => {
         if (c.terminalStatus) return false;
@@ -319,6 +417,31 @@ export default function KanbanBoard() {
                         </div>
                     );
                 })}
+
+                {/* Rejected Companies Column */}
+                <div className="kanban-column">
+                    <div className="kanban-column-header">
+                        <div className="kanban-column-title">
+                            <span className="kanban-column-dot" style={{ background: '#ef4444' }} />
+                            Rejected
+                        </div>
+                        <span className="kanban-column-count">{rejectedCompanies.length}</span>
+                    </div>
+                    <div className="kanban-column-body" style={{ minHeight: 80 }}>
+                        {rejectedCompanies.map((company) => (
+                            <RejectedCompanyCard
+                                key={company.id}
+                                company={company}
+                                rejectionRecord={rejectionRecordMap.get(company.id)}
+                            />
+                        ))}
+                        {rejectedCompanies.length === 0 && (
+                            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
+                                No rejected companies
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </DragDropContext>
     );
