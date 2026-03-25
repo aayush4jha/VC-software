@@ -1,8 +1,159 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
+import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
+const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+function isPitchDeckAttachment(filename: string): boolean {
+    return PITCH_DECK_EXTENSIONS.some(ext => filename.toLowerCase().endsWith(ext));
+}
+
+function getMimeType(filename: string): string {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    if (lower.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+    if (lower.endsWith('.key')) return 'application/x-iwork-keynote-sfile';
+    if (lower.endsWith('.odp')) return 'application/vnd.oasis.opendocument.presentation';
+    return 'application/octet-stream';
+}
+
+interface GeminiPart {
+    text?: string;
+    inlineData?: { mimeType: string; data: string };
+}
+
+interface ExtractedData {
+    companyName: string | null;
+    founderName: string | null;
+    founderEmail: string | null;
+    companyRound: string | null;
+    totalFundRaise: number | null;
+    valuation: number | null;
+    industry: string | null;
+    subIndustry: string | null;
+    dealSourceType: string | null;
+    priorityLevel: string | null;
+    shareType: string | null;
+    summary: string | null;
+}
+
+async function analyzeWithGemini(
+    apiKey: string,
+    subject: string,
+    senderName: string,
+    senderEmail: string,
+    bodyText: string,
+    attachmentParts: GeminiPart[],
+): Promise<ExtractedData> {
+    const hasAttachment = attachmentParts.length > 0;
+    const truncatedBody = bodyText.slice(0, 4000);
+
+    const prompt = `You are analyzing an email received by Dholakia Ventures, a Venture Capital firm. Extract structured data from this email AND any attached pitch deck for their deal pipeline.
+
+${hasAttachment ? `IMPORTANT: A pitch deck document is attached. Extract ALL data from it — company name, founder details, fundraise amount, valuation, round, industry, traction metrics, and any other relevant information. The pitch deck is the PRIMARY source of truth. If the deck contains data that differs from the email body, prefer the deck.` : ''}
+
+EMAIL DETAILS:
+- Subject: ${subject}
+- From: ${senderName} <${senderEmail}>
+- Full Body:
+${truncatedBody}
+
+Extract the following fields. Return ONLY valid JSON with these exact keys. Use null for any field you cannot determine. Be extremely accurate — extract REAL data, do not guess or fabricate numbers:
+
+{
+  "companyName": "The startup/company name (NOT the sender's personal name, extract the actual company name from deck or email)",
+  "founderName": "The founder's full name",
+  "founderEmail": "The founder's email address (use sender email if it appears to be the founder's)",
+  "companyRound": "One of: Pre-Seed, Seed, Pre-Series A, Series A, Pre-Series B, Series B, Growth Stage, Pre-IPO, IPO",
+  "totalFundRaise": "Amount being raised in INR crores as a number (e.g. 1.2 for ₹1.2Cr). Convert from USD if needed (1 USD ≈ 83 INR). null if not mentioned anywhere",
+  "valuation": "Company valuation in INR crores as a number. Convert if needed. null if not mentioned anywhere",
+  "industry": "The primary industry/sector (e.g. FinTech, HealthTech, SaaS, Defense, EdTech, E-commerce, AI, CleanTech, etc.)",
+  "subIndustry": "More specific sub-industry if mentioned",
+  "dealSourceType": "One of: Founder Network, Investment Banker, Friends & Family, VC & PE",
+  "priorityLevel": "One of: Low, Medium, High - based on the quality/completeness of the pitch and data available",
+  "shareType": "One of: Primary, Secondary",
+  "summary": "A 2-3 sentence summary of the company, what it does, its traction, and why it's relevant for a VC firm"
+}
+
+IMPORTANT: Return ONLY the JSON object, no markdown formatting, no code blocks, no explanation.`;
+
+    const parts: GeminiPart[] = [{ text: prompt }, ...attachmentParts];
+
+    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+    const body = JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+    });
+
+    for (const model of models) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body,
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                    if (text) {
+                        const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                        const parsed = JSON.parse(cleaned);
+                        return {
+                            companyName: parsed.companyName || null,
+                            founderName: parsed.founderName || null,
+                            founderEmail: parsed.founderEmail || null,
+                            companyRound: parsed.companyRound || null,
+                            totalFundRaise: typeof parsed.totalFundRaise === 'number' ? parsed.totalFundRaise : null,
+                            valuation: typeof parsed.valuation === 'number' ? parsed.valuation : null,
+                            industry: parsed.industry || null,
+                            subIndustry: parsed.subIndustry || null,
+                            dealSourceType: parsed.dealSourceType || null,
+                            priorityLevel: parsed.priorityLevel || null,
+                            shareType: parsed.shareType || null,
+                            summary: parsed.summary || null,
+                        };
+                    }
+                }
+
+                const errBody = await res.json().catch(() => ({ error: { code: res.status } }));
+                const code = errBody?.error?.code;
+
+                if (code === 429) {
+                    const retryDelay = errBody?.error?.details?.find(
+                        (d: { retryDelay?: string }) => d.retryDelay
+                    )?.retryDelay;
+                    const waitMs = retryDelay ? parseInt(retryDelay) * 1000 : 20000;
+                    await new Promise(r => setTimeout(r, Math.min(waitMs, 30000)));
+                    continue;
+                }
+
+                if (code === 404) break;
+                console.error(`[send-to-kanban] Gemini ${model} error (${code})`);
+                break;
+            } catch (e) {
+                console.error(`[send-to-kanban] Gemini ${model} fetch error:`, (e as Error).message);
+                break;
+            }
+        }
+    }
+
+    // All models failed — return nulls
+    return {
+        companyName: null, founderName: null, founderEmail: null, companyRound: null,
+        totalFundRaise: null, valuation: null, industry: null,
+        subIndustry: null, dealSourceType: null, priorityLevel: null,
+        shareType: null, summary: null,
+    };
+}
 
 export async function POST(request: NextRequest) {
     const user = await getRouteUser(request);
@@ -22,7 +173,7 @@ export async function POST(request: NextRequest) {
         gmailMessageId, gmailThreadId, senderName, senderEmail,
         subject, receivedAt, hasAttachments, attachmentNames,
         hasPitchDeck, relevanceLabel, derivedCompanyName,
-        // AI-extracted fields
+        // AI-extracted fields from workspace (text-only analysis)
         extracted,
         emailBody,
     } = body;
@@ -47,29 +198,121 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No pipeline stages configured' }, { status: 400 });
         }
 
-        // Use AI-extracted company name for dedup (not just email)
-        const aiData = extracted || {};
-        const derivedName = aiData.companyName || derivedCompanyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim() || '';
+        // ─── Download attachments and re-analyze with Gemini multimodal ───
+        let ai: ExtractedData = extracted || {
+            companyName: null, founderName: null, founderEmail: null, companyRound: null,
+            totalFundRaise: null, valuation: null, industry: null,
+            subIndustry: null, dealSourceType: null, priorityLevel: null,
+            shareType: null, summary: null,
+        };
+
+        if (gmailMessageId && GEMINI_API_KEY) {
+            try {
+                const authResult = await getAuthenticatedClientForUser(userId);
+                if (authResult) {
+                    const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
+
+                    // Fetch full message to get attachment metadata
+                    const fullMsg = await gmail.users.messages.get({
+                        userId: 'me',
+                        id: gmailMessageId,
+                        format: 'full',
+                    });
+
+                    const msgParts = fullMsg.data.payload?.parts || [];
+                    const attachmentGeminiParts: GeminiPart[] = [];
+
+                    // Download all pitch deck attachments
+                    const allParts = [...msgParts];
+                    // Also check nested multipart structures
+                    for (const part of msgParts) {
+                        if (part.parts) {
+                            allParts.push(...(part.parts as typeof msgParts));
+                        }
+                    }
+
+                    for (const part of allParts) {
+                        const filename = part.filename || '';
+                        if (!filename || !isPitchDeckAttachment(filename)) continue;
+                        if (!part.body?.attachmentId) continue;
+
+                        try {
+                            const attachmentRes = await gmail.users.messages.attachments.get({
+                                userId: 'me',
+                                messageId: gmailMessageId,
+                                id: part.body.attachmentId,
+                            });
+
+                            const base64Data = attachmentRes.data.data;
+                            if (base64Data) {
+                                const standardBase64 = base64Data.replace(/-/g, '+').replace(/_/g, '/');
+                                const mimeType = getMimeType(filename);
+                                attachmentGeminiParts.push({
+                                    inlineData: { mimeType, data: standardBase64 },
+                                });
+                                console.log(`[send-to-kanban] Downloaded attachment: ${filename} (${(standardBase64.length * 0.75 / 1024 / 1024).toFixed(1)}MB)`);
+                            }
+                        } catch (attachErr) {
+                            console.error(`[send-to-kanban] Failed to download attachment ${filename}:`, (attachErr as Error).message);
+                        }
+                    }
+
+                    // Re-analyze with attachment content (multimodal)
+                    const freshAI = await analyzeWithGemini(
+                        GEMINI_API_KEY,
+                        subject,
+                        senderName,
+                        senderEmail,
+                        emailBody || '',
+                        attachmentGeminiParts,
+                    );
+
+                    // Merge: prefer fresh AI data over old text-only extraction
+                    ai = {
+                        companyName: freshAI.companyName || ai.companyName,
+                        founderName: freshAI.founderName || ai.founderName,
+                        founderEmail: freshAI.founderEmail || ai.founderEmail,
+                        companyRound: freshAI.companyRound || ai.companyRound,
+                        totalFundRaise: freshAI.totalFundRaise ?? ai.totalFundRaise,
+                        valuation: freshAI.valuation ?? ai.valuation,
+                        industry: freshAI.industry || ai.industry,
+                        subIndustry: freshAI.subIndustry || ai.subIndustry,
+                        dealSourceType: freshAI.dealSourceType || ai.dealSourceType,
+                        priorityLevel: freshAI.priorityLevel || ai.priorityLevel,
+                        shareType: freshAI.shareType || ai.shareType,
+                        summary: freshAI.summary || ai.summary,
+                    };
+                }
+            } catch (err) {
+                console.error('[send-to-kanban] Attachment analysis error:', (err as Error).message);
+                // Continue with text-only extraction
+            }
+        }
+
+        // Use AI-extracted company name for dedup
+        const companyName = ai.companyName || derivedCompanyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim() || 'Unknown';
+        const founderName = ai.founderName || senderName || senderEmail.split('@')[0];
+        const founderEmail = ai.founderEmail || senderEmail;
 
         // Check if a company with the same name AND same founder email already exists
-        if (derivedName) {
+        if (companyName) {
             const { data: existingCompany } = await db
                 .from('companies')
                 .select('id, company_name')
                 .eq('organization_id', ORGANIZATION_ID)
-                .eq('founder_email', senderEmail)
-                .ilike('company_name', derivedName)
+                .eq('founder_email', founderEmail)
+                .ilike('company_name', companyName)
                 .limit(1);
 
             if (existingCompany && existingCompany.length > 0) {
                 return NextResponse.json({
-                    error: `Company "${existingCompany[0].company_name}" already exists from ${senderEmail}`,
+                    error: `Company "${existingCompany[0].company_name}" already exists from ${founderEmail}`,
                     existingCompanyId: existingCompany[0].id,
                 }, { status: 409 });
             }
         }
 
-        // Check dedup
+        // Check dedup by gmail message ID
         if (gmailMessageId) {
             const { data: existingEmail } = await db
                 .from('ingested_emails')
@@ -83,16 +326,12 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Use AI-extracted data if available, with sensible fallbacks
-        const ai = aiData;
-        const companyName = derivedName || 'Unknown';
-        const founderName = ai.founderName || senderName || senderEmail.split('@')[0];
         const companyRound = ai.companyRound || 'Seed';
         const priorityLevel = ai.priorityLevel || 'Medium';
         const dealSourceType = ai.dealSourceType || 'Founder Network';
         const shareType = ai.shareType || 'Primary';
-        const totalFundRaise = typeof ai.totalFundRaise === 'number' ? ai.totalFundRaise : null;
-        const valuation = typeof ai.valuation === 'number' ? ai.valuation : null;
+        const totalFundRaise = ai.totalFundRaise ?? null;
+        const valuation = ai.valuation ?? null;
         const subIndustry = ai.subIndustry || '';
 
         const customTags = ['email-ingested', 'email-workspace'];
@@ -117,7 +356,7 @@ export async function POST(request: NextRequest) {
             organization_id: ORGANIZATION_ID,
             company_name: companyName,
             founder_name: founderName,
-            founder_email: senderEmail,
+            founder_email: founderEmail,
             pipeline_stage_id: firstStageId,
             priority_level: priorityLevel,
             company_round: companyRound,
@@ -156,7 +395,7 @@ export async function POST(request: NextRequest) {
                 gmail_message_id: gmailMessageId,
                 gmail_thread_id: gmailThreadId || null,
                 sender_name: founderName,
-                sender_email: senderEmail,
+                sender_email: founderEmail,
                 subject,
                 received_at: receivedAt || null,
                 has_attachments: hasAttachments || false,
@@ -172,7 +411,7 @@ export async function POST(request: NextRequest) {
             company_id: newCompany.id,
             user_id: userId,
             action: 'created',
-            details: `Manually sent to Kanban from Email Workspace: "${subject}" from ${senderEmail}. AI-extracted: ${ai.summary || 'N/A'}`,
+            details: `Sent to Kanban from Email Workspace: "${subject}" from ${founderEmail}. AI-extracted: ${ai.summary || 'N/A'}`,
         });
 
         // Notify other users
@@ -187,7 +426,7 @@ export async function POST(request: NextRequest) {
                 user_id: p.id,
                 type: 'new_company',
                 title: 'Email Workspace',
-                message: `${companyName} added from email (needs review)${ai.companyRound ? ' — ' + ai.companyRound : ''}`,
+                message: `${companyName} added from email (needs review)${companyRound ? ' — ' + companyRound : ''}`,
                 company_id: newCompany.id,
             }));
             await db.from('notifications').insert(notifs);
