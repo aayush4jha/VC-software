@@ -722,7 +722,7 @@ function AnalyticsContent() {
                         {industryDistribution.length > 0 ? (
                             <ResponsiveContainer width="100%" height={300}>
                                 <RechartsPieChart>
-                                    <Pie data={industryDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={110} paddingAngle={2} label={({ name, percent }: any) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}>
+                                    <Pie data={industryDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={110} paddingAngle={2} label={({ name, percent, midAngle, outerRadius: or, cx: cxVal, cy: cyVal }: any) => { if (percent < 0.01) return null; const RADIAN = Math.PI / 180; const radius = (or || 110) + 30; const x = cxVal + radius * Math.cos(-midAngle * RADIAN); const y = cyVal + radius * Math.sin(-midAngle * RADIAN); return <text x={x} y={y} textAnchor={x > cxVal ? 'start' : 'end'} dominantBaseline="central" style={{ fontSize: 12, fill: 'var(--text-secondary)' }}>{`${name} ${(percent * 100).toFixed(0)}%`}</text>; }} labelLine={false}>
                                         {industryDistribution.map((_, i) => (
                                             <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                                         ))}
