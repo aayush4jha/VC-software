@@ -376,10 +376,13 @@ export default function KanbanBoard() {
         }
     };
 
+    const stageFilter = activeFilters.stage || [];
+    const showRejectedColumn = stageFilter.length === 0 || stageFilter.includes('__rejected__');
+
     return (
         <DragDropContext onDragEnd={handleDragEnd}>
             <div className="kanban-board">
-                {pipelineStages.map((stage) => {
+                {pipelineStages.filter(stage => stageFilter.length === 0 || stageFilter.includes(stage.id)).map((stage) => {
                     const stageCompanies = filteredCompanies.filter(c => c.pipelineStageId === stage.id);
                     return (
                         <div key={stage.id} className="kanban-column">
@@ -419,7 +422,7 @@ export default function KanbanBoard() {
                 })}
 
                 {/* Rejected Companies Column */}
-                <div className="kanban-column">
+                {showRejectedColumn && <div className="kanban-column">
                     <div className="kanban-column-header">
                         <div className="kanban-column-title">
                             <span className="kanban-column-dot" style={{ background: '#ef4444' }} />
@@ -441,7 +444,7 @@ export default function KanbanBoard() {
                             </div>
                         )}
                     </div>
-                </div>
+                </div>}
             </div>
         </DragDropContext>
     );

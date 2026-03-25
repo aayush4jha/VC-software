@@ -236,7 +236,7 @@ export default function FilterBar() {
             <FilterDropdown
                 label="Stage"
                 filterKey="stage"
-                options={pipelineStages.map(s => ({ value: s.id, label: s.name }))}
+                options={[...pipelineStages.map(s => ({ value: s.id, label: s.name })), { value: '__rejected__', label: 'Rejected' }]}
             />
             <FilterDropdown
                 label="Deal Source Type"
