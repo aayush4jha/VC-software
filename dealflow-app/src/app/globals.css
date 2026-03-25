@@ -821,7 +821,8 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 12px 0;
-  flex-wrap: wrap;
+  overflow-x: auto;
+  flex-wrap: nowrap;
 }
 
 .filter-dropdown {
