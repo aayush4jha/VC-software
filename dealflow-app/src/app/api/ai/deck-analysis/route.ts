@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { google } from 'googleapis';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { getRouteUser } from '@/lib/auth-helpers';
+import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
-async function callGemini(apiKey: string, prompt: string): Promise<string> {
+const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
+const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
+
+interface GeminiPart {
+    text?: string;
+    inlineData?: { mimeType: string; data: string };
+}
+
+async function callGeminiMultimodal(apiKey: string, parts: GeminiPart[]): Promise<string> {
     const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
     const body = JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
+        contents: [{ parts }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 8000 },
     });
 
     for (const model of models) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-        // Try up to 2 times per model (in case of rate limit with retry)
         for (let attempt = 0; attempt < 2; attempt++) {
             try {
                 const res = await fetch(url, {
@@ -28,7 +39,6 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
                 const errBody = await res.json().catch(() => ({ error: { code: res.status } }));
                 const code = errBody?.error?.code;
 
-                // Rate limited — wait and retry
                 if (code === 429) {
                     const retryDelay = errBody?.error?.details?.find(
                         (d: { retryDelay?: string }) => d.retryDelay
@@ -39,10 +49,8 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
                     continue;
                 }
 
-                // Model not found — try next model
                 if (code === 404) break;
 
-                // Other error — try next model
                 console.error(`Gemini ${model} error (${code}):`, JSON.stringify(errBody.error?.message || '').slice(0, 100));
                 break;
             } catch (e) {
@@ -55,19 +63,156 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
     throw new Error('All Gemini models failed or quota exhausted. Please try again in a few minutes.');
 }
 
+function isPitchDeckAttachment(filename: string): boolean {
+    const lower = filename.toLowerCase();
+    return PITCH_DECK_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
+function getMimeType(filename: string): string {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    if (lower.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+    if (lower.endsWith('.key')) return 'application/x-iwork-keynote-sfile';
+    if (lower.endsWith('.odp')) return 'application/vnd.oasis.opendocument.presentation';
+    return 'application/octet-stream';
+}
+
 export async function POST(request: NextRequest) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) {
         return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
 
-    const { companyName, founderName, industry, subIndustry, companyRound, totalFundRaise, valuation, quickSummary, googleDriveLink } = await request.json();
+    const { companyId, companyName, founderName, industry, subIndustry, companyRound, totalFundRaise, valuation, quickSummary, googleDriveLink } = await request.json();
 
+    // ─── Try to fetch the actual pitch deck attachment from Gmail ───
+    let attachmentParts: GeminiPart[] = [];
+    let attachmentInfo = '';
+
+    if (companyId) {
+        try {
+            const user = await getRouteUser(request);
+            if (user) {
+                const authResult = await getAuthenticatedClientForUser(user.id);
+                if (authResult) {
+                    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+                    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+                    if (supabaseUrl && serviceRoleKey) {
+                        const db = createServiceClient(supabaseUrl, serviceRoleKey);
+
+                        // Look up the ingested email record for this company
+                        const { data: ingestedEmail } = await db
+                            .from('ingested_emails')
+                            .select('gmail_message_id, has_attachments, attachment_names')
+                            .eq('company_id', companyId)
+                            .eq('organization_id', ORGANIZATION_ID)
+                            .eq('status', 'processed')
+                            .order('created_at', { ascending: false })
+                            .limit(1)
+                            .single();
+
+                        if (ingestedEmail?.has_attachments && ingestedEmail.gmail_message_id) {
+                            const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
+
+                            // Fetch the full message to get attachment metadata
+                            const fullMsg = await gmail.users.messages.get({
+                                userId: 'me',
+                                id: ingestedEmail.gmail_message_id,
+                                format: 'full',
+                            });
+
+                            const parts = fullMsg.data.payload?.parts || [];
+
+                            // Find and download pitch deck attachments
+                            for (const part of parts) {
+                                const filename = part.filename || '';
+                                if (!filename || !isPitchDeckAttachment(filename)) continue;
+                                if (!part.body?.attachmentId) continue;
+
+                                try {
+                                    const attachmentRes = await gmail.users.messages.attachments.get({
+                                        userId: 'me',
+                                        messageId: ingestedEmail.gmail_message_id,
+                                        id: part.body.attachmentId,
+                                    });
+
+                                    const base64Data = attachmentRes.data.data;
+                                    if (base64Data) {
+                                        // Convert from URL-safe base64 to standard base64
+                                        const standardBase64 = base64Data.replace(/-/g, '+').replace(/_/g, '/');
+                                        const mimeType = getMimeType(filename);
+
+                                        attachmentParts.push({
+                                            inlineData: {
+                                                mimeType,
+                                                data: standardBase64,
+                                            },
+                                        });
+                                        attachmentInfo += `\nAttached file: ${filename} (${mimeType})`;
+                                        console.log(`[deck-analysis] Downloaded attachment: ${filename} (${(standardBase64.length * 0.75 / 1024 / 1024).toFixed(1)}MB)`);
+                                    }
+                                } catch (attachErr) {
+                                    console.error(`[deck-analysis] Failed to download attachment ${filename}:`, (attachErr as Error).message);
+                                }
+                            }
+
+                            // Also check nested multipart structures
+                            for (const part of parts) {
+                                if (part.parts) {
+                                    for (const subPart of part.parts as typeof parts) {
+                                        const filename = subPart.filename || '';
+                                        if (!filename || !isPitchDeckAttachment(filename)) continue;
+                                        if (!subPart.body?.attachmentId) continue;
+
+                                        try {
+                                            const attachmentRes = await gmail.users.messages.attachments.get({
+                                                userId: 'me',
+                                                messageId: ingestedEmail.gmail_message_id,
+                                                id: subPart.body.attachmentId,
+                                            });
+
+                                            const base64Data = attachmentRes.data.data;
+                                            if (base64Data) {
+                                                const standardBase64 = base64Data.replace(/-/g, '+').replace(/_/g, '/');
+                                                const mimeType = getMimeType(filename);
+
+                                                attachmentParts.push({
+                                                    inlineData: {
+                                                        mimeType,
+                                                        data: standardBase64,
+                                                    },
+                                                });
+                                                attachmentInfo += `\nAttached file: ${filename} (${mimeType})`;
+                                                console.log(`[deck-analysis] Downloaded nested attachment: ${filename}`);
+                                            }
+                                        } catch (attachErr) {
+                                            console.error(`[deck-analysis] Failed to download nested attachment ${filename}:`, (attachErr as Error).message);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('[deck-analysis] Error fetching attachment:', (err as Error).message);
+            // Continue without attachment — fall back to text-only analysis
+        }
+    }
+
+    const hasAttachment = attachmentParts.length > 0;
     const hasEmailPitch = quickSummary && quickSummary.startsWith('[Email Pitch]');
     const emailContent = hasEmailPitch ? quickSummary.replace('[Email Pitch]\n', '') : '';
 
     const prompt = `You are a senior VC analyst at Dholakia Ventures. Perform an extremely detailed, data-oriented investment analysis report for the following company.
 
+${hasAttachment ? `
+IMPORTANT: A pitch deck document has been attached. Analyze it thoroughly — extract ALL data, metrics, financials, charts, team info, traction numbers, market sizing, and any other relevant information directly from the document. Base your analysis primarily on the actual content of the pitch deck.
+${attachmentInfo}
+` : ''}
 ${emailContent ? `
 === ORIGINAL PITCH EMAIL ===
 ${emailContent}
@@ -84,7 +229,7 @@ Valuation: ${valuation ? '₹' + valuation : 'Not specified'}
 ${!hasEmailPitch && quickSummary ? `Previous Summary: ${quickSummary}` : ''}
 ${googleDriveLink ? `Data Room: ${googleDriveLink}` : ''}
 
-Generate a comprehensive, detailed, descriptive, and data-oriented investment analysis report. Be thorough and specific. Use actual numbers, percentages, and market data where possible. If specific data is not available, provide reasonable industry benchmarks and estimates.
+Generate a comprehensive, detailed, descriptive, and data-oriented investment analysis report.${hasAttachment ? ' Use ACTUAL data, numbers, and metrics extracted from the pitch deck — do NOT make up numbers when real data is available in the document.' : ' Be thorough and specific. Use actual numbers, percentages, and market data where possible. If specific data is not available, provide reasonable industry benchmarks and estimates.'}
 
 Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON):
 {
@@ -107,7 +252,13 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
 }`;
 
     try {
-        const rawText = await callGemini(GEMINI_API_KEY, prompt);
+        // Build multimodal parts: text prompt + any attachment data
+        const geminiParts: GeminiPart[] = [
+            { text: prompt },
+            ...attachmentParts,
+        ];
+
+        const rawText = await callGeminiMultimodal(GEMINI_API_KEY, geminiParts);
 
         let analysis;
         try {

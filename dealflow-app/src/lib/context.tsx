@@ -953,6 +953,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                companyId,
                 companyName: company.companyName, founderName: company.founderName,
                 industry: ind?.name, subIndustry: company.subIndustry,
                 companyRound: company.companyRound, totalFundRaise: company.totalFundRaise,
