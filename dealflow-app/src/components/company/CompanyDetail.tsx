@@ -5,11 +5,12 @@ import {
     X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock,
     AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
     XCircle, ArrowRight, Loader2, Link2, Shield, Pause, RotateCcw,
-    FileText, BarChart3, FileSearch, Briefcase, Download,
+    FileText, BarChart3, FileSearch, Briefcase, Download, FileDown,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import type { TerminalStatus, CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
+import { downloadAsDocx, downloadAsPdf } from '@/lib/report-download';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
 const priorities: PriorityLevel[] = ['Low', 'Medium', 'High'];
@@ -766,9 +767,27 @@ export default function CompanyDetail() {
                                         <div className="ai-card-header">
                                             <div className="ai-card-icon"><Sparkles size={14} /></div>
                                             <span className="ai-card-title">Investment Analysis Report</span>
-                                            <button className="btn btn-ghost btn-sm" onClick={handleAnalyzeDeck} disabled={analyzingDeck} style={{ marginLeft: 'auto', fontSize: 11 }}>
-                                                Re-analyze
-                                            </button>
+                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+                                                <button
+                                                    className="btn btn-ghost btn-sm"
+                                                    onClick={() => downloadAsPdf({ companyName: c.companyName, analysis: c.deckAnalysis! })}
+                                                    style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                                                    title="Download as PDF"
+                                                >
+                                                    <FileDown size={12} /> PDF
+                                                </button>
+                                                <button
+                                                    className="btn btn-ghost btn-sm"
+                                                    onClick={() => downloadAsDocx({ companyName: c.companyName, analysis: c.deckAnalysis! })}
+                                                    style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                                                    title="Download as DOCX"
+                                                >
+                                                    <FileDown size={12} /> DOCX
+                                                </button>
+                                                <button className="btn btn-ghost btn-sm" onClick={handleAnalyzeDeck} disabled={analyzingDeck} style={{ fontSize: 11 }}>
+                                                    Re-analyze
+                                                </button>
+                                            </div>
                                         </div>
                                         <div className="ai-card-body">
                                             <div className="ai-section">
