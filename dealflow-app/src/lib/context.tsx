@@ -671,9 +671,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (row) {
             const updated = mapCompany(row);
             setCompanies(prev => prev.map(c => c.id === id ? updated : c));
+            setSelectedCompany(prev => prev?.id === id ? updated : prev);
         } else {
             // Fallback: apply changes locally from the input data
             setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
+            setSelectedCompany(prev => prev?.id === id ? { ...prev, ...data } : prev);
         }
     }, [apiDb]);
 
