@@ -1226,6 +1226,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
     }, [user, fetchAllData]);
 
+    // ─── Background bulk search for deck email links ───
+    useEffect(() => {
+        if (!user || isLoading || companies.length === 0) return;
+        const missing = companies.filter(c => !c.deckEmailLink && c.founderEmail);
+        if (missing.length === 0) return;
+
+        let cancelled = false;
+
+        (async () => {
+            for (const company of missing) {
+                if (cancelled) break;
+                try {
+                    const res = await fetch('/api/gmail/find-deck-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            companyName: company.companyName,
+                            founderName: company.founderName,
+                            founderEmail: company.founderEmail,
+                        }),
+                    });
+                    const data = await res.json();
+                    if (!cancelled && data.found && data.link) {
+                        await updateCompany(company.id, { deckEmailLink: data.link });
+                    }
+                } catch { /* skip failures silently */ }
+            }
+        })();
+
+        return () => { cancelled = true; };
+    // Run once after initial load — keyed on isLoading transition
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLoading]);
+
     const approveCompany = useCallback(async (companyId: string) => {
         await updateCompany(companyId, { needsReview: false });
         if (user) {
