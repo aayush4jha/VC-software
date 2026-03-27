@@ -27,89 +27,85 @@ export async function POST(request: NextRequest) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     try {
-        // ─── Strategy 0: Check ingested_emails table first (instant, no API call) ───
-        if (companyId && supabaseUrl && serviceRoleKey) {
+        // ─── Strategy 0: Check ingested_emails table (instant, no Gmail API call) ───
+        if (supabaseUrl && serviceRoleKey) {
             const db = createServiceClient(supabaseUrl, serviceRoleKey);
-            const { data: ingested } = await db
-                .from('ingested_emails')
-                .select('gmail_message_id')
-                .eq('organization_id', ORGANIZATION_ID)
-                .eq('company_id', companyId)
-                .eq('status', 'processed')
-                .order('created_at', { ascending: false })
-                .limit(1);
 
-            if (ingested && ingested.length > 0 && ingested[0].gmail_message_id) {
-                const link = buildGmailLink(ingested[0].gmail_message_id);
-                return NextResponse.json({ found: true, link, source: 'database' });
+            // 0a: Look up by company_id
+            if (companyId) {
+                const { data: ingested } = await db
+                    .from('ingested_emails')
+                    .select('gmail_message_id')
+                    .eq('organization_id', ORGANIZATION_ID)
+                    .eq('company_id', companyId)
+                    .eq('status', 'processed')
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (ingested && ingested.length > 0 && ingested[0].gmail_message_id) {
+                    return NextResponse.json({ found: true, link: buildGmailLink(ingested[0].gmail_message_id), source: 'database' });
+                }
+            }
+
+            // 0b: Look up by sender_email (covers cases where company_id wasn't linked)
+            if (founderEmail) {
+                const { data: ingested } = await db
+                    .from('ingested_emails')
+                    .select('gmail_message_id')
+                    .eq('organization_id', ORGANIZATION_ID)
+                    .eq('sender_email', founderEmail)
+                    .eq('status', 'processed')
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (ingested && ingested.length > 0 && ingested[0].gmail_message_id) {
+                    return NextResponse.json({ found: true, link: buildGmailLink(ingested[0].gmail_message_id), source: 'database' });
+                }
             }
         }
 
         // ─── Strategy 1+: Search Gmail API ───
         const authResult = await getAuthenticatedClientForUser(user.id);
         if (!authResult) {
-            return NextResponse.json({ found: false, link: null, error: 'Google not connected' });
+            return NextResponse.json({ found: false, link: null, reason: 'Google not connected' });
         }
 
         const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
 
-        // Helper: search Gmail with a query and return the first message link
-        async function searchGmail(query: string): Promise<{ id: string; link: string } | null> {
+        // Helper: search Gmail and return the first message link
+        async function searchGmail(query: string): Promise<string | null> {
             try {
-                const res = await gmail.users.messages.list({
-                    userId: 'me',
-                    q: query,
-                    maxResults: 5,
-                });
-                const messages = res.data.messages || [];
-                if (messages.length > 0 && messages[0].id) {
-                    return { id: messages[0].id, link: buildGmailLink(messages[0].id) };
-                }
+                const res = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 3 });
+                const msg = res.data.messages?.[0];
+                if (msg?.id) return buildGmailLink(msg.id);
             } catch (e) {
-                console.error(`[find-deck-email] Gmail search failed for query "${query}":`, (e as Error).message);
+                console.error(`[find-deck-email] search failed: "${query}"`, (e as Error).message);
             }
             return null;
         }
 
-        let result: { id: string; link: string } | null = null;
-
-        // Strategy 1: from:<founderEmail> with attachment (most precise)
+        // Try searches in order of reliability
+        const searches: string[] = [];
         if (founderEmail) {
-            result = await searchGmail(`from:${founderEmail} has:attachment`);
+            searches.push(`from:${founderEmail} has:attachment`);
+            searches.push(`from:${founderEmail}`);
+        }
+        if (companyName && founderEmail) {
+            searches.push(`from:${founderEmail} ${companyName}`);
+        }
+        if (companyName) {
+            searches.push(`${companyName} has:attachment`);
+            searches.push(companyName);
+        }
+        if (founderName) {
+            searches.push(`from:${founderName}`);
         }
 
-        // Strategy 2: from:<founderEmail> without attachment filter
-        if (!result && founderEmail) {
-            result = await searchGmail(`from:${founderEmail}`);
-        }
-
-        // Strategy 3: company name in subject/body from the founder email
-        if (!result && companyName && founderEmail) {
-            result = await searchGmail(`from:${founderEmail} ${companyName}`);
-        }
-
-        // Strategy 4: company name with attachment
-        if (!result && companyName) {
-            result = await searchGmail(`${companyName} has:attachment`);
-        }
-
-        // Strategy 5: company name anywhere
-        if (!result && companyName) {
-            result = await searchGmail(companyName);
-        }
-
-        // Strategy 6: founder name with attachment
-        if (!result && founderName) {
-            result = await searchGmail(`from:${founderName} has:attachment`);
-        }
-
-        // Strategy 7: founder name anywhere
-        if (!result && founderName) {
-            result = await searchGmail(`from:${founderName}`);
-        }
-
-        if (result) {
-            return NextResponse.json({ found: true, link: result.link, source: 'gmail' });
+        for (const query of searches) {
+            const link = await searchGmail(query);
+            if (link) {
+                return NextResponse.json({ found: true, link, source: 'gmail' });
+            }
         }
 
         return NextResponse.json({ found: false, link: null });

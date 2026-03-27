@@ -29,6 +29,7 @@ export default function CompanyDetail() {
         generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
         approveCompany,
         rejectionRecords, rejectionReasonCategories,
+        deckEmailLinks,
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('overview');
@@ -48,6 +49,7 @@ export default function CompanyDetail() {
 
     // Deck email search state
     const [searchingDeckEmail, setSearchingDeckEmail] = useState(false);
+    const [deckEmailLink, setDeckEmailLink] = useState<string | null>(null);
 
     // AI loading states
     const [generatingSummary, setGeneratingSummary] = useState(false);
@@ -62,31 +64,40 @@ export default function CompanyDetail() {
         }
     }, [selectedCompany, fetchComments, fetchActivity]);
 
-    // Auto-search for deck email if not already linked
+    // Auto-search for deck email when company opens
     useEffect(() => {
-        if (selectedCompany && !selectedCompany.deckEmailLink && selectedCompany.founderEmail) {
-            let cancelled = false;
-            setSearchingDeckEmail(true);
-            fetch('/api/gmail/find-deck-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    companyId: selectedCompany.id,
-                    companyName: selectedCompany.companyName,
-                    founderName: selectedCompany.founderName,
-                    founderEmail: selectedCompany.founderEmail,
-                }),
-            })
-                .then(r => r.json())
-                .then(data => {
-                    if (!cancelled && data.found && data.link) {
-                        updateCompany(selectedCompany.id, { deckEmailLink: data.link });
-                    }
-                })
-                .catch(() => {})
-                .finally(() => { if (!cancelled) setSearchingDeckEmail(false); });
-            return () => { cancelled = true; };
+        if (!selectedCompany) return;
+        // If already have link from DB or context cache, use it
+        const existing = selectedCompany.deckEmailLink || deckEmailLinks[selectedCompany.id];
+        if (existing) {
+            setDeckEmailLink(existing);
+            return;
         }
+        // Search for it
+        let cancelled = false;
+        setDeckEmailLink(null);
+        setSearchingDeckEmail(true);
+        fetch('/api/gmail/find-deck-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyId: selectedCompany.id,
+                companyName: selectedCompany.companyName,
+                founderName: selectedCompany.founderName,
+                founderEmail: selectedCompany.founderEmail,
+            }),
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (!cancelled && data.found && data.link) {
+                    setDeckEmailLink(data.link);
+                    // Try to persist (will silently fail if column doesn't exist yet)
+                    updateCompany(selectedCompany.id, { deckEmailLink: data.link }).catch(() => {});
+                }
+            })
+            .catch(() => {})
+            .finally(() => { if (!cancelled) setSearchingDeckEmail(false); });
+        return () => { cancelled = true; };
     }, [selectedCompany?.id]);
 
     if (!selectedCompany) return null;
@@ -629,9 +640,9 @@ export default function CompanyDetail() {
                                 <div className="form-group">
                                     <label className="form-label">Mail Received (Deck)</label>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {c.deckEmailLink ? (
+                                        {deckEmailLink ? (
                                             <a
-                                                href={c.deckEmailLink}
+                                                href={deckEmailLink}
                                                 target="_blank"
                                                 rel="noopener"
                                                 style={{

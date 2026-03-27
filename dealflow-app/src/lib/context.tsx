@@ -244,6 +244,9 @@ interface AppContextType {
     syncEmails: () => Promise<{ processed: number; skipped: number; created: { companyName: string; companyId: string }[]; errors?: string[] } | null>;
     approveCompany: (companyId: string) => Promise<void>;
 
+    // Deck email links (resolved from Gmail)
+    deckEmailLinks: Record<string, string>;
+
     // Refresh
     refreshData: () => Promise<void>;
 
@@ -295,6 +298,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [rejectionRecords, setRejectionRecords] = useState<RejectionRecord[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+    const [deckEmailLinks, setDeckEmailLinks] = useState<Record<string, string>>({});
 
     // UI state
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -1229,7 +1233,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // ─── Background bulk search for deck email links ───
     useEffect(() => {
         if (!user || isLoading || companies.length === 0) return;
-        const missing = companies.filter(c => !c.deckEmailLink && c.founderEmail);
+        const missing = companies.filter(c => !c.deckEmailLink && c.founderEmail && !deckEmailLinks[c.id]);
         if (missing.length === 0) return;
 
         let cancelled = false;
@@ -1250,7 +1254,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     });
                     const data = await res.json();
                     if (!cancelled && data.found && data.link) {
-                        await updateCompany(company.id, { deckEmailLink: data.link });
+                        setDeckEmailLinks(prev => ({ ...prev, [company.id]: data.link }));
+                        // Try to persist to DB (silently fails if column doesn't exist yet)
+                        updateCompany(company.id, { deckEmailLink: data.link }).catch(() => {});
                     }
                 } catch { /* skip failures silently */ }
             }
@@ -1295,6 +1301,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
         syncEmails, approveCompany,
+        deckEmailLinks,
         selectedCompany, setSelectedCompany,
         editingCompany, setEditingCompany,
         showNotifications, setShowNotifications,
@@ -1324,7 +1331,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
-        syncEmails, approveCompany,
+        syncEmails, approveCompany, deckEmailLinks,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,
         searchQuery, viewMode, activeFilters,

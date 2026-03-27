@@ -8,7 +8,7 @@ import { Company, PipelineStage, RejectionRecord } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 function CompanyKanbanCard({ company, index }: { company: Company; index: number }) {
-    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany, setTerminalStatus } = useAppContext();
+    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany, setTerminalStatus, deckEmailLinks } = useAppContext();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showPortfolioConfirm, setShowPortfolioConfirm] = useState(false);
     const analyst = company.analystId ? getUserById(company.analystId) : null;
@@ -106,9 +106,9 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                         </div>
                     </div>
                     <div className="kanban-card-founder">{company.founderName}</div>
-                    {company.deckEmailLink && (
+                    {(company.deckEmailLink || deckEmailLinks[company.id]) && (
                         <a
-                            href={company.deckEmailLink}
+                            href={company.deckEmailLink || deckEmailLinks[company.id]}
                             target="_blank"
                             rel="noopener"
                             onClick={e => e.stopPropagation()}
