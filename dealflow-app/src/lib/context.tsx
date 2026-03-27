@@ -1242,6 +1242,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
+                            companyId: company.id,
                             companyName: company.companyName,
                             founderName: company.founderName,
                             founderEmail: company.founderEmail,

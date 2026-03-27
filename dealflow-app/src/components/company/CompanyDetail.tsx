@@ -71,6 +71,7 @@ export default function CompanyDetail() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    companyId: selectedCompany.id,
                     companyName: selectedCompany.companyName,
                     founderName: selectedCompany.founderName,
                     founderEmail: selectedCompany.founderEmail,
