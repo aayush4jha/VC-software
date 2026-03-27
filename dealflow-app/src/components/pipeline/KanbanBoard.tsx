@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Pencil, Video, Mail, Trash2, Briefcase, XCircle } from 'lucide-react';
+import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { Company, PipelineStage, RejectionRecord } from '@/types/database';
@@ -106,6 +106,24 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                         </div>
                     </div>
                     <div className="kanban-card-founder">{company.founderName}</div>
+                    {company.deckEmailLink && (
+                        <a
+                            href={company.deckEmailLink}
+                            target="_blank"
+                            rel="noopener"
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                fontSize: 10, fontWeight: 600, color: '#8b5cf6',
+                                background: 'rgba(139,92,246,0.1)',
+                                padding: '2px 8px', borderRadius: 4,
+                                marginTop: 4, textDecoration: 'none',
+                            }}
+                            title="Open pitch deck email in Gmail"
+                        >
+                            <FileText size={10} /> Open Mail
+                        </a>
+                    )}
                     <div className="kanban-card-tags">
                         {industry && <span className="badge badge-primary">{industry.name}</span>}
                         <span className="badge badge-neutral">{company.companyRound}</span>

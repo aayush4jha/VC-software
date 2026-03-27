@@ -379,6 +379,7 @@ export async function POST(request: NextRequest) {
                     ingestion_source: 'email',
                     custom_tags: customTags,
                     sub_industry: ai.subIndustry || '',
+                    deck_email_link: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
                 };
 
                 if (ai.totalFundRaise !== null) companyInsert.total_fund_raise = ai.totalFundRaise;

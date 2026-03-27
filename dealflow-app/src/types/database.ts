@@ -149,6 +149,7 @@ export interface Company {
   callTranscript: CallTranscript | null;
   filterBrief: string | null;
   icMemo: string | null;
+  deckEmailLink: string | null;
   // Portfolio-specific fields
   initialInvestment: number | null;
   entryValuation: number | null;

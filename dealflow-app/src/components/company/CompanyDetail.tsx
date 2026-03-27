@@ -46,6 +46,9 @@ export default function CompanyDetail() {
     const [settingTerminal, setSettingTerminal] = useState(false);
     const [reminderDate, setReminderDate] = useState('');
 
+    // Deck email search state
+    const [searchingDeckEmail, setSearchingDeckEmail] = useState(false);
+
     // AI loading states
     const [generatingSummary, setGeneratingSummary] = useState(false);
     const [analyzingDeck, setAnalyzingDeck] = useState(false);
@@ -58,6 +61,32 @@ export default function CompanyDetail() {
             fetchActivity(selectedCompany.id).then(setActivities);
         }
     }, [selectedCompany, fetchComments, fetchActivity]);
+
+    // Auto-search for deck email if not already linked
+    useEffect(() => {
+        if (selectedCompany && !selectedCompany.deckEmailLink && selectedCompany.founderEmail) {
+            let cancelled = false;
+            setSearchingDeckEmail(true);
+            fetch('/api/gmail/find-deck-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyName: selectedCompany.companyName,
+                    founderName: selectedCompany.founderName,
+                    founderEmail: selectedCompany.founderEmail,
+                }),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (!cancelled && data.found && data.link) {
+                        updateCompany(selectedCompany.id, { deckEmailLink: data.link });
+                    }
+                })
+                .catch(() => {})
+                .finally(() => { if (!cancelled) setSearchingDeckEmail(false); });
+            return () => { cancelled = true; };
+        }
+    }, [selectedCompany?.id]);
 
     if (!selectedCompany) return null;
 
@@ -595,6 +624,37 @@ export default function CompanyDetail() {
                                             </button>
                                         </div>
                                     )}
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Mail Received (Deck)</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {c.deckEmailLink ? (
+                                            <a
+                                                href={c.deckEmailLink}
+                                                target="_blank"
+                                                rel="noopener"
+                                                style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                                                    fontSize: 13, fontWeight: 500, color: '#fff',
+                                                    background: '#8b5cf6', padding: '6px 14px',
+                                                    borderRadius: 6, textDecoration: 'none',
+                                                    transition: 'background 0.15s',
+                                                }}
+                                                onMouseEnter={e => (e.currentTarget.style.background = '#7c3aed')}
+                                                onMouseLeave={e => (e.currentTarget.style.background = '#8b5cf6')}
+                                            >
+                                                <Mail size={14} /> Open Mail <ExternalLink size={12} />
+                                            </a>
+                                        ) : searchingDeckEmail ? (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-tertiary)' }}>
+                                                <Loader2 size={14} className="spin" /> Searching Gmail...
+                                            </span>
+                                        ) : (
+                                            <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+                                                Mail not found yet
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
