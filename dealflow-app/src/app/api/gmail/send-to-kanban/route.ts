@@ -366,7 +366,6 @@ export async function POST(request: NextRequest) {
             ingestion_source: 'email-workspace',
             custom_tags: customTags,
             sub_industry: subIndustry,
-            ...(gmailMessageId ? { deck_email_link: `https://mail.google.com/mail/u/0/#inbox/${gmailMessageId}` } : {}),
         };
 
         if (totalFundRaise !== null) companyInsert.total_fund_raise = totalFundRaise;

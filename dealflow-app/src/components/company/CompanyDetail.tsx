@@ -91,8 +91,6 @@ export default function CompanyDetail() {
             .then(data => {
                 if (!cancelled && data.found && data.link) {
                     setDeckEmailLink(data.link);
-                    // Try to persist (will silently fail if column doesn't exist yet)
-                    updateCompany(selectedCompany.id, { deckEmailLink: data.link }).catch(() => {});
                 }
             })
             .catch(() => {})

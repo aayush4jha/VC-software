@@ -659,7 +659,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             quickSummary: 'quick_summary', deckAnalysis: 'deck_analysis', kpiData: 'kpi_data',
             callTranscript: 'call_transcript', filterBrief: 'filter_brief', icMemo: 'ic_memo',
             linkedPreviousEntryId: 'linked_previous_entry_id',
-            needsReview: 'needs_review', ingestionSource: 'ingestion_source', deckEmailLink: 'deck_email_link',
+            needsReview: 'needs_review', ingestionSource: 'ingestion_source',
             initialInvestment: 'initial_investment', entryValuation: 'entry_valuation',
             entryOwnership: 'entry_ownership', currentOwnership: 'current_ownership',
             latestValuation: 'latest_valuation', portfolioStatus: 'portfolio_status',
@@ -1255,8 +1255,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     const data = await res.json();
                     if (!cancelled && data.found && data.link) {
                         setDeckEmailLinks(prev => ({ ...prev, [company.id]: data.link }));
-                        // Try to persist to DB (silently fails if column doesn't exist yet)
-                        updateCompany(company.id, { deckEmailLink: data.link }).catch(() => {});
                     }
                 } catch { /* skip failures silently */ }
             }

@@ -442,13 +442,29 @@ function EmailsContent() {
                             )}
 
                             {/* Email body */}
-                            <div style={{
-                                padding: 20, background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                                borderRadius: 10, fontSize: 14, lineHeight: 1.7, color: 'var(--text-primary)',
-                                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                            }}>
-                                {selectedEmail.emailBody || selectedEmail.snippet || '(no content)'}
-                            </div>
+                            <div
+                                style={{
+                                    padding: 20, background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                                    borderRadius: 10, fontSize: 14, lineHeight: 1.7, color: 'var(--text-primary)',
+                                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                }}
+                                dangerouslySetInnerHTML={{
+                                    __html: (() => {
+                                        const raw = selectedEmail.emailBody || selectedEmail.snippet || '(no content)';
+                                        // Escape HTML entities first to prevent XSS
+                                        const escaped = raw
+                                            .replace(/&/g, '&amp;')
+                                            .replace(/</g, '&lt;')
+                                            .replace(/>/g, '&gt;')
+                                            .replace(/"/g, '&quot;');
+                                        // Convert URLs to clickable links
+                                        return escaped.replace(
+                                            /(https?:\/\/[^\s<>"')\]]+)/g,
+                                            '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #6366f1; text-decoration: underline; word-break: break-all;">$1</a>'
+                                        );
+                                    })(),
+                                }}
+                            />
 
                             {/* Action buttons */}
                             {selectedEmail.direction === 'received' && (
