@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
     Mail, Send, CheckCircle, XCircle, Loader2, Inbox,
@@ -588,7 +588,9 @@ export default function EmailsPage() {
         <div className="app-layout">
             <Sidebar />
             <main className="main-content">
-                <EmailsContent />
+                <Suspense>
+                    <EmailsContent />
+                </Suspense>
             </main>
         </div>
     );
