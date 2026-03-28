@@ -298,8 +298,10 @@ export async function POST(request: NextRequest) {
         const priorityLevel = ai.priorityLevel || 'Medium';
         const dealSourceType = ai.dealSourceType || 'Founder Network';
         const shareType = ai.shareType || 'Primary';
-        const totalFundRaise = ai.totalFundRaise ?? null;
-        const valuation = ai.valuation ?? null;
+        // AI returns amounts in crores — convert to full INR for storage
+        const CRORE = 10000000;
+        const totalFundRaise = ai.totalFundRaise != null ? Math.round(ai.totalFundRaise * CRORE) : null;
+        const valuation = ai.valuation != null ? Math.round(ai.valuation * CRORE) : null;
         const subIndustry = ai.subIndustry || '';
 
         const customTags = ['email-ingested', 'email-workspace'];

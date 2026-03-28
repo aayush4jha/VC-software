@@ -381,8 +381,10 @@ export async function POST(request: NextRequest) {
                     sub_industry: ai.subIndustry || '',
                 };
 
-                if (ai.totalFundRaise !== null) companyInsert.total_fund_raise = ai.totalFundRaise;
-                if (ai.valuation !== null) companyInsert.valuation = ai.valuation;
+                // AI returns amounts in crores — convert to full INR for storage
+                const CRORE = 10000000;
+                if (ai.totalFundRaise !== null) companyInsert.total_fund_raise = Math.round(ai.totalFundRaise * CRORE);
+                if (ai.valuation !== null) companyInsert.valuation = Math.round(ai.valuation * CRORE);
                 if (industryId) companyInsert.industry_id = industryId;
                 // Store email body so Analyze Deck can use the pitch content
                 if (bodyText) {
