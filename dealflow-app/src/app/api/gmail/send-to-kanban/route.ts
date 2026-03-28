@@ -294,38 +294,6 @@ export async function POST(request: NextRequest) {
         const founderName = ai.founderName || senderName || senderEmail.split('@')[0];
         const founderEmail = ai.founderEmail || senderEmail;
 
-        // Check if a company with the same name AND same founder email already exists
-        if (companyName) {
-            const { data: existingCompany } = await db
-                .from('companies')
-                .select('id, company_name')
-                .eq('organization_id', ORGANIZATION_ID)
-                .eq('founder_email', founderEmail)
-                .ilike('company_name', companyName)
-                .limit(1);
-
-            if (existingCompany && existingCompany.length > 0) {
-                return NextResponse.json({
-                    error: `Company "${existingCompany[0].company_name}" already exists from ${founderEmail}`,
-                    existingCompanyId: existingCompany[0].id,
-                }, { status: 409 });
-            }
-        }
-
-        // Check dedup by gmail message ID
-        if (gmailMessageId) {
-            const { data: existingEmail } = await db
-                .from('ingested_emails')
-                .select('id')
-                .eq('organization_id', ORGANIZATION_ID)
-                .eq('gmail_message_id', gmailMessageId)
-                .limit(1);
-
-            if (existingEmail && existingEmail.length > 0) {
-                return NextResponse.json({ error: 'Email already processed' }, { status: 409 });
-            }
-        }
-
         const companyRound = ai.companyRound || 'Seed';
         const priorityLevel = ai.priorityLevel || 'Medium';
         const dealSourceType = ai.dealSourceType || 'Founder Network';
