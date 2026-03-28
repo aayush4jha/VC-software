@@ -6,10 +6,6 @@ import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
-function buildGmailLink(messageId: string): string {
-    return `https://mail.google.com/mail/u/0/#inbox/${messageId}`;
-}
-
 export async function POST(request: NextRequest) {
     const user = await getRouteUser(request);
     if (!user) {
@@ -43,11 +39,11 @@ export async function POST(request: NextRequest) {
                     .limit(1);
 
                 if (ingested && ingested.length > 0 && ingested[0].gmail_message_id) {
-                    return NextResponse.json({ found: true, link: buildGmailLink(ingested[0].gmail_message_id), source: 'database' });
+                    return NextResponse.json({ found: true, messageId: ingested[0].gmail_message_id, source: 'database' });
                 }
             }
 
-            // 0b: Look up by sender_email (covers cases where company_id wasn't linked)
+            // 0b: Look up by sender_email
             if (founderEmail) {
                 const { data: ingested } = await db
                     .from('ingested_emails')
@@ -59,7 +55,7 @@ export async function POST(request: NextRequest) {
                     .limit(1);
 
                 if (ingested && ingested.length > 0 && ingested[0].gmail_message_id) {
-                    return NextResponse.json({ found: true, link: buildGmailLink(ingested[0].gmail_message_id), source: 'database' });
+                    return NextResponse.json({ found: true, messageId: ingested[0].gmail_message_id, source: 'database' });
                 }
             }
         }
@@ -67,24 +63,22 @@ export async function POST(request: NextRequest) {
         // ─── Strategy 1+: Search Gmail API ───
         const authResult = await getAuthenticatedClientForUser(user.id);
         if (!authResult) {
-            return NextResponse.json({ found: false, link: null, reason: 'Google not connected' });
+            return NextResponse.json({ found: false, messageId: null, reason: 'Google not connected' });
         }
 
         const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
 
-        // Helper: search Gmail and return the first message link
         async function searchGmail(query: string): Promise<string | null> {
             try {
                 const res = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 3 });
                 const msg = res.data.messages?.[0];
-                if (msg?.id) return buildGmailLink(msg.id);
+                if (msg?.id) return msg.id;
             } catch (e) {
                 console.error(`[find-deck-email] search failed: "${query}"`, (e as Error).message);
             }
             return null;
         }
 
-        // Try searches in order of reliability
         const searches: string[] = [];
         if (founderEmail) {
             searches.push(`from:${founderEmail} has:attachment`);
@@ -102,13 +96,13 @@ export async function POST(request: NextRequest) {
         }
 
         for (const query of searches) {
-            const link = await searchGmail(query);
-            if (link) {
-                return NextResponse.json({ found: true, link, source: 'gmail' });
+            const messageId = await searchGmail(query);
+            if (messageId) {
+                return NextResponse.json({ found: true, messageId, source: 'gmail' });
             }
         }
 
-        return NextResponse.json({ found: false, link: null });
+        return NextResponse.json({ found: false, messageId: null });
     } catch (error: unknown) {
         console.error('[gmail/find-deck-email] error:', error);
         return NextResponse.json({ error: (error as Error).message || 'Failed to search' }, { status: 500 });

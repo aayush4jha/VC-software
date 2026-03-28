@@ -2,7 +2,8 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     Mail, Send, CheckCircle, XCircle, Loader2, Inbox,
     Search, ArrowRight, Tag, Paperclip, FileText, RefreshCw,
@@ -50,6 +51,8 @@ interface WorkspaceEmail {
 function EmailsContent() {
     const { refreshData } = useAppContext();
     const { isConnected, isChecking, connect, disconnect } = useGoogleAuth();
+    const searchParams = useSearchParams();
+    const targetMessageId = searchParams.get('messageId');
 
     const [emails, setEmails] = useState<WorkspaceEmail[]>([]);
     const [loading, setLoading] = useState(false);
@@ -96,6 +99,14 @@ function EmailsContent() {
         const interval = setInterval(fetchEmails, 60000);
         return () => clearInterval(interval);
     }, [isConnected, fetchEmails]);
+
+    // Auto-select email when navigated with ?messageId=
+    useEffect(() => {
+        if (targetMessageId && emails.length > 0 && !selectedEmail) {
+            const match = emails.find(e => e.id === targetMessageId);
+            if (match) setSelectedEmail(match);
+        }
+    }, [targetMessageId, emails, selectedEmail]);
 
     const handleSendToKanban = useCallback(async (email: WorkspaceEmail) => {
         setSendingIds(prev => new Set(prev).add(email.id));

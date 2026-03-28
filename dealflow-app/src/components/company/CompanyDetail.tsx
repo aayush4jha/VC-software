@@ -49,7 +49,7 @@ export default function CompanyDetail() {
 
     // Deck email search state
     const [searchingDeckEmail, setSearchingDeckEmail] = useState(false);
-    const [deckEmailLink, setDeckEmailLink] = useState<string | null>(null);
+    const [deckMessageId, setDeckMessageId] = useState<string | null>(null);
 
     // AI loading states
     const [generatingSummary, setGeneratingSummary] = useState(false);
@@ -67,15 +67,15 @@ export default function CompanyDetail() {
     // Auto-search for deck email when company opens
     useEffect(() => {
         if (!selectedCompany) return;
-        // If already have link from DB or context cache, use it
-        const existing = selectedCompany.deckEmailLink || deckEmailLinks[selectedCompany.id];
+        // If already have messageId from context cache, use it
+        const existing = deckEmailLinks[selectedCompany.id];
         if (existing) {
-            setDeckEmailLink(existing);
+            setDeckMessageId(existing);
             return;
         }
         // Search for it
         let cancelled = false;
-        setDeckEmailLink(null);
+        setDeckMessageId(null);
         setSearchingDeckEmail(true);
         fetch('/api/gmail/find-deck-email', {
             method: 'POST',
@@ -89,8 +89,8 @@ export default function CompanyDetail() {
         })
             .then(r => r.json())
             .then(data => {
-                if (!cancelled && data.found && data.link) {
-                    setDeckEmailLink(data.link);
+                if (!cancelled && data.found && data.messageId) {
+                    setDeckMessageId(data.messageId);
                 }
             })
             .catch(() => {})
@@ -638,22 +638,21 @@ export default function CompanyDetail() {
                                 <div className="form-group">
                                     <label className="form-label">Mail Received (Deck)</label>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {deckEmailLink ? (
+                                        {deckMessageId ? (
                                             <a
-                                                href={deckEmailLink}
-                                                target="_blank"
-                                                rel="noopener"
+                                                href={`/emails?messageId=${deckMessageId}`}
                                                 style={{
                                                     display: 'inline-flex', alignItems: 'center', gap: 6,
                                                     fontSize: 13, fontWeight: 500, color: '#fff',
                                                     background: '#8b5cf6', padding: '6px 14px',
                                                     borderRadius: 6, textDecoration: 'none',
+                                                    cursor: 'pointer',
                                                     transition: 'background 0.15s',
                                                 }}
                                                 onMouseEnter={e => (e.currentTarget.style.background = '#7c3aed')}
                                                 onMouseLeave={e => (e.currentTarget.style.background = '#8b5cf6')}
                                             >
-                                                <Mail size={14} /> Open Mail <ExternalLink size={12} />
+                                                <Mail size={14} /> Open Mail
                                             </a>
                                         ) : searchingDeckEmail ? (
                                             <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-tertiary)' }}>

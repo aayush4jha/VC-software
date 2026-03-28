@@ -106,11 +106,9 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                         </div>
                     </div>
                     <div className="kanban-card-founder">{company.founderName}</div>
-                    {(company.deckEmailLink || deckEmailLinks[company.id]) && (
+                    {deckEmailLinks[company.id] && (
                         <a
-                            href={company.deckEmailLink || deckEmailLinks[company.id]}
-                            target="_blank"
-                            rel="noopener"
+                            href={`/emails?messageId=${deckEmailLinks[company.id]}`}
                             onClick={e => e.stopPropagation()}
                             style={{
                                 display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -119,7 +117,7 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                                 padding: '2px 8px', borderRadius: 4,
                                 marginTop: 4, textDecoration: 'none',
                             }}
-                            title="Open pitch deck email in Gmail"
+                            title="Open pitch deck email"
                         >
                             <FileText size={10} /> Open Mail
                         </a>

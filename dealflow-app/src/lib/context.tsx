@@ -1253,8 +1253,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         }),
                     });
                     const data = await res.json();
-                    if (!cancelled && data.found && data.link) {
-                        setDeckEmailLinks(prev => ({ ...prev, [company.id]: data.link }));
+                    if (!cancelled && data.found && data.messageId) {
+                        setDeckEmailLinks(prev => ({ ...prev, [company.id]: data.messageId }));
                     }
                 } catch { /* skip failures silently */ }
             }
