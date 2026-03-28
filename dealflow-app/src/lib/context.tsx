@@ -9,7 +9,7 @@ import type {
     User, Company, PipelineStage, Industry, DealSourceName,
     RejectionReasonCategory, RejectionSubReason, RejectionRecord, Notification,
     Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
-    PagePermission, FollowOnRound,
+    PagePermission, FollowOnRound, CompanyScore,
 } from '@/types/database';
 
 // ──────────────────────────────────────────────────
@@ -189,6 +189,9 @@ interface AppContextType {
     fetchComments: (companyId: string) => Promise<Comment[]>;
     fetchActivity: (companyId: string) => Promise<ActivityLog[]>;
     fetchEmailLogs: (companyId: string) => Promise<EmailLog[]>;
+    fetchScores: (companyId: string) => Promise<CompanyScore[]>;
+    addScore: (companyId: string, scorerType: 'ai' | 'analyst', score: number, scorerId?: string | null) => Promise<CompanyScore | null>;
+    deleteScore: (scoreId: string) => Promise<void>;
 
     // Mutations
     createCompany: (data: Record<string, unknown>) => Promise<Company | null>;
@@ -556,6 +559,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
             emailType: r.email_type ?? '',
             createdAt: r.created_at ?? '',
         }));
+    }, [apiDb]);
+
+    // ─── Company Scores ─────────────────────────────
+    const fetchScores = useCallback(async (companyId: string): Promise<CompanyScore[]> => {
+        const { data } = await apiDb({
+            table: 'company_scores', operation: 'select',
+            filter: [{ column: 'company_id', op: 'eq', value: companyId }],
+            order: { column: 'created_at', ascending: false },
+        });
+        return (data || []).map((r: any): CompanyScore => ({
+            id: r.id,
+            companyId: r.company_id,
+            scorerType: r.scorer_type,
+            scorerId: r.scorer_id ?? null,
+            score: r.score,
+            createdAt: r.created_at ?? '',
+        }));
+    }, [apiDb]);
+
+    const addScore = useCallback(async (companyId: string, scorerType: 'ai' | 'analyst', score: number, scorerId?: string | null): Promise<CompanyScore | null> => {
+        const { data, error } = await apiDb({
+            table: 'company_scores', operation: 'insert',
+            data: { company_id: companyId, scorer_type: scorerType, scorer_id: scorerId || null, score },
+        });
+        if (error) { console.error('addScore error:', error); return null; }
+        const r = data;
+        if (!r) return null;
+        return { id: r.id, companyId: r.company_id, scorerType: r.scorer_type, scorerId: r.scorer_id ?? null, score: r.score, createdAt: r.created_at ?? '' };
+    }, [apiDb]);
+
+    const deleteScore = useCallback(async (scoreId: string): Promise<void> => {
+        const { error } = await apiDb({ table: 'company_scores', operation: 'delete', match: { id: scoreId } });
+        if (error) console.error('deleteScore error:', error);
     }, [apiDb]);
 
     // ─── Sign Out ───────────────────────────────────
@@ -975,11 +1011,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         const { analysis } = await res.json();
         await apiDb({ table: 'companies', operation: 'update', data: { deck_analysis: analysis }, match: { id: companyId } });
+        // Auto-save AI confidence score
+        if (typeof analysis.confidenceScore === 'number' && analysis.confidenceScore > 0) {
+            await addScore(companyId, 'ai', analysis.confidenceScore, null);
+        }
         // Update local state so the UI re-renders with the analysis
         const updated = { ...company, deckAnalysis: analysis };
         setCompanies(prev => prev.map(c => c.id === companyId ? updated : c));
         setSelectedCompany(updated);
-    }, [apiDb, companies, industries, setSelectedCompany]);
+    }, [apiDb, companies, industries, setSelectedCompany, addScore]);
 
     const generateFilterBrief = useCallback(async (companyId: string) => {
         const company = companies.find(c => c.id === companyId);
@@ -1286,7 +1326,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
         formatCurrency, getDaysInPipeline,
-        fetchComments, fetchActivity, fetchEmailLogs,
+        fetchComments, fetchActivity, fetchEmailLogs, fetchScores, addScore, deleteScore,
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,
@@ -1317,7 +1357,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
-        fetchComments, fetchActivity, fetchEmailLogs,
+        fetchComments, fetchActivity, fetchEmailLogs, fetchScores, addScore, deleteScore,
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,

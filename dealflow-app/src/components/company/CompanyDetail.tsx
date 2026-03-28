@@ -30,6 +30,7 @@ export default function CompanyDetail() {
         approveCompany,
         rejectionRecords, rejectionReasonCategories,
         deckEmailLinks,
+        fetchScores, addScore, deleteScore,
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('overview');
@@ -51,6 +52,12 @@ export default function CompanyDetail() {
     const [searchingDeckEmail, setSearchingDeckEmail] = useState(false);
     const [deckMessageId, setDeckMessageId] = useState<string | null>(null);
 
+    // Scores state
+    const [scores, setScores] = useState<import('@/types/database').CompanyScore[]>([]);
+    const [showAddScore, setShowAddScore] = useState(false);
+    const [newScoreAnalyst, setNewScoreAnalyst] = useState('');
+    const [newScoreValue, setNewScoreValue] = useState('');
+
     // AI loading states
     const [generatingSummary, setGeneratingSummary] = useState(false);
     const [analyzingDeck, setAnalyzingDeck] = useState(false);
@@ -61,8 +68,9 @@ export default function CompanyDetail() {
         if (selectedCompany) {
             fetchComments(selectedCompany.id).then(setComments);
             fetchActivity(selectedCompany.id).then(setActivities);
+            fetchScores(selectedCompany.id).then(setScores);
         }
-    }, [selectedCompany, fetchComments, fetchActivity]);
+    }, [selectedCompany, fetchComments, fetchActivity, fetchScores]);
 
     // Auto-search for deck email when company opens
     useEffect(() => {
@@ -831,6 +839,136 @@ export default function CompanyDetail() {
                                             )}
                                         </div>
                                     )}
+
+                                    {/* Scores Section */}
+                                    <div style={{
+                                        padding: 16, borderRadius: 10, marginBottom: 16,
+                                        background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                            <div style={{ fontWeight: 700, fontSize: 14 }}>Scores</div>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => setShowAddScore(!showAddScore)}
+                                                style={{ fontSize: 12 }}
+                                            >
+                                                {showAddScore ? 'Cancel' : '+ Add Score'}
+                                            </button>
+                                        </div>
+
+                                        {/* Add Score Form */}
+                                        {showAddScore && (
+                                            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12, padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', display: 'block', marginBottom: 4 }}>Analyst</label>
+                                                    <select
+                                                        className="form-input"
+                                                        value={newScoreAnalyst}
+                                                        onChange={e => setNewScoreAnalyst(e.target.value)}
+                                                        style={{ fontSize: 13, padding: '6px 8px', height: 34 }}
+                                                    >
+                                                        <option value="">Select analyst...</option>
+                                                        {users.map(u => (
+                                                            <option key={u.id} value={u.id}>{u.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div style={{ width: 100 }}>
+                                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', display: 'block', marginBottom: 4 }}>Score (%)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min={0}
+                                                        max={100}
+                                                        value={newScoreValue}
+                                                        onChange={e => setNewScoreValue(e.target.value)}
+                                                        placeholder="0-100"
+                                                        style={{ fontSize: 13, padding: '6px 8px', height: 34 }}
+                                                    />
+                                                </div>
+                                                <button
+                                                    className="btn btn-primary btn-sm"
+                                                    style={{ height: 34, fontSize: 12 }}
+                                                    disabled={!newScoreAnalyst || !newScoreValue}
+                                                    onClick={async () => {
+                                                        const val = parseInt(newScoreValue);
+                                                        if (isNaN(val) || val < 0 || val > 100) return;
+                                                        const result = await addScore(c.id, 'analyst', val, newScoreAnalyst);
+                                                        if (result) {
+                                                            setScores(prev => [result, ...prev]);
+                                                            setNewScoreAnalyst('');
+                                                            setNewScoreValue('');
+                                                            setShowAddScore(false);
+                                                        }
+                                                    }}
+                                                >
+                                                    Add
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Score List */}
+                                        {scores.length === 0 && !showAddScore && (
+                                            <div style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: 12 }}>
+                                                No scores yet. Analyze the deck to get an AI score, or add analyst scores manually.
+                                            </div>
+                                        )}
+                                        {scores.length > 0 && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                {scores.map(s => {
+                                                    const scorer = s.scorerType === 'ai' ? null : getUserById(s.scorerId || '');
+                                                    const color = s.score >= 70 ? '#10b981' : s.score >= 40 ? '#f59e0b' : '#ef4444';
+                                                    return (
+                                                        <div key={s.id} style={{
+                                                            display: 'flex', alignItems: 'center', gap: 10,
+                                                            padding: '8px 12px', background: 'var(--bg-secondary)',
+                                                            borderRadius: 8, border: '1px solid var(--border)',
+                                                        }}>
+                                                            <div style={{
+                                                                width: 32, height: 32, borderRadius: '50%',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                fontSize: 11, fontWeight: 700, color: '#fff',
+                                                                background: s.scorerType === 'ai' ? '#8b5cf6' : 'var(--primary)',
+                                                                flexShrink: 0,
+                                                            }}>
+                                                                {s.scorerType === 'ai' ? 'AI' : scorer?.name.split(' ').map(n => n[0]).join('') || '?'}
+                                                            </div>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                                                    {s.scorerType === 'ai' ? 'AI Confidence Score' : scorer?.name || 'Unknown Analyst'}
+                                                                </div>
+                                                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                                                                    {new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                                </div>
+                                                            </div>
+                                                            {/* Score bar */}
+                                                            <div style={{ width: 80, marginRight: 8 }}>
+                                                                <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+                                                                    <div style={{ width: `${s.score}%`, height: '100%', borderRadius: 3, background: color, transition: 'width 0.3s' }} />
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ fontSize: 16, fontWeight: 700, color, minWidth: 40, textAlign: 'right' }}>
+                                                                {s.score}%
+                                                            </div>
+                                                            <button
+                                                                className="btn btn-ghost btn-sm"
+                                                                onClick={async () => {
+                                                                    await deleteScore(s.id);
+                                                                    setScores(prev => prev.filter(sc => sc.id !== s.id));
+                                                                }}
+                                                                style={{ padding: 4, minWidth: 'auto', opacity: 0.4 }}
+                                                                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                                                                onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                                                                title="Delete score"
+                                                            >
+                                                                <X size={14} style={{ color: '#ef4444' }} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
 
                                     <div className="ai-card" style={{ marginBottom: 16 }}>
                                         <div className="ai-card-header">

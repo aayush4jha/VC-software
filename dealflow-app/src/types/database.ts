@@ -280,6 +280,15 @@ export interface IngestedEmail {
   createdAt: string;
 }
 
+export interface CompanyScore {
+  id: string;
+  companyId: string;
+  scorerType: 'ai' | 'analyst';
+  scorerId: string | null;  // user ID for analyst, null for AI
+  score: number;            // percentage 0-100
+  createdAt: string;
+}
+
 export interface EmailLog {
   id: string;
   companyId: string | null;
