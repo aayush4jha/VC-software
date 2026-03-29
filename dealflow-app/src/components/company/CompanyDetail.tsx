@@ -64,6 +64,9 @@ export default function CompanyDetail() {
     const [generatingBrief, setGeneratingBrief] = useState(false);
     const [generatingMemo, setGeneratingMemo] = useState(false);
 
+    // Refs (must be before any conditional returns)
+    const deckFileRef = useRef<HTMLInputElement>(null);
+
     useEffect(() => {
         if (selectedCompany) {
             fetchComments(selectedCompany.id).then(setComments);
@@ -194,8 +197,6 @@ export default function CompanyDetail() {
         await generateAISummary(c.id);
         setGeneratingSummary(false);
     };
-
-    const deckFileRef = useRef<HTMLInputElement>(null);
 
     const handleAnalyzeDeck = async (file?: File) => {
         setAnalyzingDeck(true);
