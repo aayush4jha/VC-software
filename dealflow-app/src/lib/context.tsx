@@ -197,7 +197,7 @@ interface AppContextType {
     createCompany: (data: Record<string, unknown>) => Promise<Company | null>;
     updateCompany: (id: string, data: Record<string, unknown>) => Promise<void>;
     deleteCompany: (id: string) => Promise<void>;
-    moveCompanyStage: (companyId: string, targetStageId: string) => Promise<void>;
+    moveCompanyStage: (companyId: string, targetStageId: string) => Promise<string | null>;
     assignAnalyst: (companyId: string, analystId: string | null) => Promise<void>;
     addComment: (companyId: string, text: string) => Promise<Comment | null>;
     rejectCompany: (companyId: string, reasons: { categoryId: string; subReasonIds: string[] }[], commMethod: string, emailDraft?: string, recipientEmail?: string) => Promise<void>;
@@ -209,7 +209,7 @@ interface AppContextType {
 
     // AI generation mutations
     generateAISummary: (companyId: string) => Promise<void>;
-    generateDeckAnalysis: (companyId: string) => Promise<void>;
+    generateDeckAnalysis: (companyId: string, uploadedFile?: { data: string; mimeType: string; filename: string } | null) => Promise<void>;
     generateFilterBrief: (companyId: string) => Promise<void>;
     generateICMemo: (companyId: string) => Promise<void>;
 
@@ -726,12 +726,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCompanies(prev => prev.filter(c => c.id !== id));
     }, [apiDb]);
 
-    const moveCompanyStage = useCallback(async (companyId: string, targetStageId: string) => {
-        if (!user) return;
+    const moveCompanyStage = useCallback(async (companyId: string, targetStageId: string): Promise<string | null> => {
+        if (!user) return null;
         const company = companies.find(c => c.id === companyId);
-        if (!company) return;
+        if (!company) return null;
         const fromStageId = company.pipelineStageId;
         const toStage = pipelineStages.find(s => s.id === targetStageId);
+
+        // ─── Stage gate: Filter Discussion requires all key fields ───
+        if (toStage?.name?.toLowerCase().includes('filter')) {
+            const missing: string[] = [];
+            if (!company.founderName) missing.push('Founder Name');
+            if (!company.analystId) missing.push('Analyst');
+            if (!company.founderEmail) missing.push('Founder Email');
+            if (!company.companyRound) missing.push('Company Round');
+            if (!company.priorityLevel) missing.push('Priority Level');
+            if (!company.industryId) missing.push('Industry');
+            if (!company.subIndustry) missing.push('Sub-Industry');
+            if (!company.dealSourceType) missing.push('Deal Source Type');
+            if (!company.dealSourceNameId) missing.push('Deal Source Name');
+            if (!company.totalFundRaise) missing.push('Total Fund Raise');
+            if (!company.valuation) missing.push('Valuation');
+            if (!company.shareType) missing.push('Share Type');
+            if (!company.deckAnalysis) missing.push('Deck Analysis (run Analyze Deck first)');
+            if (missing.length > 0) {
+                return `Cannot move to ${toStage.name}. Missing required fields:\n\n• ${missing.join('\n• ')}`;
+            }
+        }
 
         await apiDb({ table: 'companies', operation: 'update', data: { pipeline_stage_id: targetStageId }, match: { id: companyId } });
         setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, pipelineStageId: targetStageId } : c));
@@ -756,6 +777,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 },
             });
         }
+        return null;
     }, [apiDb, user, companies, pipelineStages]);
 
     const assignAnalyst = useCallback(async (companyId: string, analystId: string | null) => {
@@ -988,7 +1010,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await apiDb({ table: 'companies', operation: 'update', data: { quick_summary: summary }, match: { id: companyId } });
     }, [apiDb, companies, industries]);
 
-    const generateDeckAnalysis = useCallback(async (companyId: string) => {
+    const generateDeckAnalysis = useCallback(async (companyId: string, uploadedFile?: { data: string; mimeType: string; filename: string } | null) => {
         const company = companies.find(c => c.id === companyId);
         if (!company) return;
         const ind = industries.find(i => i.id === company.industryId);
@@ -1002,6 +1024,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 companyRound: company.companyRound, totalFundRaise: company.totalFundRaise,
                 valuation: company.valuation, quickSummary: company.quickSummary,
                 googleDriveLink: company.googleDriveLink,
+                ...(uploadedFile ? { uploadedFile } : {}),
             }),
         });
         if (!res.ok) {

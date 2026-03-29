@@ -377,7 +377,7 @@ export default function KanbanBoard() {
         return true;
     });
 
-    const handleDragEnd = (result: DropResult) => {
+    const handleDragEnd = async (result: DropResult) => {
         const { destination, source, draggableId } = result;
 
         // Dropped outside a droppable area
@@ -388,7 +388,8 @@ export default function KanbanBoard() {
 
         // If the card moved to a different column, update the stage
         if (destination.droppableId !== source.droppableId) {
-            moveCompanyStage(draggableId, destination.droppableId);
+            const error = await moveCompanyStage(draggableId, destination.droppableId);
+            if (error) alert(error);
         }
     };
 

@@ -86,13 +86,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
 
-    const { companyId, companyName, founderName, industry, subIndustry, companyRound, totalFundRaise, valuation, quickSummary, googleDriveLink } = await request.json();
+    const { companyId, companyName, founderName, industry, subIndustry, companyRound, totalFundRaise, valuation, quickSummary, googleDriveLink, uploadedFile } = await request.json();
 
     // ─── Try to fetch the actual pitch deck attachment from Gmail ───
     let attachmentParts: GeminiPart[] = [];
     let attachmentInfo = '';
 
-    if (companyId) {
+    // If a file was manually uploaded, use it directly
+    if (uploadedFile && uploadedFile.data && uploadedFile.mimeType) {
+        attachmentParts.push({ inlineData: { mimeType: uploadedFile.mimeType, data: uploadedFile.data } });
+        attachmentInfo = `\nManually uploaded file: ${uploadedFile.filename || 'pitch-deck'} (${uploadedFile.mimeType})`;
+    }
+
+    if (companyId && attachmentParts.length === 0) {
         try {
             const user = await getRouteUser(request);
             if (user) {

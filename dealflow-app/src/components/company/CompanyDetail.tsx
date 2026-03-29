@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock,
     AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
@@ -168,7 +168,8 @@ export default function CompanyDetail() {
 
     const handleMoveStage = async (targetStageId: string) => {
         setShowMoveStageDropdown(false);
-        await moveCompanyStage(c.id, targetStageId);
+        const error = await moveCompanyStage(c.id, targetStageId);
+        if (error) alert(error);
     };
 
     // Terminal status handlers
@@ -194,15 +195,24 @@ export default function CompanyDetail() {
         setGeneratingSummary(false);
     };
 
-    const handleAnalyzeDeck = async () => {
+    const deckFileRef = useRef<HTMLInputElement>(null);
+
+    const handleAnalyzeDeck = async (file?: File) => {
         setAnalyzingDeck(true);
         setActiveTab('ai');
         try {
-            await generateDeckAnalysis(c.id);
+            let uploadedFile = null;
+            if (file) {
+                const buffer = await file.arrayBuffer();
+                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                uploadedFile = { data: base64, mimeType: file.type || 'application/pdf', filename: file.name };
+            }
+            await generateDeckAnalysis(c.id, uploadedFile);
         } catch (err) {
             alert('Analysis failed: ' + (err as Error).message);
         }
         setAnalyzingDeck(false);
+        if (deckFileRef.current) deckFileRef.current.value = '';
     };
 
     const handleGenerateBrief = async () => {
@@ -752,15 +762,35 @@ export default function CompanyDetail() {
 
                     {activeTab === 'ai' && (
                         <div>
-                            {/* Analyze Button — always visible */}
+                            {/* Analyze Button + Upload — always visible */}
                             {!analyzingDeck && (
                                 <div style={{ marginBottom: 20 }}>
-                                    <button className="btn btn-primary" onClick={handleAnalyzeDeck} disabled={analyzingDeck} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <FileSearch size={14} /> {c.deckAnalysis ? 'Re-analyze' : 'Analyze Deck / Summary'}
-                                    </button>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <button className="btn btn-primary" onClick={() => handleAnalyzeDeck()} disabled={analyzingDeck} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <FileSearch size={14} /> {c.deckAnalysis ? 'Re-analyze' : 'Analyze Deck / Summary'}
+                                        </button>
+                                        <input
+                                            ref={deckFileRef}
+                                            type="file"
+                                            accept=".pdf,.pptx,.ppt"
+                                            style={{ display: 'none' }}
+                                            onChange={e => {
+                                                const file = e.target.files?.[0];
+                                                if (file) handleAnalyzeDeck(file);
+                                            }}
+                                        />
+                                        <button
+                                            className="btn btn-ghost"
+                                            onClick={() => deckFileRef.current?.click()}
+                                            disabled={analyzingDeck}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                                        >
+                                            <FileText size={14} /> Upload Deck
+                                        </button>
+                                    </div>
                                     {!c.deckAnalysis && (
                                         <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                                            Generates a comprehensive investment analysis report using AI based on the pitch email and company data.
+                                            Analyze from the pitch email, or manually upload a PDF/PPTX deck for AI analysis.
                                         </p>
                                     )}
                                 </div>
@@ -991,7 +1021,7 @@ export default function CompanyDetail() {
                                                 >
                                                     <FileDown size={12} /> DOCX
                                                 </button>
-                                                <button className="btn btn-ghost btn-sm" onClick={handleAnalyzeDeck} disabled={analyzingDeck} style={{ fontSize: 11 }}>
+                                                <button className="btn btn-ghost btn-sm" onClick={() => handleAnalyzeDeck()} disabled={analyzingDeck} style={{ fontSize: 11 }}>
                                                     Re-analyze
                                                 </button>
                                             </div>
@@ -1294,7 +1324,7 @@ export default function CompanyDetail() {
                     {/* Analyze Deck */}
                     <button
                         className="btn btn-sm"
-                        onClick={handleAnalyzeDeck}
+                        onClick={() => handleAnalyzeDeck()}
                         disabled={analyzingDeck}
                         style={{
                             background: 'var(--primary)', color: '#fff',
