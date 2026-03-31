@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText } from 'lucide-react';
+import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText, Clock } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { Company, PipelineStage, RejectionRecord } from '@/types/database';
@@ -14,6 +14,34 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
     const analyst = company.analystId ? getUserById(company.analystId) : null;
     const industry = getIndustryById(company.industryId);
     const days = getDaysInPipeline(company.createdAt);
+
+    // Stage deadline countdown
+    const stageDeadline = company.stageDeadlines?.[company.pipelineStageId];
+    let deadlineLabel = '';
+    let deadlineColor = '';
+    if (stageDeadline) {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const dl = new Date(stageDeadline);
+        dl.setHours(0, 0, 0, 0);
+        const diffDays = Math.ceil((dl.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays < 0) {
+            deadlineLabel = `Overdue by ${Math.abs(diffDays)}d`;
+            deadlineColor = '#ef4444';
+        } else if (diffDays === 0) {
+            deadlineLabel = 'Last day to escalate';
+            deadlineColor = '#ef4444';
+        } else if (diffDays === 1) {
+            deadlineLabel = '1 day remaining';
+            deadlineColor = '#f59e0b';
+        } else if (diffDays <= 3) {
+            deadlineLabel = `${diffDays} days remaining`;
+            deadlineColor = '#f59e0b';
+        } else {
+            deadlineLabel = `${diffDays} days remaining`;
+            deadlineColor = '#10b981';
+        }
+    }
 
     const handleEdit = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -79,6 +107,19 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                         opacity: snapshot.isDragging ? 0.9 : 1,
                     }}
                 >
+                    {deadlineLabel && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            fontSize: 10, fontWeight: 600,
+                            color: deadlineColor,
+                            background: `${deadlineColor}15`,
+                            padding: '3px 8px',
+                            borderRadius: 4,
+                            marginBottom: 4,
+                        }}>
+                            <Clock size={10} /> {deadlineLabel}
+                        </div>
+                    )}
                     {company.needsReview && (
                         <div style={{
                             display: 'flex', alignItems: 'center', gap: 4,

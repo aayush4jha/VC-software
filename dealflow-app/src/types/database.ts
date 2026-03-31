@@ -140,6 +140,7 @@ export interface Company {
   updatedAt: string;
   slaDeadline: string | null;
   isOverdue: boolean;
+  stageDeadlines: Record<string, string>; // { stageId: ISO date }
   needsReview: boolean;
   ingestionSource: string | null;
   // AI fields

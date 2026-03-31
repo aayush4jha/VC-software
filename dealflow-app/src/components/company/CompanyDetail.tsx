@@ -697,18 +697,58 @@ export default function CompanyDetail() {
                                 </div>
                             </div>
 
-                            {/* SLA */}
+                            {/* Stage Deadlines */}
                             <div style={{ marginTop: 20, padding: 16, background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>SLA Deadline</div>
-                                        <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>
-                                            {c.slaDeadline ? new Date(c.slaDeadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'}
-                                        </div>
-                                    </div>
-                                    <div className={`sla-indicator ${c.isOverdue ? 'overdue' : days > 20 ? 'at-risk' : 'on-track'}`}>
-                                        {c.isOverdue ? <><AlertTriangle size={14} /> Overdue</> : days > 20 ? '⚠ At Risk' : '✓ On Track'}
-                                    </div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+                                    Stage Deadlines
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {pipelineStages.map(s => {
+                                        const dl = c.stageDeadlines?.[s.id];
+                                        const isCurrent = c.pipelineStageId === s.id;
+                                        let countdown = '';
+                                        let countdownColor = '';
+                                        if (dl) {
+                                            const now = new Date();
+                                            now.setHours(0, 0, 0, 0);
+                                            const deadline = new Date(dl);
+                                            deadline.setHours(0, 0, 0, 0);
+                                            const diff = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                            if (diff < 0) { countdown = `Overdue by ${Math.abs(diff)}d`; countdownColor = '#ef4444'; }
+                                            else if (diff === 0) { countdown = 'Last day'; countdownColor = '#ef4444'; }
+                                            else if (diff === 1) { countdown = '1 day left'; countdownColor = '#f59e0b'; }
+                                            else if (diff <= 3) { countdown = `${diff} days left`; countdownColor = '#f59e0b'; }
+                                            else { countdown = `${diff} days left`; countdownColor = '#10b981'; }
+                                        }
+                                        return (
+                                            <div key={s.id} style={{
+                                                display: 'flex', alignItems: 'center', gap: 8,
+                                                padding: '6px 10px', borderRadius: 6,
+                                                background: isCurrent ? 'rgba(99,102,241,0.08)' : 'transparent',
+                                                border: isCurrent ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent',
+                                            }}>
+                                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                                                <span style={{ fontSize: 12, fontWeight: isCurrent ? 600 : 400, flex: 1, color: isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                                                    {s.name}
+                                                </span>
+                                                {countdown && (
+                                                    <span style={{ fontSize: 11, fontWeight: 600, color: countdownColor, whiteSpace: 'nowrap' }}>
+                                                        {countdown}
+                                                    </span>
+                                                )}
+                                                <input
+                                                    type="date"
+                                                    value={dl ? dl.split('T')[0] : ''}
+                                                    onChange={async (e) => {
+                                                        const newDeadlines = { ...(c.stageDeadlines || {}), [s.id]: e.target.value || undefined };
+                                                        if (!e.target.value) delete newDeadlines[s.id];
+                                                        await updateCompany(c.id, { stageDeadlines: newDeadlines });
+                                                    }}
+                                                    style={{ fontSize: 11, padding: '2px 6px', height: 26, width: 120, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                                />
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
