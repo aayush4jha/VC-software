@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText, Clock } from 'lucide-react';
+import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText, Clock, Flag } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { Company, PipelineStage, RejectionRecord } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 function CompanyKanbanCard({ company, index }: { company: Company; index: number }) {
-    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany, setTerminalStatus, deckEmailLinks } = useAppContext();
+    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany, setTerminalStatus, deckEmailLinks, updateCompany } = useAppContext();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showPortfolioConfirm, setShowPortfolioConfirm] = useState(false);
     const analyst = company.analystId ? getUserById(company.analystId) : null;
@@ -93,6 +93,14 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
         setShowDeleteConfirm(false);
     };
 
+    const handleTogglePriority = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const newPriority = company.priorityLevel === 'High' ? 'Medium' : 'High';
+        await updateCompany(company.id, { priorityLevel: newPriority });
+    };
+
+    const isHighPriority = company.priorityLevel === 'High';
+
     return (
         <Draggable draggableId={company.id} index={index}>
             {(provided, snapshot) => (
@@ -100,14 +108,36 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                     ref={provided.innerRef}
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
-                    className={`kanban-card ${company.priorityLevel === 'High' ? 'high-priority' : ''} ${company.isOverdue ? 'overdue' : ''} ${company.needsReview ? 'needs-review' : ''}`}
+                    className={`kanban-card ${isHighPriority ? 'high-priority' : ''} ${company.isOverdue ? 'overdue' : ''} ${company.needsReview ? 'needs-review' : ''}`}
                     onClick={() => setSelectedCompany(company)}
                     style={{
                         ...provided.draggableProps.style,
                         opacity: snapshot.isDragging ? 0.9 : 1,
                     }}
                 >
-                    {deadlineLabel && (
+                    {isHighPriority && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            fontSize: 10, fontWeight: 700,
+                            color: '#ef4444',
+                            background: 'rgba(239,68,68,0.08)',
+                            padding: '3px 8px',
+                            borderRadius: 4,
+                            marginBottom: 4,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                        }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Flag size={10} /> Priority
+                            </span>
+                            {deadlineLabel && (
+                                <span style={{ color: deadlineColor, fontWeight: 600 }}>
+                                    {deadlineLabel}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                    {!isHighPriority && deadlineLabel && (
                         <div style={{
                             display: 'flex', alignItems: 'center', gap: 4,
                             fontSize: 10, fontWeight: 600,
@@ -136,6 +166,14 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                     <div className="kanban-card-header">
                         <span className="kanban-card-name">{company.companyName}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button
+                                className="kanban-card-edit-btn"
+                                onClick={handleTogglePriority}
+                                title={isHighPriority ? 'Remove priority' : 'Set high priority'}
+                                style={{ color: isHighPriority ? '#ef4444' : undefined }}
+                            >
+                                <Flag size={12} />
+                            </button>
                             <button
                                 className="kanban-card-edit-btn"
                                 onClick={handleEdit}
@@ -441,7 +479,14 @@ export default function KanbanBoard() {
         <DragDropContext onDragEnd={handleDragEnd}>
             <div className="kanban-board">
                 {pipelineStages.filter(stage => stageFilter.length === 0 || stageFilter.includes(stage.id)).map((stage) => {
-                    const stageCompanies = filteredCompanies.filter(c => c.pipelineStageId === stage.id);
+                    const stageCompanies = filteredCompanies
+                        .filter(c => c.pipelineStageId === stage.id)
+                        .sort((a, b) => {
+                            // High priority companies pinned to top
+                            if (a.priorityLevel === 'High' && b.priorityLevel !== 'High') return -1;
+                            if (a.priorityLevel !== 'High' && b.priorityLevel === 'High') return 1;
+                            return 0;
+                        });
                     return (
                         <div key={stage.id} className="kanban-column">
                             <div className="kanban-column-header">
