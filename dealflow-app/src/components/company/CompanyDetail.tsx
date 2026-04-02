@@ -31,6 +31,7 @@ export default function CompanyDetail() {
         rejectionRecords, rejectionReasonCategories,
         deckEmailLinks,
         fetchScores, addScore, deleteScore,
+        analyzeMeetingRecording,
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('overview');
@@ -63,9 +64,11 @@ export default function CompanyDetail() {
     const [analyzingDeck, setAnalyzingDeck] = useState(false);
     const [generatingBrief, setGeneratingBrief] = useState(false);
     const [generatingMemo, setGeneratingMemo] = useState(false);
+    const [analyzingRecording, setAnalyzingRecording] = useState(false);
 
     // Refs (must be before any conditional returns)
     const deckFileRef = useRef<HTMLInputElement>(null);
+    const recordingFileRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (selectedCompany) {
@@ -1158,12 +1161,56 @@ export default function CompanyDetail() {
 
                     {activeTab === 'calls' && (
                         <div>
+                            {/* Upload Recording */}
+                            <div style={{ marginBottom: 20 }}>
+                                <input
+                                    ref={recordingFileRef}
+                                    type="file"
+                                    accept="video/*,audio/*"
+                                    style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        setAnalyzingRecording(true);
+                                        try {
+                                            const buffer = await file.arrayBuffer();
+                                            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                                            await analyzeMeetingRecording(c.id, { data: base64, mimeType: file.type, filename: file.name });
+                                        } catch (err) {
+                                            alert('Analysis failed: ' + (err as Error).message);
+                                        }
+                                        setAnalyzingRecording(false);
+                                        if (recordingFileRef.current) recordingFileRef.current.value = '';
+                                    }}
+                                />
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={() => recordingFileRef.current?.click()}
+                                    disabled={analyzingRecording}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    {analyzingRecording ? <><Loader2 size={14} className="spin" /> Analyzing Recording...</> : <><Phone size={14} /> Upload Meeting Recording</>}
+                                </button>
+                                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                                    Upload a video or audio recording. AI will transcribe, analyze facial expressions, and extract key insights.
+                                </p>
+                            </div>
+
+                            {/* Loading state */}
+                            {analyzingRecording && (
+                                <div className="ai-card" style={{ marginBottom: 16, textAlign: 'center', padding: 40 }}>
+                                    <Loader2 size={24} className="spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                                    <div style={{ fontSize: 14, fontWeight: 600 }}>Analyzing Meeting Recording...</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>Transcribing, analyzing expressions, and extracting insights. This may take 30-60 seconds.</div>
+                                </div>
+                            )}
+
                             {c.callTranscript ? (
                                 <div>
                                     <div className="card" style={{ marginBottom: 16 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                                             <div>
-                                                <div style={{ fontSize: 15, fontWeight: 700 }}>Intro Call Recording</div>
+                                                <div style={{ fontSize: 15, fontWeight: 700 }}>Meeting Recording Analysis</div>
                                                 <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                                                     {c.callTranscript.date} • {c.callTranscript.duration} • {c.callTranscript.platform}
                                                 </div>
@@ -1176,44 +1223,107 @@ export default function CompanyDetail() {
                                         </div>
                                     </div>
 
-                                    <div className="ai-card">
+                                    {/* Sentiment Summary */}
+                                    {c.callTranscript.sentimentSummary && (
+                                        <div style={{
+                                            padding: '12px 16px', borderRadius: 8, marginBottom: 16,
+                                            background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+                                        }}>
+                                            <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--primary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                Overall Sentiment
+                                            </div>
+                                            <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
+                                                {c.callTranscript.sentimentSummary}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Facial / Behavioral Analysis */}
+                                    {c.callTranscript.facialAnalysis && (
+                                        <div className="ai-card" style={{ marginBottom: 16 }}>
+                                            <div className="ai-card-header">
+                                                <div className="ai-card-icon"><Sparkles size={14} /></div>
+                                                <span className="ai-card-title">Expression & Behavior Analysis</span>
+                                            </div>
+                                            <div className="ai-card-body">
+                                                <div style={{ fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                                                    {c.callTranscript.facialAnalysis}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Participant Behavior */}
+                                    {c.callTranscript.participantBehavior && c.callTranscript.participantBehavior.length > 0 && (
+                                        <div className="ai-card" style={{ marginBottom: 16 }}>
+                                            <div className="ai-card-header">
+                                                <div className="ai-card-icon"><Sparkles size={14} /></div>
+                                                <span className="ai-card-title">Participant Assessment</span>
+                                            </div>
+                                            <div className="ai-card-body">
+                                                {c.callTranscript.participantBehavior.map((p, i) => (
+                                                    <div key={i} style={{ padding: '8px 0', borderBottom: i < c.callTranscript!.participantBehavior!.length - 1 ? '1px solid var(--border-light)' : 'none', fontSize: 13, lineHeight: 1.6 }}>
+                                                        {p}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Key Points & Action Items */}
+                                    <div className="ai-card" style={{ marginBottom: 16 }}>
                                         <div className="ai-card-header">
                                             <div className="ai-card-icon"><Sparkles size={14} /></div>
-                                            <span className="ai-card-title">Call Transcript Analysis</span>
+                                            <span className="ai-card-title">Key Insights</span>
                                         </div>
                                         <div className="ai-card-body">
-                                            <div className="ai-section">
-                                                <div className="ai-section-title">Key Points</div>
-                                                <ul className="ai-list">
-                                                    {c.callTranscript.keyPoints.map((p, i) => <li key={i}>{p}</li>)}
-                                                </ul>
-                                            </div>
-                                            <div className="ai-section">
-                                                <div className="ai-section-title">Action Items</div>
-                                                <ul className="ai-list">
-                                                    {c.callTranscript.actionItems.map((a, i) => <li key={i}>{a}</li>)}
-                                                </ul>
-                                            </div>
-                                            <div className="ai-section">
-                                                <div className="ai-section-title">Concerns</div>
-                                                <ul className="ai-list">
-                                                    {c.callTranscript.concerns.map((cc, i) => <li key={i}>{cc}</li>)}
-                                                </ul>
-                                            </div>
-                                            <div className="ai-section">
-                                                <div className="ai-section-title">Red Flags</div>
-                                                <ul className="ai-list red-flags">
-                                                    {c.callTranscript.redFlags.map((f, i) => <li key={i}>{f}</li>)}
-                                                </ul>
-                                            </div>
+                                            {c.callTranscript.keyPoints.length > 0 && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title">Key Points</div>
+                                                    <ul className="ai-list">{c.callTranscript.keyPoints.map((p, i) => <li key={i}>{p}</li>)}</ul>
+                                                </div>
+                                            )}
+                                            {c.callTranscript.actionItems.length > 0 && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title">Action Items</div>
+                                                    <ul className="ai-list">{c.callTranscript.actionItems.map((a, i) => <li key={i}>{a}</li>)}</ul>
+                                                </div>
+                                            )}
+                                            {c.callTranscript.concerns.length > 0 && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title">Concerns</div>
+                                                    <ul className="ai-list">{c.callTranscript.concerns.map((cc, i) => <li key={i}>{cc}</li>)}</ul>
+                                                </div>
+                                            )}
+                                            {c.callTranscript.redFlags.length > 0 && (
+                                                <div className="ai-section">
+                                                    <div className="ai-section-title">Red Flags</div>
+                                                    <ul className="ai-list red-flags">{c.callTranscript.redFlags.map((f, i) => <li key={i}>{f}</li>)}</ul>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
+
+                                    {/* Full Transcript */}
+                                    {c.callTranscript.transcript && (
+                                        <div className="ai-card">
+                                            <div className="ai-card-header">
+                                                <div className="ai-card-icon"><FileText size={14} /></div>
+                                                <span className="ai-card-title">Full Transcript</span>
+                                            </div>
+                                            <div className="ai-card-body">
+                                                <div style={{ fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap', fontFamily: 'var(--font-sans)', maxHeight: 500, overflowY: 'auto' }}>
+                                                    {c.callTranscript.transcript}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            ) : (
+                            ) : !analyzingRecording && (
                                 <div className="empty-state">
                                     <div className="empty-state-icon"><Calendar size={24} /></div>
                                     <div className="empty-state-title">No Call Records</div>
-                                    <div className="empty-state-text">Call recordings and transcripts will appear here after the Intro Call stage</div>
+                                    <div className="empty-state-text">Upload a meeting recording above to get AI-powered transcription, facial expression analysis, and key insights.</div>
                                 </div>
                             )}
                         </div>

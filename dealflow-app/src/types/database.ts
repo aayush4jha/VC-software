@@ -217,6 +217,11 @@ export interface CallTranscript {
   actionItems: string[];
   concerns: string[];
   redFlags: string[];
+  // Full transcript and analysis
+  transcript?: string;
+  facialAnalysis?: string;
+  sentimentSummary?: string;
+  participantBehavior?: string[];
 }
 
 export interface Comment {

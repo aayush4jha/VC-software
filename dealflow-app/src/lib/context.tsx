@@ -213,6 +213,7 @@ interface AppContextType {
     generateDeckAnalysis: (companyId: string, uploadedFile?: { data: string; mimeType: string; filename: string } | null) => Promise<void>;
     generateFilterBrief: (companyId: string) => Promise<void>;
     generateICMemo: (companyId: string) => Promise<void>;
+    analyzeMeetingRecording: (companyId: string, file: { data: string; mimeType: string; filename: string }) => Promise<void>;
 
     // Saved views CRUD
     fetchSavedViews: () => Promise<void>;
@@ -1087,6 +1088,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await apiDb({ table: 'companies', operation: 'update', data: { ic_memo: memo }, match: { id: companyId } });
     }, [apiDb, companies, industries]);
 
+    const analyzeMeetingRecording = useCallback(async (companyId: string, file: { data: string; mimeType: string; filename: string }) => {
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+        const res = await fetch('/api/ai/meeting-analysis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyName: company.companyName,
+                founderName: company.founderName,
+                fileData: file.data,
+                fileMimeType: file.mimeType,
+                fileName: file.filename,
+            }),
+        });
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Meeting analysis failed (${res.status}): ${errText.slice(0, 200)}`);
+        }
+        const { analysis } = await res.json();
+        const callTranscript = {
+            recordingUrl: '',
+            date: new Date().toISOString().split('T')[0],
+            duration: analysis.duration || 'Unknown',
+            platform: 'Google Meet',
+            keyPoints: analysis.keyPoints || [],
+            actionItems: analysis.actionItems || [],
+            concerns: analysis.concerns || [],
+            redFlags: analysis.redFlags || [],
+            transcript: analysis.transcript || '',
+            facialAnalysis: analysis.facialAnalysis || '',
+            sentimentSummary: analysis.sentimentSummary || '',
+            participantBehavior: analysis.participantBehavior || [],
+        };
+        await apiDb({ table: 'companies', operation: 'update', data: { call_transcript: callTranscript }, match: { id: companyId } });
+        const updated = { ...company, callTranscript };
+        setCompanies(prev => prev.map(c => c.id === companyId ? updated : c));
+        setSelectedCompany(updated);
+    }, [apiDb, companies, setSelectedCompany]);
+
     // ─── Saved Views CRUD ───────────────────────────
 
     const fetchSavedViews = useCallback(async () => {
@@ -1354,7 +1394,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,
-        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
+        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo, analyzeMeetingRecording,
         fetchSavedViews, saveSavedView, deleteSavedView,
         addPipelineStage, updatePipelineStage, deletePipelineStage,
         addIndustry, updateIndustry, deleteIndustry,
@@ -1385,7 +1425,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,
-        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
+        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo, analyzeMeetingRecording,
         fetchSavedViews, saveSavedView, deleteSavedView,
         addPipelineStage, updatePipelineStage, deletePipelineStage,
         addIndustry, updateIndustry, deleteIndustry,
