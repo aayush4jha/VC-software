@@ -214,6 +214,7 @@ interface AppContextType {
     generateFilterBrief: (companyId: string) => Promise<void>;
     generateICMemo: (companyId: string) => Promise<void>;
     analyzeMeetingRecording: (companyId: string, file: { data: string; mimeType: string; filename: string }) => Promise<void>;
+    fetchAndAnalyzeMeetingRecording: (companyId: string) => Promise<void>;
 
     // Saved views CRUD
     fetchSavedViews: () => Promise<void>;
@@ -1127,6 +1128,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSelectedCompany(updated);
     }, [apiDb, companies, setSelectedCompany]);
 
+    const fetchAndAnalyzeMeetingRecording = useCallback(async (companyId: string) => {
+        const company = companies.find(c => c.id === companyId);
+        if (!company) return;
+        const res = await fetch('/api/ai/fetch-meeting-recording', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyName: company.companyName,
+                founderName: company.founderName,
+            }),
+        });
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Failed (${res.status}): ${errText.slice(0, 200)}`);
+        }
+        const data = await res.json();
+        if (!data.found) {
+            throw new Error(data.error || 'No recording found in Google Drive.');
+        }
+        const callTranscript = {
+            recordingUrl: '',
+            date: new Date().toISOString().split('T')[0],
+            duration: data.analysis.duration || 'Unknown',
+            platform: 'Google Meet',
+            keyPoints: data.analysis.keyPoints || [],
+            actionItems: data.analysis.actionItems || [],
+            concerns: data.analysis.concerns || [],
+            redFlags: data.analysis.redFlags || [],
+            transcript: data.analysis.transcript || '',
+            facialAnalysis: data.analysis.facialAnalysis || '',
+            sentimentSummary: data.analysis.sentimentSummary || '',
+            participantBehavior: data.analysis.participantBehavior || [],
+        };
+        await apiDb({ table: 'companies', operation: 'update', data: { call_transcript: callTranscript }, match: { id: companyId } });
+        const updated = { ...company, callTranscript };
+        setCompanies(prev => prev.map(c => c.id === companyId ? updated : c));
+        setSelectedCompany(updated);
+    }, [apiDb, companies, setSelectedCompany]);
+
     // ─── Saved Views CRUD ───────────────────────────
 
     const fetchSavedViews = useCallback(async () => {
@@ -1394,7 +1434,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,
-        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo, analyzeMeetingRecording,
+        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo, analyzeMeetingRecording, fetchAndAnalyzeMeetingRecording,
         fetchSavedViews, saveSavedView, deleteSavedView,
         addPipelineStage, updatePipelineStage, deletePipelineStage,
         addIndustry, updateIndustry, deleteIndustry,
@@ -1425,7 +1465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,
-        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo, analyzeMeetingRecording,
+        generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo, analyzeMeetingRecording, fetchAndAnalyzeMeetingRecording,
         fetchSavedViews, saveSavedView, deleteSavedView,
         addPipelineStage, updatePipelineStage, deletePipelineStage,
         addIndustry, updateIndustry, deleteIndustry,

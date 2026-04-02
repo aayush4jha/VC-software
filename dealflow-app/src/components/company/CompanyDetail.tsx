@@ -5,7 +5,7 @@ import {
     X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock,
     AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
     XCircle, ArrowRight, Loader2, Link2, Shield, Pause, RotateCcw,
-    FileText, BarChart3, FileSearch, Briefcase, Download, FileDown,
+    FileText, BarChart3, FileSearch, Briefcase, Download, FileDown, Video,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
@@ -31,7 +31,7 @@ export default function CompanyDetail() {
         rejectionRecords, rejectionReasonCategories,
         deckEmailLinks,
         fetchScores, addScore, deleteScore,
-        analyzeMeetingRecording,
+        analyzeMeetingRecording, fetchAndAnalyzeMeetingRecording,
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('overview');
@@ -1161,38 +1161,56 @@ export default function CompanyDetail() {
 
                     {activeTab === 'calls' && (
                         <div>
-                            {/* Upload Recording */}
+                            {/* Fetch & Analyze Recording */}
                             <div style={{ marginBottom: 20 }}>
-                                <input
-                                    ref={recordingFileRef}
-                                    type="file"
-                                    accept="video/*,audio/*"
-                                    style={{ display: 'none' }}
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        setAnalyzingRecording(true);
-                                        try {
-                                            const buffer = await file.arrayBuffer();
-                                            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-                                            await analyzeMeetingRecording(c.id, { data: base64, mimeType: file.type, filename: file.name });
-                                        } catch (err) {
-                                            alert('Analysis failed: ' + (err as Error).message);
-                                        }
-                                        setAnalyzingRecording(false);
-                                        if (recordingFileRef.current) recordingFileRef.current.value = '';
-                                    }}
-                                />
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={() => recordingFileRef.current?.click()}
-                                    disabled={analyzingRecording}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                >
-                                    {analyzingRecording ? <><Loader2 size={14} className="spin" /> Analyzing Recording...</> : <><Phone size={14} /> Upload Meeting Recording</>}
-                                </button>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={async () => {
+                                            setAnalyzingRecording(true);
+                                            try {
+                                                await fetchAndAnalyzeMeetingRecording(c.id);
+                                            } catch (err) {
+                                                alert((err as Error).message);
+                                            }
+                                            setAnalyzingRecording(false);
+                                        }}
+                                        disabled={analyzingRecording}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                    >
+                                        {analyzingRecording ? <><Loader2 size={14} className="spin" /> Analyzing...</> : <><Video size={14} /> Fetch &amp; Analyze Recording</>}
+                                    </button>
+                                    <input
+                                        ref={recordingFileRef}
+                                        type="file"
+                                        accept="video/*,audio/*"
+                                        style={{ display: 'none' }}
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            setAnalyzingRecording(true);
+                                            try {
+                                                const buffer = await file.arrayBuffer();
+                                                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                                                await analyzeMeetingRecording(c.id, { data: base64, mimeType: file.type, filename: file.name });
+                                            } catch (err) {
+                                                alert('Analysis failed: ' + (err as Error).message);
+                                            }
+                                            setAnalyzingRecording(false);
+                                            if (recordingFileRef.current) recordingFileRef.current.value = '';
+                                        }}
+                                    />
+                                    <button
+                                        className="btn btn-ghost"
+                                        onClick={() => recordingFileRef.current?.click()}
+                                        disabled={analyzingRecording}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                                    >
+                                        <FileText size={14} /> Upload Manually
+                                    </button>
+                                </div>
                                 <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                                    Upload a video or audio recording. AI will transcribe, analyze facial expressions, and extract key insights.
+                                    Auto-fetches the meeting recording from Google Drive, transcribes it, analyzes facial expressions &amp; body language, and extracts key insights.
                                 </p>
                             </div>
 
@@ -1200,8 +1218,8 @@ export default function CompanyDetail() {
                             {analyzingRecording && (
                                 <div className="ai-card" style={{ marginBottom: 16, textAlign: 'center', padding: 40 }}>
                                     <Loader2 size={24} className="spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
-                                    <div style={{ fontSize: 14, fontWeight: 600 }}>Analyzing Meeting Recording...</div>
-                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>Transcribing, analyzing expressions, and extracting insights. This may take 30-60 seconds.</div>
+                                    <div style={{ fontSize: 14, fontWeight: 600 }}>Fetching &amp; Analyzing Meeting Recording...</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>Searching Google Drive, downloading recording, transcribing, and analyzing. This may take 30-60 seconds.</div>
                                 </div>
                             )}
 
