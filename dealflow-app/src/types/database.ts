@@ -151,6 +151,8 @@ export interface Company {
   filterBrief: string | null;
   icMemo: string | null;
   deckEmailLink: string | null;
+  meetEventTitle: string | null;
+  meetEventDate: string | null;
   // Portfolio-specific fields
   initialInvestment: number | null;
   entryValuation: number | null;

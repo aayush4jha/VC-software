@@ -8,7 +8,7 @@ import { useGoogleAuth } from '@/lib/useGoogleAuth';
 type SendStatus = 'idle' | 'creating' | 'success' | 'error' | 'auth-required';
 
 export default function CalendarInvite() {
-    const { showCalendarInvite, setShowCalendarInvite, selectedCompany, user } = useAppContext();
+    const { showCalendarInvite, setShowCalendarInvite, selectedCompany, user, updateCompany } = useAppContext();
     const { isConnected, isChecking, connect } = useGoogleAuth();
     const [date, setDate] = useState('2026-02-20');
     const [time, setTime] = useState('14:00');
@@ -68,6 +68,12 @@ export default function CalendarInvite() {
             setMeetLink(data.meetLink);
             setEventLink(data.eventLink);
             setStatusMessage('Calendar event created with Google Meet!');
+
+            // Save event title + date on the company so we can find the recording later
+            await updateCompany(selectedCompany.id, {
+                meetEventTitle: eventTitle,
+                meetEventDate: `${date}T${time}:00`,
+            });
         } catch {
             setSendStatus('error');
             setStatusMessage('Network error. Please try again.');

@@ -79,6 +79,8 @@ function mapCompany(r: any): Company {
         filterBrief: r.filter_brief ?? null,
         icMemo: r.ic_memo ?? null,
         deckEmailLink: r.deck_email_link ?? null,
+        meetEventTitle: r.meet_event_title ?? null,
+        meetEventDate: r.meet_event_date ?? null,
         initialInvestment: r.initial_investment ?? null,
         entryValuation: r.entry_valuation ?? null,
         entryOwnership: r.entry_ownership != null ? Number(r.entry_ownership) : null,
@@ -696,7 +698,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             valuation: 'valuation', googleDriveLink: 'google_drive_link', customTags: 'custom_tags',
             terminalStatus: 'terminal_status', slaDeadline: 'sla_deadline', isOverdue: 'is_overdue', stageDeadlines: 'stage_deadlines',
             quickSummary: 'quick_summary', deckAnalysis: 'deck_analysis', kpiData: 'kpi_data',
-            callTranscript: 'call_transcript', filterBrief: 'filter_brief', icMemo: 'ic_memo',
+            callTranscript: 'call_transcript', filterBrief: 'filter_brief', icMemo: 'ic_memo', meetEventTitle: 'meet_event_title', meetEventDate: 'meet_event_date',
             linkedPreviousEntryId: 'linked_previous_entry_id',
             needsReview: 'needs_review', ingestionSource: 'ingestion_source',
             initialInvestment: 'initial_investment', entryValuation: 'entry_valuation',
@@ -1137,6 +1139,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify({
                 companyName: company.companyName,
                 founderName: company.founderName,
+                meetEventTitle: company.meetEventTitle,
+                meetEventDate: company.meetEventDate,
             }),
         });
         if (!res.ok) {
