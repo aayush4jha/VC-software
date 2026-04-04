@@ -297,6 +297,28 @@ export interface CompanyScore {
   createdAt: string;
 }
 
+export const FEEDBACK_RATING_CATEGORIES = ['Market', 'Team', 'Product', 'Traction', 'Risk'] as const;
+export type FeedbackRatingCategory = typeof FEEDBACK_RATING_CATEGORIES[number];
+
+export const FEEDBACK_TAGS = [
+    'Strong Team', 'Weak Team', 'Large Market', 'Niche Market',
+    'High Risk', 'Low Risk', 'Follow-up Required', 'Strong Traction',
+    'No Traction', 'Good Unit Economics', 'Needs Data', 'Competitive Moat',
+    'Crowded Space', 'Capital Intensive', 'Scalable',
+] as const;
+
+export interface CompanyFeedback {
+    id: string;
+    companyId: string;
+    userId: string;
+    stageId: string;
+    ratings: Record<FeedbackRatingCategory, number>; // 1-5 for each
+    comment: string;
+    tags: string[];
+    status: 'active' | 'addressed' | 'resolved';
+    createdAt: string;
+}
+
 export interface EmailLog {
   id: string;
   companyId: string | null;

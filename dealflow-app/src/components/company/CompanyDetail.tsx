@@ -32,6 +32,7 @@ export default function CompanyDetail() {
         deckEmailLinks,
         fetchScores, addScore, deleteScore,
         analyzeMeetingRecording, fetchAndAnalyzeMeetingRecording,
+        fetchFeedback, addFeedback, updateFeedbackStatus, deleteFeedback,
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('overview');
@@ -59,6 +60,13 @@ export default function CompanyDetail() {
     const [newScoreAnalyst, setNewScoreAnalyst] = useState('');
     const [newScoreValue, setNewScoreValue] = useState('');
 
+    // Feedback state
+    const [feedbackList, setFeedbackList] = useState<import('@/types/database').CompanyFeedback[]>([]);
+    const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+    const [fbRatings, setFbRatings] = useState<Record<string, number>>({ Market: 3, Team: 3, Product: 3, Traction: 3, Risk: 3 });
+    const [fbComment, setFbComment] = useState('');
+    const [fbTags, setFbTags] = useState<string[]>([]);
+
     // AI loading states
     const [generatingSummary, setGeneratingSummary] = useState(false);
     const [analyzingDeck, setAnalyzingDeck] = useState(false);
@@ -75,6 +83,7 @@ export default function CompanyDetail() {
             fetchComments(selectedCompany.id).then(setComments);
             fetchActivity(selectedCompany.id).then(setActivities);
             fetchScores(selectedCompany.id).then(setScores);
+            fetchFeedback(selectedCompany.id).then(setFeedbackList);
         }
     }, [selectedCompany, fetchComments, fetchActivity, fetchScores]);
 
@@ -125,6 +134,7 @@ export default function CompanyDetail() {
     const tabs = [
         { id: 'overview', label: 'Overview' },
         { id: 'ai', label: 'AI Analysis' },
+        { id: 'feedback', label: `Feedback (${feedbackList.length})` },
         { id: 'calls', label: 'Calls' },
         { id: 'activity', label: 'Activity' },
         ...(c.terminalStatus === 'Rejected' ? [{ id: 'rejection', label: 'Rejection Reasons' }] : []),
@@ -175,7 +185,10 @@ export default function CompanyDetail() {
     const handleMoveStage = async (targetStageId: string) => {
         setShowMoveStageDropdown(false);
         const error = await moveCompanyStage(c.id, targetStageId);
-        if (error) alert(error);
+        if (error) { alert(error); return; }
+        // After successful stage move, prompt for feedback
+        setActiveTab('feedback');
+        setShowFeedbackForm(true);
     };
 
     // Terminal status handlers
@@ -1156,6 +1169,238 @@ export default function CompanyDetail() {
                                     <div className="empty-state-text">Click &quot;Analyze Deck / Summary&quot; above to generate a detailed AI-powered investment report</div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {activeTab === 'feedback' && (
+                        <div>
+                            {/* Add Feedback Button */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <div style={{ fontSize: 15, fontWeight: 700 }}>Feedback &amp; Evaluations</div>
+                                <button className="btn btn-primary btn-sm" onClick={() => setShowFeedbackForm(!showFeedbackForm)}>
+                                    {showFeedbackForm ? 'Cancel' : '+ Add Feedback'}
+                                </button>
+                            </div>
+
+                            {/* Add Feedback Form */}
+                            {showFeedbackForm && (
+                                <div style={{ padding: 16, background: 'var(--bg-tertiary)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 20 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Rate this company</div>
+
+                                    {/* Rating sliders */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px', marginBottom: 16 }}>
+                                        {(['Market', 'Team', 'Product', 'Traction', 'Risk'] as const).map(cat => (
+                                            <div key={cat}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                                                    <span style={{ fontWeight: 500 }}>{cat}</span>
+                                                    <span style={{ fontWeight: 700, color: fbRatings[cat] >= 4 ? '#10b981' : fbRatings[cat] >= 3 ? '#f59e0b' : '#ef4444' }}>{fbRatings[cat]}/5</span>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 4 }}>
+                                                    {[1, 2, 3, 4, 5].map(v => (
+                                                        <button
+                                                            key={v}
+                                                            onClick={() => setFbRatings(prev => ({ ...prev, [cat]: v }))}
+                                                            style={{
+                                                                flex: 1, height: 8, borderRadius: 4, border: 'none', cursor: 'pointer',
+                                                                background: v <= fbRatings[cat] ? (fbRatings[cat] >= 4 ? '#10b981' : fbRatings[cat] >= 3 ? '#f59e0b' : '#ef4444') : 'var(--border)',
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Tags */}
+                                    <div style={{ marginBottom: 12 }}>
+                                        <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Tags</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                            {(['Strong Team', 'Weak Team', 'Large Market', 'Niche Market', 'High Risk', 'Low Risk', 'Follow-up Required', 'Strong Traction', 'No Traction', 'Competitive Moat', 'Crowded Space', 'Scalable', 'Needs Data']).map(tag => (
+                                                <button
+                                                    key={tag}
+                                                    onClick={() => setFbTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                                                    style={{
+                                                        fontSize: 11, padding: '3px 8px', borderRadius: 12, border: '1px solid var(--border)', cursor: 'pointer',
+                                                        background: fbTags.includes(tag) ? 'var(--primary)' : 'var(--bg-secondary)',
+                                                        color: fbTags.includes(tag) ? '#fff' : 'var(--text-secondary)',
+                                                        fontWeight: fbTags.includes(tag) ? 600 : 400,
+                                                    }}
+                                                >
+                                                    {tag}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Comment */}
+                                    <textarea
+                                        className="form-input"
+                                        rows={3}
+                                        value={fbComment}
+                                        onChange={e => setFbComment(e.target.value)}
+                                        placeholder="Your insights, concerns, or observations..."
+                                        style={{ fontSize: 13, resize: 'vertical', marginBottom: 12 }}
+                                    />
+
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        disabled={!fbComment.trim()}
+                                        onClick={async () => {
+                                            const result = await addFeedback({
+                                                companyId: c.id, stageId: c.pipelineStageId,
+                                                ratings: fbRatings, comment: fbComment, tags: fbTags,
+                                            });
+                                            if (result) {
+                                                setFeedbackList(prev => [result, ...prev]);
+                                                setFbComment('');
+                                                setFbTags([]);
+                                                setFbRatings({ Market: 3, Team: 3, Product: 3, Traction: 3, Risk: 3 });
+                                                setShowFeedbackForm(false);
+                                            }
+                                        }}
+                                    >
+                                        Submit Feedback
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Analytics Summary */}
+                            {feedbackList.length > 0 && (
+                                <div style={{ padding: 16, background: 'var(--bg-tertiary)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 20 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>
+                                        Average Ratings ({feedbackList.length} review{feedbackList.length > 1 ? 's' : ''})
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+                                        {(['Market', 'Team', 'Product', 'Traction', 'Risk'] as const).map(cat => {
+                                            const values = feedbackList.map(f => f.ratings[cat]).filter(v => typeof v === 'number');
+                                            const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                            const color = avg >= 4 ? '#10b981' : avg >= 3 ? '#f59e0b' : '#ef4444';
+                                            return (
+                                                <div key={cat} style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: 22, fontWeight: 700, color }}>{avg.toFixed(1)}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{cat}</div>
+                                                    <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', marginTop: 6, overflow: 'hidden' }}>
+                                                        <div style={{ width: `${(avg / 5) * 100}%`, height: '100%', borderRadius: 2, background: color }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Recommendation Score */}
+                                    {(() => {
+                                        const allAvgs = (['Market', 'Team', 'Product', 'Traction'] as const).map(cat => {
+                                            const values = feedbackList.map(f => f.ratings[cat]).filter(v => typeof v === 'number');
+                                            return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                        });
+                                        const riskAvg = feedbackList.map(f => f.ratings['Risk']).filter(v => typeof v === 'number');
+                                        const riskScore = riskAvg.length > 0 ? riskAvg.reduce((a, b) => a + b, 0) / riskAvg.length : 3;
+                                        const positiveAvg = allAvgs.reduce((a, b) => a + b, 0) / allAvgs.length;
+                                        const recScore = Math.round(((positiveAvg * 0.7 + (6 - riskScore) * 0.3) / 5) * 100);
+                                        const recColor = recScore >= 70 ? '#10b981' : recScore >= 50 ? '#f59e0b' : '#ef4444';
+                                        const recLabel = recScore >= 70 ? 'INVEST' : recScore >= 50 ? 'FURTHER REVIEW' : 'PASS';
+                                        return (
+                                            <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: `${recColor}10`, border: `1px solid ${recColor}30`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <div style={{ fontSize: 12, fontWeight: 600, color: recColor }}>{recLabel}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Recommendation based on team feedback</div>
+                                                </div>
+                                                <div style={{ fontSize: 20, fontWeight: 700, color: recColor }}>{recScore}%</div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+
+                            {/* Feedback History */}
+                            {feedbackList.length === 0 && !showFeedbackForm && (
+                                <div className="empty-state">
+                                    <div className="empty-state-icon"><MessageSquare size={24} /></div>
+                                    <div className="empty-state-title">No Feedback Yet</div>
+                                    <div className="empty-state-text">Add your evaluation to start tracking opinions across the team.</div>
+                                </div>
+                            )}
+
+                            {feedbackList.map(fb => {
+                                const author = getUserById(fb.userId);
+                                const stage = getStageById(fb.stageId);
+                                return (
+                                    <div key={fb.id} style={{
+                                        padding: 14, marginBottom: 10, borderRadius: 10,
+                                        border: '1px solid var(--border)', background: 'var(--bg-secondary)',
+                                        opacity: fb.status === 'resolved' ? 0.6 : 1,
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <div className="kanban-card-avatar" style={{ width: 28, height: 28, fontSize: 10 }}>
+                                                    {author?.name.split(' ').map(n => n[0]).join('') || '?'}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: 13, fontWeight: 600 }}>{author?.name || 'Unknown'}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                                                        {stage && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: stage.color, display: 'inline-block', marginRight: 4 }} />{stage.name} • </>}
+                                                        {new Date(fb.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: 4 }}>
+                                                {fb.status === 'active' && (
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => { updateFeedbackStatus(fb.id, 'addressed'); setFeedbackList(prev => prev.map(f => f.id === fb.id ? { ...f, status: 'addressed' } : f)); }} style={{ fontSize: 10, padding: '2px 6px' }}>
+                                                        Mark Addressed
+                                                    </button>
+                                                )}
+                                                {fb.status === 'addressed' && (
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => { updateFeedbackStatus(fb.id, 'resolved'); setFeedbackList(prev => prev.map(f => f.id === fb.id ? { ...f, status: 'resolved' } : f)); }} style={{ fontSize: 10, padding: '2px 6px', color: '#10b981' }}>
+                                                        Resolve
+                                                    </button>
+                                                )}
+                                                <button className="btn btn-ghost btn-sm" onClick={() => { deleteFeedback(fb.id); setFeedbackList(prev => prev.filter(f => f.id !== fb.id)); }} style={{ fontSize: 10, padding: '2px 6px', color: '#ef4444' }}>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Mini ratings bar */}
+                                        <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+                                            {(['Market', 'Team', 'Product', 'Traction', 'Risk'] as const).map(cat => {
+                                                const v = fb.ratings[cat] ?? 0;
+                                                const color = v >= 4 ? '#10b981' : v >= 3 ? '#f59e0b' : '#ef4444';
+                                                return (
+                                                    <div key={cat} style={{ fontSize: 11 }}>
+                                                        <span style={{ color: 'var(--text-tertiary)' }}>{cat.slice(0, 3)}: </span>
+                                                        <span style={{ fontWeight: 700, color }}>{v}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Comment */}
+                                        <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>{fb.comment}</div>
+
+                                        {/* Tags */}
+                                        {fb.tags.length > 0 && (
+                                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                                                {fb.tags.map(tag => (
+                                                    <span key={tag} className="badge badge-neutral" style={{ fontSize: 10 }}>{tag}</span>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Status badge */}
+                                        {fb.status !== 'active' && (
+                                            <div style={{ marginTop: 6 }}>
+                                                <span style={{
+                                                    fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                                                    background: fb.status === 'addressed' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)',
+                                                    color: fb.status === 'addressed' ? '#f59e0b' : '#10b981',
+                                                }}>
+                                                    {fb.status === 'addressed' ? 'Addressed' : 'Resolved'}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
 

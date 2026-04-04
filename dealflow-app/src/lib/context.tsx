@@ -9,7 +9,7 @@ import type {
     User, Company, PipelineStage, Industry, DealSourceName,
     RejectionReasonCategory, RejectionSubReason, RejectionRecord, Notification,
     Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
-    PagePermission, FollowOnRound, CompanyScore,
+    PagePermission, FollowOnRound, CompanyScore, CompanyFeedback,
 } from '@/types/database';
 
 // ──────────────────────────────────────────────────
@@ -195,6 +195,10 @@ interface AppContextType {
     fetchScores: (companyId: string) => Promise<CompanyScore[]>;
     addScore: (companyId: string, scorerType: 'ai' | 'analyst', score: number, scorerId?: string | null) => Promise<CompanyScore | null>;
     deleteScore: (scoreId: string) => Promise<void>;
+    fetchFeedback: (companyId: string) => Promise<CompanyFeedback[]>;
+    addFeedback: (data: { companyId: string; stageId: string; ratings: Record<string, number>; comment: string; tags: string[] }) => Promise<CompanyFeedback | null>;
+    updateFeedbackStatus: (feedbackId: string, status: 'active' | 'addressed' | 'resolved') => Promise<void>;
+    deleteFeedback: (feedbackId: string) => Promise<void>;
 
     // Mutations
     createCompany: (data: Record<string, unknown>) => Promise<Company | null>;
@@ -597,6 +601,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const deleteScore = useCallback(async (scoreId: string): Promise<void> => {
         const { error } = await apiDb({ table: 'company_scores', operation: 'delete', match: { id: scoreId } });
         if (error) console.error('deleteScore error:', error);
+    }, [apiDb]);
+
+    // ─── Company Feedback ───────────────────────────
+    const fetchFeedback = useCallback(async (companyId: string): Promise<CompanyFeedback[]> => {
+        const { data } = await apiDb({
+            table: 'company_feedback', operation: 'select',
+            filter: [{ column: 'company_id', op: 'eq', value: companyId }],
+            order: { column: 'created_at', ascending: false },
+        });
+        return (data || []).map((r: any): CompanyFeedback => ({
+            id: r.id, companyId: r.company_id, userId: r.user_id, stageId: r.stage_id,
+            ratings: r.ratings ?? {}, comment: r.comment ?? '', tags: r.tags ?? [],
+            status: r.status ?? 'active', createdAt: r.created_at ?? '',
+        }));
+    }, [apiDb]);
+
+    const addFeedback = useCallback(async (data: { companyId: string; stageId: string; ratings: Record<string, number>; comment: string; tags: string[] }): Promise<CompanyFeedback | null> => {
+        if (!user) return null;
+        const { data: row, error } = await apiDb({
+            table: 'company_feedback', operation: 'insert',
+            data: { company_id: data.companyId, user_id: user.id, stage_id: data.stageId, ratings: data.ratings, comment: data.comment, tags: data.tags },
+        });
+        if (error || !row) { console.error('addFeedback error:', error); return null; }
+        return { id: row.id, companyId: row.company_id, userId: row.user_id, stageId: row.stage_id, ratings: row.ratings ?? {}, comment: row.comment ?? '', tags: row.tags ?? [], status: row.status ?? 'active', createdAt: row.created_at ?? '' };
+    }, [apiDb, user]);
+
+    const updateFeedbackStatus = useCallback(async (feedbackId: string, status: 'active' | 'addressed' | 'resolved'): Promise<void> => {
+        await apiDb({ table: 'company_feedback', operation: 'update', data: { status }, match: { id: feedbackId } });
+    }, [apiDb]);
+
+    const deleteFeedback = useCallback(async (feedbackId: string): Promise<void> => {
+        await apiDb({ table: 'company_feedback', operation: 'delete', match: { id: feedbackId } });
     }, [apiDb]);
 
     // ─── Sign Out ───────────────────────────────────
@@ -1434,7 +1470,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
         formatCurrency, getDaysInPipeline,
-        fetchComments, fetchActivity, fetchEmailLogs, fetchScores, addScore, deleteScore,
+        fetchComments, fetchActivity, fetchEmailLogs, fetchScores, addScore, deleteScore, fetchFeedback, addFeedback, updateFeedbackStatus, deleteFeedback,
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,
@@ -1465,7 +1501,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
-        fetchComments, fetchActivity, fetchEmailLogs, fetchScores, addScore, deleteScore,
+        fetchComments, fetchActivity, fetchEmailLogs, fetchScores, addScore, deleteScore, fetchFeedback, addFeedback, updateFeedbackStatus, deleteFeedback,
         createCompany, updateCompany, deleteCompany, moveCompanyStage, assignAnalyst,
         addComment, rejectCompany, markNotificationsRead,
         setTerminalStatus, resolveTerminalStatus,

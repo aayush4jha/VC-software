@@ -6,7 +6,7 @@ const ALLOWED_TABLES = new Set([
     'companies', 'pipeline_stages', 'industries', 'deal_source_names',
     'rejection_reason_categories', 'rejection_sub_reasons', 'rejection_records',
     'comments', 'activity_logs', 'notifications', 'saved_views', 'email_logs',
-    'profiles', 'ingested_emails', 'company_scores',
+    'profiles', 'ingested_emails', 'company_scores', 'company_feedback',
 ]);
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';
