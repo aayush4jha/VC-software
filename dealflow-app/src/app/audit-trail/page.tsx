@@ -16,12 +16,14 @@ interface AuditEntry {
     new_value: string | null;
     details: string;
     created_at: string;
+    source: string;
 }
 
 function AuditTrailContent() {
     const [logs, setLogs] = useState<AuditEntry[]>([]);
     const [companies, setCompanies] = useState<Record<string, string>>({});
     const [users, setUsers] = useState<Record<string, { name: string; role: string }>>({});
+    const [stages, setStages] = useState<Record<string, { name: string; color: string }>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
@@ -38,6 +40,7 @@ function AuditTrailContent() {
             setLogs(data.logs || []);
             setCompanies(data.companies || {});
             setUsers(data.users || {});
+            setStages(data.stages || {});
         } catch { setError('Network error'); }
         setLoading(false);
     }, []);
@@ -63,12 +66,14 @@ function AuditTrailContent() {
     const userList = Object.entries(users).sort(([, a], [, b]) => a.name.localeCompare(b.name));
 
     const handleExport = () => {
-        const rows = [['ID', 'Timestamp', 'User', 'Role', 'Company', 'Action', 'Entity', 'Field', 'Old Value', 'New Value', 'Details'].join(',')];
+        const rows = [['Change ID', 'Timestamp', 'User', 'Role', 'Company', 'Action', 'Field', 'Old Value', 'New Value', 'Details'].join(',')];
         for (const l of filtered) {
             const userName = l.user_id ? users[l.user_id]?.name || '' : '';
             const userRole = l.user_id ? users[l.user_id]?.role || '' : '';
             const companyName = l.company_id ? companies[l.company_id] || '' : '';
-            rows.push([l.id, l.created_at, `"${userName}"`, userRole, `"${companyName}"`, l.action, l.entity, l.field || '', `"${(l.old_value || '').replace(/"/g, '""')}"`, `"${(l.new_value || '').replace(/"/g, '""')}"`, `"${l.details.replace(/"/g, '""')}"`].join(','));
+            const oldDisplay = l.field === 'pipeline_stage' && l.old_value ? stages[l.old_value]?.name || l.old_value : l.old_value || '';
+            const newDisplay = l.field === 'pipeline_stage' && l.new_value ? stages[l.new_value]?.name || l.new_value : l.new_value || '';
+            rows.push([l.id, l.created_at, `"${userName}"`, userRole, `"${companyName}"`, l.action, l.field || '', `"${oldDisplay.replace(/"/g, '""')}"`, `"${newDisplay.replace(/"/g, '""')}"`, `"${l.details.replace(/"/g, '""')}"`].join(','));
         }
         const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
@@ -77,10 +82,15 @@ function AuditTrailContent() {
         URL.revokeObjectURL(url);
     };
 
-    const actionColor: Record<string, string> = {
-        field_update: '#3b82f6', stage_change: '#8b5cf6', created: '#10b981',
-        rejected: '#ef4444', assigned: '#06b6d4', terminal_status_set: '#f59e0b',
-        approved: '#10b981', terminal_status_resolved: '#6366f1',
+    const actionLabels: Record<string, { label: string; color: string }> = {
+        created: { label: 'Created', color: '#10b981' },
+        stage_change: { label: 'Stage Move', color: '#8b5cf6' },
+        assigned: { label: 'Assigned', color: '#06b6d4' },
+        rejected: { label: 'Rejected', color: '#ef4444' },
+        terminal_status_set: { label: 'Status Set', color: '#f59e0b' },
+        terminal_status_resolved: { label: 'Status Resolved', color: '#6366f1' },
+        approved: { label: 'Approved', color: '#10b981' },
+        field_update: { label: 'Field Update', color: '#3b82f6' },
     };
 
     if (error) {
@@ -104,11 +114,11 @@ function AuditTrailContent() {
                     </div>
                     <select className="form-input" value={filterAction} onChange={e => setFilterAction(e.target.value)} style={{ width: 180, fontSize: 13, height: 36 }}>
                         <option value="">All actions</option>
-                        {actionTypes.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
+                        {actionTypes.map(a => <option key={a} value={a}>{actionLabels[a]?.label || a}</option>)}
                     </select>
                     <select className="form-input" value={filterUser} onChange={e => setFilterUser(e.target.value)} style={{ width: 180, fontSize: 13, height: 36 }}>
                         <option value="">All users</option>
-                        {userList.map(([id, u]) => <option key={id} value={id}>{u.name}</option>)}
+                        {userList.map(([id, u]) => <option key={id} value={id}>{u.name} ({u.role})</option>)}
                     </select>
                     <button className="btn btn-ghost btn-sm" onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Download size={14} /> Export CSV
@@ -122,67 +132,96 @@ function AuditTrailContent() {
                 ) : filtered.length === 0 ? (
                     <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>
                         <FileText size={32} style={{ marginBottom: 8, opacity: 0.4 }} />
-                        <div style={{ fontWeight: 600 }}>No audit entries found</div>
-                        <div style={{ fontSize: 13, marginTop: 4 }}>Changes will appear here as users update company data.</div>
+                        <div style={{ fontWeight: 600 }}>No entries found</div>
                     </div>
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div style={{ background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                        {/* Table header */}
+                        <div style={{ display: 'flex', padding: '10px 16px', borderBottom: '2px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            <div style={{ width: 150 }}>Timestamp</div>
+                            <div style={{ width: 110 }}>Action</div>
+                            <div style={{ width: 140 }}>Who</div>
+                            <div style={{ width: 160 }}>Company</div>
+                            <div style={{ flex: 1 }}>What Changed</div>
+                            <div style={{ width: 80, textAlign: 'right', fontSize: 10 }}>ID</div>
+                        </div>
+                        {/* Rows */}
                         {filtered.map(l => {
                             const userName = l.user_id ? users[l.user_id]?.name || 'System' : 'System';
                             const userRole = l.user_id ? users[l.user_id]?.role || '' : '';
-                            const companyName = l.company_id ? companies[l.company_id] || 'Unknown' : '—';
-                            const color = actionColor[l.action] || 'var(--text-secondary)';
+                            const companyName = l.company_id ? companies[l.company_id] || 'Deleted' : '—';
+                            const actionInfo = actionLabels[l.action] || { label: l.action, color: 'var(--text-secondary)' };
                             const time = new Date(l.created_at);
+
+                            // Resolve stage names for stage_change actions
+                            let oldDisplay = l.old_value || '';
+                            let newDisplay = l.new_value || '';
+                            if (l.field === 'pipeline_stage' || l.action === 'stage_change') {
+                                if (l.old_value && stages[l.old_value]) oldDisplay = stages[l.old_value].name;
+                                if (l.new_value && stages[l.new_value]) newDisplay = stages[l.new_value].name;
+                            }
+
                             return (
                                 <div key={l.id} style={{
-                                    display: 'flex', gap: 12, padding: '10px 14px',
-                                    borderBottom: '1px solid var(--border-light)',
-                                    fontSize: 13, alignItems: 'flex-start',
-                                }}>
-                                    {/* Time */}
-                                    <div style={{ width: 130, flexShrink: 0, fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-                                        <div>{time.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-                                        <div>{time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+                                    display: 'flex', padding: '10px 16px', borderBottom: '1px solid var(--border-light)',
+                                    fontSize: 13, alignItems: 'center',
+                                    transition: 'background 0.1s',
+                                }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                    {/* Timestamp */}
+                                    <div style={{ width: 150, fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.4 }}>
+                                        <div style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{time.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                                        <div>{time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                                     </div>
-                                    {/* Action badge */}
-                                    <div style={{ width: 110, flexShrink: 0 }}>
+                                    {/* Action */}
+                                    <div style={{ width: 110 }}>
                                         <span style={{
-                                            fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-                                            background: `${color}15`, color,
-                                            textTransform: 'uppercase', letterSpacing: '0.3px',
+                                            fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
+                                            background: `${actionInfo.color}15`, color: actionInfo.color,
                                         }}>
-                                            {l.action.replace(/_/g, ' ')}
+                                            {actionInfo.label}
                                         </span>
                                     </div>
-                                    {/* User */}
-                                    <div style={{ width: 120, flexShrink: 0 }}>
-                                        <div style={{ fontWeight: 600, fontSize: 12 }}>{userName}</div>
-                                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>{userRole}</div>
+                                    {/* Who */}
+                                    <div style={{ width: 140 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <div className="kanban-card-avatar" style={{ width: 24, height: 24, fontSize: 9, flexShrink: 0 }}>
+                                                {userName.split(' ').map(n => n[0]).join('')}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.2 }}>{userName}</div>
+                                                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>{userRole}</div>
+                                            </div>
+                                        </div>
                                     </div>
                                     {/* Company */}
-                                    <div style={{ width: 140, flexShrink: 0, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <div style={{ width: 160, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {companyName}
                                     </div>
-                                    {/* Change details */}
+                                    {/* What Changed */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        {l.field ? (
+                                        {(l.action === 'stage_change' && oldDisplay && newDisplay) ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontWeight: 500 }}>{oldDisplay}</span>
+                                                <ArrowRight size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                                                <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)', color: '#10b981', fontWeight: 500 }}>{newDisplay}</span>
+                                            </div>
+                                        ) : l.field && oldDisplay && newDisplay ? (
                                             <div>
-                                                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{l.field}</span>
-                                                {l.old_value && l.new_value ? (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: 12 }}>
-                                                        <span style={{ color: '#ef4444', background: 'rgba(239,68,68,0.08)', padding: '1px 6px', borderRadius: 3, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>{l.old_value}</span>
-                                                        <ArrowRight size={12} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-                                                        <span style={{ color: '#10b981', background: 'rgba(16,185,129,0.08)', padding: '1px 6px', borderRadius: 3, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>{l.new_value}</span>
-                                                    </div>
-                                                ) : l.new_value ? (
-                                                    <div style={{ fontSize: 12, marginTop: 2 }}>
-                                                        Set to: <span style={{ color: '#10b981', fontWeight: 500 }}>{l.new_value}</span>
-                                                    </div>
-                                                ) : null}
+                                                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>{l.field}: </span>
+                                                <span style={{ fontSize: 12, color: '#ef4444' }}>{oldDisplay}</span>
+                                                <span style={{ margin: '0 4px', color: 'var(--text-tertiary)' }}>→</span>
+                                                <span style={{ fontSize: 12, color: '#10b981' }}>{newDisplay}</span>
                                             </div>
                                         ) : (
-                                            <div style={{ color: 'var(--text-secondary)' }}>{l.details}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{l.details}</div>
                                         )}
+                                    </div>
+                                    {/* ID */}
+                                    <div style={{ width: 80, textAlign: 'right', fontSize: 10, color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
+                                        {l.id.slice(0, 8)}
                                     </div>
                                 </div>
                             );
