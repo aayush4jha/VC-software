@@ -60,6 +60,7 @@ function BarChart({ data, maxVal }: { data: { label: string; value: number; colo
 function PipelineAnalyticsContent() {
     const [data, setData] = useState<Analytics | null>(null);
     const [loading, setLoading] = useState(true);
+    const [hoveredBar, setHoveredBar] = useState<{ idx: number; x: number } | null>(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -187,7 +188,7 @@ function PipelineAnalyticsContent() {
                 {/* Daily Activity (30-day sparkline) */}
                 <div style={{ padding: 20, background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 28 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Pipeline Activity (Last 30 Days)</div>
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80, position: 'relative' }} onMouseLeave={() => setHoveredBar(null)}>
                         {data.dailyActivity.map((d, i) => {
                             const total = d.added + d.moved + d.rejected;
                             const h = maxDayActivity > 0 ? (total / maxDayActivity) * 100 : 0;
@@ -195,15 +196,39 @@ function PipelineAnalyticsContent() {
                             return (
                                 <div
                                     key={i}
-                                    title={`${d.date}: +${d.added} added, ${d.moved} moved, ${d.rejected} rejected`}
+                                    onMouseEnter={e => {
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        const parentRect = e.currentTarget.parentElement!.getBoundingClientRect();
+                                        setHoveredBar({ idx: i, x: rect.left - parentRect.left + rect.width / 2 });
+                                    }}
                                     style={{
                                         flex: 1, height: `${Math.max(h, 4)}%`, background: color,
                                         borderRadius: '3px 3px 0 0', transition: 'height 0.3s', cursor: 'pointer', minWidth: 4,
                                         opacity: total > 0 ? 1 : 0.2,
+                                        outline: hoveredBar?.idx === i ? `2px solid ${color}` : 'none',
                                     }}
                                 />
                             );
                         })}
+                        {hoveredBar != null && (() => {
+                            const d = data.dailyActivity[hoveredBar.idx];
+                            if (!d) return null;
+                            const dateLabel = new Date(d.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+                            return (
+                                <div style={{
+                                    position: 'absolute', bottom: '110%', left: hoveredBar.x, transform: 'translateX(-50%)',
+                                    background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8,
+                                    padding: '8px 12px', fontSize: 11, lineHeight: 1.6, boxShadow: 'var(--shadow-lg)',
+                                    pointerEvents: 'none', zIndex: 10, whiteSpace: 'nowrap',
+                                }}>
+                                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 2 }}>{dateLabel}</div>
+                                    {d.added > 0 && <div style={{ color: '#3b82f6' }}>+{d.added} added</div>}
+                                    {d.moved > 0 && <div style={{ color: '#8b5cf6' }}>{d.moved} moved</div>}
+                                    {d.rejected > 0 && <div style={{ color: '#ef4444' }}>{d.rejected} rejected</div>}
+                                    {d.added === 0 && d.moved === 0 && d.rejected === 0 && <div style={{ color: 'var(--text-tertiary)' }}>No activity</div>}
+                                </div>
+                            );
+                        })()}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: 'var(--text-tertiary)' }}>
                         <span>{data.dailyActivity[0]?.date}</span>
