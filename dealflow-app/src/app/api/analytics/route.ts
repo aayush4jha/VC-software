@@ -14,6 +14,12 @@ export async function GET(request: NextRequest) {
 
     const db = createServiceClient(supabaseUrl, serviceRoleKey);
 
+    // Check admin access
+    const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).single();
+    if (!profile || !['admin', 'partner'].includes(profile.role)) {
+        return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     // Fetch all data in parallel
     const [companiesRes, stagesRes, activityRes, profilesRes] = await Promise.all([
         db.from('companies').select('id, company_name, analyst_id, pipeline_stage_id, priority_level, terminal_status, created_at, industry_id, company_round').eq('organization_id', ORGANIZATION_ID),

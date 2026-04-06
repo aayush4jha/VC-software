@@ -723,7 +723,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return company;
     }, [apiDb, user, users]);
 
+    // Fields worth tracking in audit (skip large JSON blobs)
+    const AUDIT_FIELDS = new Set([
+        'companyName', 'founderName', 'founderEmail', 'analystId', 'companyRound',
+        'priorityLevel', 'dealSourceType', 'dealSourceNameId', 'industryId',
+        'subIndustry', 'shareType', 'totalFundRaise', 'valuation', 'googleDriveLink',
+        'customTags', 'terminalStatus', 'needsReview', 'pipelineStageId', 'slaDeadline',
+        'hqLocation', 'notes', 'portfolioStatus', 'initialInvestment', 'entryValuation',
+    ]);
+
     const updateCompany = useCallback(async (id: string, data: Record<string, unknown>) => {
+        // Capture old values for audit
+        const oldCompany = companies.find(c => c.id === id);
+
         const dbData: Record<string, unknown> = {};
         const fieldMap: Record<string, string> = {
             companyName: 'company_name', founderName: 'founder_name', founderEmail: 'founder_email',
@@ -759,7 +771,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
             setSelectedCompany(prev => prev?.id === id ? { ...prev, ...data } : prev);
         }
-    }, [apiDb]);
+
+        // Audit log: track field-level changes
+        if (user && oldCompany) {
+            const auditInserts: Record<string, unknown>[] = [];
+            for (const [key, newVal] of Object.entries(data)) {
+                if (!AUDIT_FIELDS.has(key)) continue;
+                const oldVal = (oldCompany as unknown as Record<string, unknown>)[key];
+                const oldStr = oldVal == null ? '' : typeof oldVal === 'object' ? JSON.stringify(oldVal) : String(oldVal);
+                const newStr = newVal == null ? '' : typeof newVal === 'object' ? JSON.stringify(newVal) : String(newVal);
+                if (oldStr === newStr) continue;
+                auditInserts.push({
+                    company_id: id, user_id: user.id, action: 'field_update',
+                    entity: 'company', field: key, old_value: oldStr.slice(0, 500), new_value: newStr.slice(0, 500),
+                    details: `Changed ${key} on ${oldCompany.companyName}`,
+                });
+            }
+            if (auditInserts.length > 0) {
+                apiDb({ table: 'audit_logs', operation: 'insert', data: auditInserts }).catch(() => {});
+            }
+        }
+    }, [apiDb, user, companies]);
 
     const deleteCompany = useCallback(async (id: string) => {
         const { error } = await apiDb({ table: 'companies', operation: 'delete', match: { id } });

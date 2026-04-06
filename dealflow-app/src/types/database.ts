@@ -245,6 +245,19 @@ export interface ActivityLog {
   createdAt: string;
 }
 
+export interface AuditLog {
+  id: string;
+  companyId: string;
+  userId: string;
+  action: string;       // 'field_update' | 'stage_change' | 'created' | 'deleted' | 'rejected' | etc.
+  entity: string;       // 'company' | 'score' | 'feedback' | etc.
+  field: string | null;  // specific field changed
+  oldValue: string | null;
+  newValue: string | null;
+  details: string;
+  createdAt: string;
+}
+
 export type NotificationType =
   | 'assignment'
   | 'overdue'
