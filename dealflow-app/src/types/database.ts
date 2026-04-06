@@ -6,20 +6,24 @@ export type PagePermission =
   | 'dashboard'
   | 'dealflow'
   | 'portfolio'
+  | 'analytics'
+  | 'pipeline-analytics'
+  | 'audit-trail'
   | 'contacts'
   | 'emails'
-
   | 'admin'
   | 'settings';
 
 export const ALL_PAGE_PERMISSIONS: { key: PagePermission; label: string }[] = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'dealflow', label: 'Deal Flow' },
-  { key: 'portfolio', label: 'Portfolio & Analytics' },
+  { key: 'portfolio', label: 'Portfolio' },
+  { key: 'analytics', label: 'Analytics' },
+  { key: 'pipeline-analytics', label: 'Pipeline Analytics' },
+  { key: 'audit-trail', label: 'Audit Trail' },
   { key: 'contacts', label: 'Contacts' },
   { key: 'emails', label: 'Email Workspace' },
-  { key: 'admin', label: 'Admin, Pipeline Analytics & Audit Trail' },
-  { key: 'settings', label: 'Settings' },
+  { key: 'admin', label: 'Admin' },
 ];
 
 export interface User {

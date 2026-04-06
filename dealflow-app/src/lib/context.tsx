@@ -19,8 +19,8 @@ import type {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, PagePermission[]> = {
-    admin: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'admin', 'settings'],
-    partner: ['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'admin'],
+    admin: ['dashboard', 'dealflow', 'portfolio', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'admin', 'settings'],
+    partner: ['dashboard', 'dealflow', 'portfolio', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'admin'],
     analyst: ['dashboard', 'dealflow', 'contacts', 'emails'],
 };
 

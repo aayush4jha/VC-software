@@ -60,11 +60,11 @@ export async function updateSession(request: NextRequest) {
         '/settings': 'settings',
         '/dealflow': 'dealflow',
         '/portfolio': 'portfolio',
-        '/analytics': 'portfolio',
+        '/analytics': 'analytics',
         '/contacts': 'contacts',
         '/emails': 'emails',
-        '/pipeline-analytics': 'admin',
-        '/audit-trail': 'admin',
+        '/pipeline-analytics': 'pipeline-analytics',
+        '/audit-trail': 'audit-trail',
     };
 
     const matchedPermission = Object.entries(routePermissionMap).find(
