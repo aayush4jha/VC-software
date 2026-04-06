@@ -191,7 +191,7 @@ export default function AdminPage() {
     const [showInvite, setShowInvite] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
     const [inviteRole, setInviteRole] = useState('analyst');
-    const [invitePermissions, setInvitePermissions] = useState<PagePermission[]>(['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai']);
+    const [invitePermissions, setInvitePermissions] = useState<PagePermission[]>(['dashboard', 'dealflow', 'contacts', 'emails']);
     const [inviting, setInviting] = useState(false);
 
     // Column filters for All Companies
@@ -643,7 +643,7 @@ export default function AdminPage() {
                                                     await inviteUser(inviteEmail, inviteRole, invitePermissions);
                                                     setInviteEmail('');
                                                     setInviteRole('analyst');
-                                                    setInvitePermissions(['dashboard', 'dealflow', 'portfolio', 'contacts', 'emails', 'ai']);
+                                                    setInvitePermissions(['dashboard', 'dealflow', 'contacts', 'emails']);
                                                     setShowInvite(false);
                                                 } catch (err) {
                                                     alert((err as Error).message);
