@@ -24,6 +24,7 @@ export const ALL_PAGE_PERMISSIONS: { key: PagePermission; label: string }[] = [
   { key: 'contacts', label: 'Contacts' },
   { key: 'emails', label: 'Email Workspace' },
   { key: 'admin', label: 'Admin' },
+  { key: 'settings', label: 'Settings' },
 ];
 
 export interface User {

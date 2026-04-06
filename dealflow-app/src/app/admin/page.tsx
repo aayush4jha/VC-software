@@ -703,7 +703,7 @@ export default function AdminPage() {
                                             {/* Permission badges (read-only) */}
                                             {!isEditing && (
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, marginLeft: 48 }}>
-                                                    {u.permissions.map(p => (
+                                                    {u.permissions.filter(p => (p as string) !== 'ai').map(p => (
                                                         <span key={p} className="badge badge-neutral" style={{ fontSize: 10 }}>{p}</span>
                                                     ))}
                                                 </div>
