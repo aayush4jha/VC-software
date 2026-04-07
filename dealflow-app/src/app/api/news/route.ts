@@ -52,20 +52,33 @@ function parseRSS(xml: string, companyName: string): NewsArticle[] {
 
         if (!titleMatch) continue;
 
-        const title = titleMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/, '$1').trim();
+        const stripCDATA = (s: string) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+        const decodeEntities = (s: string) => s
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&apos;/g, "'")
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+            .replace(/&[a-z]+;/gi, ' ');
+        const stripAll = (s: string) =>
+            decodeEntities(stripCDATA(s))
+                .replace(/<[^>]+>/g, ' ')      // strip HTML tags
+                .replace(/<[^>]*$/, ' ')        // strip dangling open tag
+                .replace(/^[^>]*>/, ' ')        // strip dangling close tag
+                .replace(/\s+/g, ' ')
+                .trim();
+
+        const title = stripAll(titleMatch[1]);
         const link = linkMatch ? linkMatch[1].trim() : '';
         const pubDate = pubMatch ? pubMatch[1].trim() : '';
-        const source = sourceMatch ? sourceMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/, '$1').trim() : 'Google News';
+        const source = sourceMatch ? stripAll(sourceMatch[1]) : 'Google News';
 
-        // Strip HTML from description
+        // Strip HTML from description (Google News uses HTML lists in description)
         const rawDesc = descMatch ? descMatch[1] : '';
-        const snippet = rawDesc
-            .replace(/<!\[CDATA\[(.*?)\]\]>/, '$1')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/&[a-z]+;/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 200);
+        const snippet = stripAll(rawDesc).slice(0, 200);
 
         articles.push({
             id: `${companyName}-${i}-${pubDate}`,

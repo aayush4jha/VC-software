@@ -80,7 +80,7 @@ function NewsContent() {
 
     return (
         <>
-            <TopHeader title="News & Updates" subtitle={`${filtered.length} articles from ${portfolioCompanies.length} companies`} />
+            <TopHeader title="News" subtitle={`${filtered.length} articles from ${portfolioCompanies.length} companies`} />
             <div className="page-content page-enter" style={{ padding: 24 }}>
                 {/* Sentiment overview */}
                 {articles.length > 0 && (

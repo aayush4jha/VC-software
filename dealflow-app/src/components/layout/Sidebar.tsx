@@ -18,7 +18,7 @@ const navItems: { label: string; href: string; icon: React.ElementType; permissi
     { label: 'Audit Trail', href: '/audit-trail', icon: FileText, permission: 'audit-trail' },
     { label: 'Contacts', href: '/contacts', icon: Users, permission: 'contacts' },
     { label: 'Email Workspace', href: '/emails', icon: Mail, permission: 'emails' },
-    { label: 'News & Updates', href: '/news', icon: Newspaper, permission: 'news' },
+    { label: 'News', href: '/news', icon: Newspaper, permission: 'news' },
 ];
 
 function hasPermission(userPermissions: PagePermission[] | undefined, required: PagePermission): boolean {
