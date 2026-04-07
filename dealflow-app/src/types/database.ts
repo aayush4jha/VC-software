@@ -11,6 +11,7 @@ export type PagePermission =
   | 'audit-trail'
   | 'contacts'
   | 'emails'
+  | 'news'
   | 'admin'
   | 'settings';
 
@@ -23,6 +24,7 @@ export const ALL_PAGE_PERMISSIONS: { key: PagePermission; label: string }[] = [
   { key: 'audit-trail', label: 'Audit Trail' },
   { key: 'contacts', label: 'Contacts' },
   { key: 'emails', label: 'Email Workspace' },
+  { key: 'news', label: 'News & Updates' },
   { key: 'admin', label: 'Admin' },
   { key: 'settings', label: 'Settings' },
 ];

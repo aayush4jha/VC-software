@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    Home, LayoutGrid, Briefcase, Users, Mail, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield, BarChart3, Activity, FileText,
+    Home, LayoutGrid, Briefcase, Users, Mail, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield, BarChart3, Activity, FileText, Newspaper,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { PagePermission } from '@/types/database';
@@ -18,6 +18,7 @@ const navItems: { label: string; href: string; icon: React.ElementType; permissi
     { label: 'Audit Trail', href: '/audit-trail', icon: FileText, permission: 'audit-trail' },
     { label: 'Contacts', href: '/contacts', icon: Users, permission: 'contacts' },
     { label: 'Email Workspace', href: '/emails', icon: Mail, permission: 'emails' },
+    { label: 'News & Updates', href: '/news', icon: Newspaper, permission: 'news' },
 ];
 
 function hasPermission(userPermissions: PagePermission[] | undefined, required: PagePermission): boolean {

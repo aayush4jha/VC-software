@@ -19,9 +19,9 @@ import type {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, PagePermission[]> = {
-    admin: ['dashboard', 'dealflow', 'portfolio', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'admin', 'settings'],
-    partner: ['dashboard', 'dealflow', 'portfolio', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'admin'],
-    analyst: ['dashboard', 'dealflow', 'contacts', 'emails'],
+    admin: ['dashboard', 'dealflow', 'portfolio', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'news', 'admin', 'settings'],
+    partner: ['dashboard', 'dealflow', 'portfolio', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'news', 'admin'],
+    analyst: ['dashboard', 'dealflow', 'contacts', 'emails', 'news'],
 };
 
 function mapUser(r: any): User {

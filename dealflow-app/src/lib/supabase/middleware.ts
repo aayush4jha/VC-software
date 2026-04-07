@@ -65,6 +65,7 @@ export async function updateSession(request: NextRequest) {
         '/emails': 'emails',
         '/pipeline-analytics': 'pipeline-analytics',
         '/audit-trail': 'audit-trail',
+        '/news': 'news',
     };
 
     const matchedPermission = Object.entries(routePermissionMap).find(
