@@ -5,7 +5,7 @@ import { X, Calendar, Video, Clock, Send, ExternalLink, CheckCircle, AlertCircle
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 
-type SendStatus = 'idle' | 'creating' | 'success' | 'error' | 'auth-required';
+type SendStatus = 'idle' | 'creating' | 'success' | 'error' | 'auth-required' | 'booking-sent';
 
 export default function CalendarInvite() {
     const { showCalendarInvite, setShowCalendarInvite, selectedCompany, user, updateCompany } = useAppContext();
@@ -18,6 +18,8 @@ export default function CalendarInvite() {
     const [statusMessage, setStatusMessage] = useState('');
     const [meetLink, setMeetLink] = useState<string | null>(null);
     const [eventLink, setEventLink] = useState<string | null>(null);
+    const [bookingUrl, setBookingUrl] = useState<string | null>(null);
+    const [creatingBooking, setCreatingBooking] = useState(false);
 
     if (!showCalendarInvite || !selectedCompany) return null;
 
@@ -80,12 +82,53 @@ export default function CalendarInvite() {
         }
     };
 
+    const handleSendBookingLink = async () => {
+        setCreatingBooking(true);
+        setStatusMessage('');
+        try {
+            const res = await fetch('/api/calendar/create-booking-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyId: selectedCompany.id,
+                    companyName: selectedCompany.companyName,
+                    attendeeName: selectedCompany.founderName,
+                    attendeeEmail: selectedCompany.founderEmail,
+                    hostName: user?.name || '',
+                    hostEmail: user?.email || '',
+                    eventTitle,
+                    durationMinutes: parseInt(duration),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) { setStatusMessage(data.error || 'Failed'); setCreatingBooking(false); return; }
+            setBookingUrl(data.bookingUrl);
+            setSendStatus('booking-sent');
+            setStatusMessage('Booking link generated! Share it with the founder.');
+
+            // Also send it via email
+            await fetch('/api/gmail/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: selectedCompany.founderEmail,
+                    subject: `Schedule a call - ${selectedCompany.companyName} | Dholakia Ventures`,
+                    body: `Hi ${selectedCompany.founderName},\n\nPlease pick a time slot that works for you using the link below:\n\n${data.bookingUrl}\n\nThis will automatically create a Google Meet call and send calendar invites to both of us.\n\nLooking forward to our conversation!\n\nBest regards,\n${user?.name || 'Dholakia Ventures'}`,
+                }),
+            });
+        } catch {
+            setStatusMessage('Network error. Please try again.');
+        }
+        setCreatingBooking(false);
+    };
+
     const handleClose = () => {
         setShowCalendarInvite(false);
         setSendStatus('idle');
         setStatusMessage('');
         setMeetLink(null);
         setEventLink(null);
+        setBookingUrl(null);
     };
 
     return (
@@ -282,24 +325,67 @@ export default function CalendarInvite() {
                             </a>
                         </div>
                     )}
+                    {/* Booking link result */}
+                    {sendStatus === 'booking-sent' && bookingUrl && (
+                        <div style={{
+                            padding: '12px 14px', borderRadius: 'var(--radius-md)',
+                            background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+                            marginTop: 8,
+                        }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>Booking Link (sent to {selectedCompany.founderEmail})</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <input
+                                    className="form-input"
+                                    value={bookingUrl}
+                                    readOnly
+                                    onClick={e => (e.target as HTMLInputElement).select()}
+                                    style={{ fontSize: 12, flex: 1 }}
+                                />
+                                <button
+                                    className="btn btn-sm"
+                                    onClick={() => navigator.clipboard.writeText(bookingUrl)}
+                                    style={{ padding: '4px 8px', fontSize: 11 }}
+                                >
+                                    <Link2 size={12} /> Copy
+                                </button>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#6366f1', marginTop: 6 }}>
+                                The founder will see your available calendar slots and can pick a time. A Google Meet will be created automatically.
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <div className="modal-footer">
                     <button className="btn btn-secondary" onClick={handleClose}>
-                        {sendStatus === 'success' ? 'Close' : 'Cancel'}
+                        {sendStatus === 'success' || sendStatus === 'booking-sent' ? 'Close' : 'Cancel'}
                     </button>
-                    {sendStatus !== 'success' && (
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleCreateEvent}
-                            disabled={sendStatus === 'creating'}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: sendStatus === 'creating' ? 0.7 : 1 }}
-                        >
-                            {sendStatus === 'creating' ? (
-                                <><Loader2 size={14} className="spin" /> Creating...</>
-                            ) : (
-                                <><Send size={14} /> Create Event &amp; Meet</>
-                            )}
-                        </button>
+                    {sendStatus !== 'success' && sendStatus !== 'booking-sent' && (
+                        <>
+                            <button
+                                className="btn btn-ghost"
+                                onClick={handleSendBookingLink}
+                                disabled={sendStatus === 'creating' || creatingBooking}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                            >
+                                {creatingBooking ? (
+                                    <><Loader2 size={14} className="spin" /> Sending...</>
+                                ) : (
+                                    <><Calendar size={14} /> Let Them Pick a Slot</>
+                                )}
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleCreateEvent}
+                                disabled={sendStatus === 'creating' || creatingBooking}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: sendStatus === 'creating' ? 0.7 : 1 }}
+                            >
+                                {sendStatus === 'creating' ? (
+                                    <><Loader2 size={14} className="spin" /> Creating...</>
+                                ) : (
+                                    <><Send size={14} /> Create Event &amp; Meet</>
+                                )}
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

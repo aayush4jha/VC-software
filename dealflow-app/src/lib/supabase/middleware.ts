@@ -37,7 +37,7 @@ export async function updateSession(request: NextRequest) {
     const pathname = request.nextUrl.pathname;
 
     // Public paths that don't need auth
-    const publicPaths = ['/login', '/auth/callback', '/api/'];
+    const publicPaths = ['/login', '/auth/callback', '/api/', '/book'];
     const isPublic = publicPaths.some(p => pathname.startsWith(p));
 
     if (!user && !isPublic) {
