@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink, Clock,
+    X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink,
     AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
-    XCircle, ArrowRight, Loader2, Link2, Shield, Pause, RotateCcw,
-    FileText, BarChart3, FileSearch, Briefcase, Download, FileDown, Video,
+    XCircle, ArrowRight, Loader2, Link2, Pause, RotateCcw,
+    FileText, FileSearch, Download, FileDown, Video,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
-import type { TerminalStatus, CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
+import type { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
 import { downloadAsDocx, downloadAsPdf } from '@/lib/report-download';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
@@ -25,7 +25,7 @@ export default function CompanyDetail() {
         pipelineStages, user, users, companies, industries, dealSourceNames,
         updateCompany, moveCompanyStage, assignAnalyst, addComment,
         fetchComments, fetchActivity,
-        setTerminalStatus, resolveTerminalStatus,
+        resolveTerminalStatus,
         generateAISummary, generateDeckAnalysis, generateFilterBrief, generateICMemo,
         approveCompany,
         rejectionRecords, rejectionReasonCategories,
@@ -47,8 +47,7 @@ export default function CompanyDetail() {
     const [showTerminalMenu, setShowTerminalMenu] = useState(false);
     const [showResolveModal, setShowResolveModal] = useState(false);
     const [resolveTargetStageId, setResolveTargetStageId] = useState('');
-    const [settingTerminal, setSettingTerminal] = useState(false);
-    const [reminderDate, setReminderDate] = useState('');
+    const [settingTerminal] = useState(false);
 
     // Deck email search state
     const [searchingDeckEmail, setSearchingDeckEmail] = useState(false);
@@ -192,14 +191,6 @@ export default function CompanyDetail() {
     };
 
     // Terminal status handlers
-    const handleSetTerminal = async (status: TerminalStatus) => {
-        setSettingTerminal(true);
-        setShowTerminalMenu(false);
-        await setTerminalStatus(c.id, status, reminderDate || undefined);
-        setReminderDate('');
-        setSettingTerminal(false);
-    };
-
     const handleResolveTerminal = async () => {
         if (!resolveTargetStageId) return;
         await resolveTerminalStatus(c.id, resolveTargetStageId);
@@ -466,44 +457,6 @@ export default function CompanyDetail() {
                                         <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
                                             {days} days in pipeline
                                         </div>
-                                    </div>
-                                    <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                        Change To
-                                    </div>
-                                    {[
-                                        { status: 'Awaiting Response' as TerminalStatus, icon: <Clock size={14} />, color: '#f59e0b', desc: 'Waiting for founder reply' },
-                                        { status: 'Blocker' as TerminalStatus, icon: <Shield size={14} />, color: '#ef4444', desc: 'Blocked by external factor' },
-                                        { status: 'Next Round Analysis' as TerminalStatus, icon: <BarChart3 size={14} />, color: '#6366f1', desc: 'Track for future round' },
-                                        { status: 'Portfolio' as TerminalStatus, icon: <Briefcase size={14} />, color: '#10b981', desc: 'Mark as invested' },
-                                    ].map(item => (
-                                        <button
-                                            key={item.status}
-                                            onClick={() => handleSetTerminal(item.status)}
-                                            style={{
-                                                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                                                padding: '9px 14px', background: 'none', border: 'none',
-                                                cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left',
-                                            }}
-                                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
-                                            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                                        >
-                                            <span style={{ color: item.color }}>{item.icon}</span>
-                                            <div>
-                                                <div style={{ fontWeight: 500 }}>{item.status}</div>
-                                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{item.desc}</div>
-                                            </div>
-                                        </button>
-                                    ))}
-                                    {/* Reminder date for Awaiting/Blocker */}
-                                    <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
-                                        <label style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'block', marginBottom: 4 }}>Reminder Date (optional)</label>
-                                        <input
-                                            type="date"
-                                            className="form-input"
-                                            value={reminderDate}
-                                            onChange={e => setReminderDate(e.target.value)}
-                                            style={{ fontSize: 12, padding: '4px 8px', height: 28 }}
-                                        />
                                     </div>
                                 </div>
                             )}
