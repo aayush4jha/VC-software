@@ -69,9 +69,11 @@ function BookingContent() {
     if (error) {
         return (
             <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-                <div style={{ textAlign: 'center', padding: 40 }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>Link Error</div>
-                    <div style={{ color: '#64748b' }}>{error}</div>
+                <div style={{ textAlign: 'center', padding: 40, maxWidth: 480 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>
+                        This booking link isn&apos;t ready yet
+                    </div>
+                    <div style={{ color: '#64748b', lineHeight: 1.5 }}>{error}</div>
                 </div>
             </div>
         );

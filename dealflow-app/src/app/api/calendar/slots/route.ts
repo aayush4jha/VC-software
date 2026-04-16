@@ -35,7 +35,10 @@ export async function GET(request: NextRequest) {
     // Get authenticated Google client for the host user
     const authResult = await getAuthenticatedClientForUser(userId);
     if (!authResult) {
-        return NextResponse.json({ error: 'Host Google account not connected' }, { status: 401 });
+        return NextResponse.json({
+            error: 'The host needs to reconnect their Google account before you can pick a slot. Please let them know.',
+            code: 'host_reconnect_required',
+        }, { status: 401 });
     }
 
     const calendar = google.calendar({ version: 'v3', auth: authResult.oauth2Client });
@@ -112,7 +115,16 @@ export async function GET(request: NextRequest) {
             duration,
         });
     } catch (err) {
-        console.error('[calendar/slots] error:', err);
-        return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+        const msg = (err as Error).message || '';
+        console.error('[calendar/slots] error:', msg);
+        if (msg.includes('invalid_grant') || msg.includes('Invalid Credentials')) {
+            // Host tokens are stale — clear them so they're forced to reconnect
+            await db.from('google_tokens').delete().eq('user_id', userId);
+            return NextResponse.json({
+                error: 'The host needs to reconnect their Google account before you can pick a slot. Please let them know.',
+                code: 'host_reconnect_required',
+            }, { status: 401 });
+        }
+        return NextResponse.json({ error: msg }, { status: 500 });
     }
 }

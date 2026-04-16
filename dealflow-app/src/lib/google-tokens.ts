@@ -96,8 +96,15 @@ export async function getGoogleTokens(userId: string): Promise<StoredTokens | nu
                 connected_at: data.connected_at,
             };
         } catch (err) {
-            console.error('[google-tokens] Failed to refresh access token:', err);
-            // Return existing tokens — the caller will get a 401 from Google
+            const msg = (err as Error).message || '';
+            console.error('[google-tokens] Failed to refresh access token:', msg);
+            // If the refresh token itself is invalid/revoked, clear stored tokens
+            // so the user is forced to reconnect cleanly.
+            if (msg.includes('invalid_grant')) {
+                await db.from('google_tokens').delete().eq('user_id', userId);
+                return null;
+            }
+            // Transient failure — keep tokens, let caller retry
             return {
                 access_token: data.access_token,
                 refresh_token: data.refresh_token,
