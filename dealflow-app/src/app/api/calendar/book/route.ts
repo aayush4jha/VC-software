@@ -115,6 +115,21 @@ export async function POST(request: NextRequest) {
             }).eq('id', booking.company_id);
         }
 
+        // Log for admin audit trail so it's visible in the activity feed
+        const slotLocal = new Date(slotStart).toLocaleString('en-IN', {
+            weekday: 'short', day: 'numeric', month: 'short',
+            hour: '2-digit', minute: '2-digit', hour12: true,
+            timeZone: 'Asia/Kolkata',
+        });
+        await db.from('activity_logs').insert({
+            company_id: booking.company_id || null,
+            user_id: userId,
+            action: 'slot_booked',
+            details: `${booking.attendee_name || booking.attendee_email} booked "${booking.event_title}" for ${slotLocal} IST`,
+        }).then(({ error }) => {
+            if (error) console.error('[calendar/book] activity log failed:', error.message);
+        });
+
         return NextResponse.json({
             success: true,
             meetLink: meetLink || null,

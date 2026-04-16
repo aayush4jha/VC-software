@@ -199,34 +199,47 @@ function BookingContent() {
                             </div>
                         ))}
 
-                        {selectedSlot && (
-                            <div style={{
-                                position: 'sticky', bottom: 20, padding: 16,
-                                background: '#fff', borderRadius: 12, boxShadow: '0 -4px 20px rgba(0,0,0,0.1)',
-                                border: '1px solid #e2e8f0',
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            }}>
-                                <div>
-                                    <div style={{ fontSize: 14, fontWeight: 600 }}>{selectedSlot.date} at {selectedSlot.time}</div>
-                                    <div style={{ fontSize: 12, color: '#64748b' }}>{duration} minutes &middot; Google Meet</div>
-                                </div>
-                                <button
-                                    onClick={handleBook}
-                                    disabled={booking}
-                                    style={{
-                                        padding: '10px 24px', background: '#6366f1', color: '#fff',
-                                        border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14,
-                                        cursor: booking ? 'wait' : 'pointer', opacity: booking ? 0.7 : 1,
-                                        fontFamily: 'inherit',
-                                    }}
-                                >
-                                    {booking ? 'Booking...' : 'Confirm Booking'}
-                                </button>
-                            </div>
-                        )}
+                        {/* Spacer so the fixed confirm bar doesn't cover the last row */}
+                        {selectedSlot && <div style={{ height: 100 }} />}
                     </>
                 )}
             </div>
+
+            {selectedSlot && !booked && (
+                <div style={{
+                    position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50,
+                    padding: '14px 20px',
+                    background: '#fff',
+                    boxShadow: '0 -4px 20px rgba(0,0,0,0.1)',
+                    borderTop: '1px solid #e2e8f0',
+                }}>
+                    <div style={{
+                        maxWidth: 600, margin: '0 auto',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+                    }}>
+                        <div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>
+                                {selectedSlot.date} at {selectedSlot.time}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>
+                                {duration} minutes &middot; Google Meet
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleBook}
+                            disabled={booking}
+                            style={{
+                                padding: '12px 28px', background: '#6366f1', color: '#fff',
+                                border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14,
+                                cursor: booking ? 'wait' : 'pointer', opacity: booking ? 0.7 : 1,
+                                fontFamily: 'inherit', whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {booking ? 'Booking...' : 'Confirm Booking'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
