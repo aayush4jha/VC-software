@@ -20,6 +20,8 @@ export default function CalendarInvite() {
     const [eventLink, setEventLink] = useState<string | null>(null);
     const [bookingUrl, setBookingUrl] = useState<string | null>(null);
     const [creatingBooking, setCreatingBooking] = useState(false);
+    const [emailSent, setEmailSent] = useState<boolean | null>(null);
+    const [emailError, setEmailError] = useState<string | null>(null);
 
     if (!showCalendarInvite || !selectedCompany) return null;
 
@@ -85,6 +87,8 @@ export default function CalendarInvite() {
     const handleSendBookingLink = async () => {
         setCreatingBooking(true);
         setStatusMessage('');
+        setEmailSent(null);
+        setEmailError(null);
         try {
             const res = await fetch('/api/calendar/create-booking-link', {
                 method: 'POST',
@@ -104,18 +108,34 @@ export default function CalendarInvite() {
             if (!res.ok) { setStatusMessage(data.error || 'Failed'); setCreatingBooking(false); return; }
             setBookingUrl(data.bookingUrl);
             setSendStatus('booking-sent');
-            setStatusMessage('Booking link generated! Share it with the founder.');
+            setStatusMessage('Booking link generated. Sending email to founder...');
 
-            // Also send it via email
-            await fetch('/api/gmail/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: selectedCompany.founderEmail,
-                    subject: `Schedule a call - ${selectedCompany.companyName} | Dholakia Ventures`,
-                    body: `Hi ${selectedCompany.founderName},\n\nPlease pick a time slot that works for you using the link below:\n\n${data.bookingUrl}\n\nThis will automatically create a Google Meet call and send calendar invites to both of us.\n\nLooking forward to our conversation!\n\nBest regards,\n${user?.name || 'Dholakia Ventures'}`,
-                }),
-            });
+            // Also send it via email — check the response so we surface failures
+            try {
+                const mailRes = await fetch('/api/gmail/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: selectedCompany.founderEmail,
+                        companyId: selectedCompany.id,
+                        subject: `Schedule a call - ${selectedCompany.companyName} | Dholakia Ventures`,
+                        body: `Hi ${selectedCompany.founderName},\n\nPlease pick a time slot that works for you using the link below:\n\n${data.bookingUrl}\n\nThis will automatically create a Google Meet call and send calendar invites to both of us.\n\nLooking forward to our conversation!\n\nBest regards,\n${user?.name || 'Dholakia Ventures'}`,
+                    }),
+                });
+                const mailData = await mailRes.json().catch(() => ({}));
+                if (!mailRes.ok) {
+                    setEmailSent(false);
+                    setEmailError(mailData.error || 'Failed to send email. Copy the link and send it manually.');
+                    setStatusMessage('Booking link ready, but email failed to send. Copy it manually below.');
+                } else {
+                    setEmailSent(true);
+                    setStatusMessage(`Booking link emailed to ${selectedCompany.founderEmail}.`);
+                }
+            } catch {
+                setEmailSent(false);
+                setEmailError('Network error while sending email. Copy the link and send it manually.');
+                setStatusMessage('Booking link ready, but email failed to send.');
+            }
         } catch {
             setStatusMessage('Network error. Please try again.');
         }
@@ -129,6 +149,8 @@ export default function CalendarInvite() {
         setMeetLink(null);
         setEventLink(null);
         setBookingUrl(null);
+        setEmailSent(null);
+        setEmailError(null);
     };
 
     return (
@@ -332,7 +354,13 @@ export default function CalendarInvite() {
                             background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
                             marginTop: 8,
                         }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>Booking Link (sent to {selectedCompany.founderEmail})</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                                Booking Link {emailSent === true
+                                    ? `(emailed to ${selectedCompany.founderEmail})`
+                                    : emailSent === false
+                                        ? '(email failed — copy and send manually)'
+                                        : '(sending email...)'}
+                            </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <input
                                     className="form-input"
@@ -352,6 +380,11 @@ export default function CalendarInvite() {
                             <div style={{ fontSize: 11, color: '#6366f1', marginTop: 6 }}>
                                 The founder will see your available calendar slots and can pick a time. A Google Meet will be created automatically.
                             </div>
+                            {emailError && (
+                                <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>
+                                    {emailError}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
