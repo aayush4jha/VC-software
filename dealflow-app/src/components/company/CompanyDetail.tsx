@@ -450,10 +450,25 @@ export default function CompanyDetail() {
                                     position: 'absolute', top: '100%', right: 0, marginTop: 6,
                                     background: 'var(--bg-secondary)', border: '1px solid var(--border)',
                                     borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
-                                    minWidth: 240, padding: '6px 0', zIndex: 10,
+                                    minWidth: 260, padding: '6px 0', zIndex: 10,
                                 }}>
-                                    <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                        Set Terminal Status
+                                    {/* Current status — what this deal is actually in right now */}
+                                    <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                                            Current Status
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage?.color, display: 'inline-block' }} />
+                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                Active &middot; {stage?.name || 'In pipeline'}
+                                            </span>
+                                        </div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                            {days} days in pipeline
+                                        </div>
+                                    </div>
+                                    <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                        Change To
                                     </div>
                                     {[
                                         { status: 'Awaiting Response' as TerminalStatus, icon: <Clock size={14} />, color: '#f59e0b', desc: 'Waiting for founder reply' },
