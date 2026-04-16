@@ -40,13 +40,41 @@ export async function POST(request: NextRequest) {
     const calendar = google.calendar({ version: 'v3', auth: authResult.oauth2Client });
 
     try {
+        // Final conflict check — re-query freebusy right before creating the event
+        // so a slot that just got booked by someone else is rejected cleanly
+        const freebusy = await calendar.freebusy.query({
+            requestBody: {
+                timeMin: slotStart,
+                timeMax: slotEnd,
+                timeZone: 'Asia/Kolkata',
+                items: [{ id: 'primary' }],
+            },
+        });
+        const busy = freebusy.data.calendars?.primary?.busy || [];
+        if (busy.length > 0) {
+            return NextResponse.json({
+                error: 'This slot was just booked by someone else. Please pick another time.',
+                code: 'slot_taken',
+            }, { status: 409 });
+        }
+
+        const description = [
+            `Meeting with ${booking.attendee_name}${booking.company_name ? ` from ${booking.company_name}` : ''}.`,
+            '',
+            `Attendee: ${booking.attendee_name} <${booking.attendee_email}>`,
+            booking.host_name ? `Host: ${booking.host_name} <${booking.host_email}>` : `Host: ${booking.host_email}`,
+            `Duration: ${booking.duration_minutes || 30} minutes`,
+            '',
+            'Booked via Dholakia Ventures scheduling link.',
+        ].filter(Boolean).join('\n');
+
         const event = await calendar.events.insert({
             calendarId: 'primary',
             conferenceDataVersion: 1,
             sendUpdates: 'all',
             requestBody: {
                 summary: booking.event_title,
-                description: `Meeting with ${booking.attendee_name} from ${booking.company_name}.\n\nBooked via scheduling link.`,
+                description,
                 start: { dateTime: slotStart, timeZone: 'Asia/Kolkata' },
                 end: { dateTime: slotEnd, timeZone: 'Asia/Kolkata' },
                 attendees: [

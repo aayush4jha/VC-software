@@ -16,6 +16,24 @@ function BookingContent() {
     const token = searchParams.get('token');
     const userId = searchParams.get('user');
 
+    // Global CSS locks body scroll for the app shell — undo that for this public page
+    useEffect(() => {
+        const prevHtmlOverflow = document.documentElement.style.overflow;
+        const prevHtmlHeight = document.documentElement.style.height;
+        const prevBodyOverflow = document.body.style.overflow;
+        const prevBodyHeight = document.body.style.height;
+        document.documentElement.style.overflow = 'auto';
+        document.documentElement.style.height = 'auto';
+        document.body.style.overflow = 'auto';
+        document.body.style.height = 'auto';
+        return () => {
+            document.documentElement.style.overflow = prevHtmlOverflow;
+            document.documentElement.style.height = prevHtmlHeight;
+            document.body.style.overflow = prevBodyOverflow;
+            document.body.style.height = prevBodyHeight;
+        };
+    }, []);
+
     const [slots, setSlots] = useState<Slot[]>([]);
     const [companyName, setCompanyName] = useState('');
     const [hostName, setHostName] = useState('');
