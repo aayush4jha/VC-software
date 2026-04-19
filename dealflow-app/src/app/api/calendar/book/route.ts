@@ -58,15 +58,26 @@ export async function POST(request: NextRequest) {
             }, { status: 409 });
         }
 
+        const extraGuests: string[] = Array.isArray(booking.additional_guests)
+            ? (booking.additional_guests as unknown[]).filter((g): g is string => typeof g === 'string')
+            : [];
+
         const description = [
             `Meeting with ${booking.attendee_name}${booking.company_name ? ` from ${booking.company_name}` : ''}.`,
             '',
             `Attendee: ${booking.attendee_name} <${booking.attendee_email}>`,
             booking.host_name ? `Host: ${booking.host_name} <${booking.host_email}>` : `Host: ${booking.host_email}`,
+            extraGuests.length > 0 ? `Additional guests: ${extraGuests.join(', ')}` : '',
             `Duration: ${booking.duration_minutes || 30} minutes`,
             '',
             'Booked via Dholakia Ventures scheduling link.',
         ].filter(Boolean).join('\n');
+
+        const attendees = [
+            { email: booking.attendee_email, displayName: booking.attendee_name },
+            { email: booking.host_email, self: true },
+            ...extraGuests.map(email => ({ email })),
+        ];
 
         const event = await calendar.events.insert({
             calendarId: 'primary',
@@ -77,10 +88,7 @@ export async function POST(request: NextRequest) {
                 description,
                 start: { dateTime: slotStart, timeZone: 'Asia/Kolkata' },
                 end: { dateTime: slotEnd, timeZone: 'Asia/Kolkata' },
-                attendees: [
-                    { email: booking.attendee_email, displayName: booking.attendee_name },
-                    { email: booking.host_email, self: true },
-                ],
+                attendees,
                 conferenceData: {
                     createRequest: {
                         requestId: `book-${Date.now()}-${Math.random().toString(36).substring(7)}`,

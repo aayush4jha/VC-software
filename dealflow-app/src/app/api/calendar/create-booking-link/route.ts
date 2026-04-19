@@ -10,11 +10,32 @@ export async function POST(request: NextRequest) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) return NextResponse.json({ error: 'Config missing' }, { status: 500 });
 
-    const { companyId, companyName, attendeeName, attendeeEmail, hostName, hostEmail, eventTitle, durationMinutes } = await request.json();
+    const {
+        companyId, companyName, attendeeName, attendeeEmail,
+        hostName, hostEmail, eventTitle, durationMinutes,
+        allowedSlots, additionalGuests,
+    } = await request.json();
 
     if (!attendeeEmail || !eventTitle) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    // Normalize the optional pre-selected slots + guest emails
+    const cleanSlots = Array.isArray(allowedSlots)
+        ? allowedSlots
+              .filter((s: unknown): s is { start: string; end: string } =>
+                  !!s && typeof (s as { start?: unknown }).start === 'string' && typeof (s as { end?: unknown }).end === 'string')
+              .map(s => ({ start: s.start, end: s.end }))
+        : null;
+
+    const cleanGuests = Array.isArray(additionalGuests)
+        ? Array.from(new Set(
+            additionalGuests
+                .filter((g: unknown): g is string => typeof g === 'string')
+                .map(g => g.trim().toLowerCase())
+                .filter(g => /.+@.+\..+/.test(g) && g !== attendeeEmail.toLowerCase()),
+        ))
+        : null;
 
     const db = createServiceClient(supabaseUrl, serviceRoleKey);
 
@@ -32,6 +53,8 @@ export async function POST(request: NextRequest) {
         host_email: hostEmail || '',
         event_title: eventTitle,
         duration_minutes: durationMinutes || 30,
+        allowed_slots: cleanSlots && cleanSlots.length > 0 ? cleanSlots : null,
+        additional_guests: cleanGuests && cleanGuests.length > 0 ? cleanGuests : null,
     }).select().single();
 
     if (error) {

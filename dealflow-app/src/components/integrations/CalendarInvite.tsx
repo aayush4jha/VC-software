@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Calendar, Video, Clock, Send, ExternalLink, CheckCircle, AlertCircle, Loader2, LogIn, Link2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, Calendar, Video, Clock, Send, ExternalLink, CheckCircle, AlertCircle, Loader2, LogIn, Link2, Plus, Users } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 
 type SendStatus = 'idle' | 'creating' | 'success' | 'error' | 'auth-required' | 'booking-sent';
+
+interface HostSlot { start: string; end: string; date: string; time: string }
 
 export default function CalendarInvite() {
     const { showCalendarInvite, setShowCalendarInvite, selectedCompany, user, updateCompany } = useAppContext();
@@ -22,6 +24,15 @@ export default function CalendarInvite() {
     const [creatingBooking, setCreatingBooking] = useState(false);
     const [emailSent, setEmailSent] = useState<boolean | null>(null);
     const [emailError, setEmailError] = useState<string | null>(null);
+
+    // Pick-a-slot flow state
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [hostSlots, setHostSlots] = useState<HostSlot[]>([]);
+    const [loadingHostSlots, setLoadingHostSlots] = useState(false);
+    const [hostSlotsError, setHostSlotsError] = useState<string | null>(null);
+    const [selectedSlotKeys, setSelectedSlotKeys] = useState<Set<string>>(new Set());
+    const [guestEmailInput, setGuestEmailInput] = useState('');
+    const [guestEmails, setGuestEmails] = useState<string[]>([]);
 
     if (!showCalendarInvite || !selectedCompany) return null;
 
@@ -84,7 +95,74 @@ export default function CalendarInvite() {
         }
     };
 
+    // Load host's own free slots once the picker opens
+    const loadHostSlots = useCallback(async () => {
+        setLoadingHostSlots(true);
+        setHostSlotsError(null);
+        try {
+            const res = await fetch(`/api/calendar/my-slots?duration=${parseInt(duration)}`);
+            const data = await res.json();
+            if (!res.ok) {
+                setHostSlotsError(data.error || 'Failed to load your availability.');
+                setHostSlots([]);
+            } else {
+                setHostSlots(data.slots || []);
+            }
+        } catch {
+            setHostSlotsError('Network error while loading your availability.');
+        }
+        setLoadingHostSlots(false);
+    }, [duration]);
+
+    useEffect(() => {
+        if (pickerOpen) loadHostSlots();
+    }, [pickerOpen, loadHostSlots]);
+
+    const openPicker = () => {
+        if (!isConnected) {
+            setSendStatus('auth-required');
+            setStatusMessage('Connect your Google account so we can load your availability.');
+            return;
+        }
+        setPickerOpen(true);
+        setSendStatus('idle');
+        setStatusMessage('');
+    };
+
+    const toggleSlot = (key: string) => {
+        setSelectedSlotKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key); else next.add(key);
+            return next;
+        });
+    };
+
+    const addGuestEmail = () => {
+        const raw = guestEmailInput.trim().toLowerCase();
+        if (!raw) return;
+        if (!/.+@.+\..+/.test(raw)) {
+            setStatusMessage(`"${raw}" doesn't look like a valid email.`);
+            return;
+        }
+        if (guestEmails.includes(raw) || raw === (selectedCompany?.founderEmail || '').toLowerCase()) {
+            setGuestEmailInput('');
+            return;
+        }
+        setGuestEmails(g => [...g, raw]);
+        setGuestEmailInput('');
+        setStatusMessage('');
+    };
+
+    const removeGuestEmail = (email: string) => {
+        setGuestEmails(g => g.filter(e => e !== email));
+    };
+
     const handleSendBookingLink = async () => {
+        const chosenSlots = hostSlots.filter(s => selectedSlotKeys.has(s.start));
+        if (chosenSlots.length === 0) {
+            setStatusMessage('Pick at least one slot to offer the founder.');
+            return;
+        }
         setCreatingBooking(true);
         setStatusMessage('');
         setEmailSent(null);
@@ -102,6 +180,8 @@ export default function CalendarInvite() {
                     hostEmail: user?.email || '',
                     eventTitle,
                     durationMinutes: parseInt(duration),
+                    allowedSlots: chosenSlots.map(s => ({ start: s.start, end: s.end })),
+                    additionalGuests: guestEmails,
                 }),
             });
             const data = await res.json();
@@ -151,6 +231,12 @@ export default function CalendarInvite() {
         setBookingUrl(null);
         setEmailSent(null);
         setEmailError(null);
+        setPickerOpen(false);
+        setHostSlots([]);
+        setHostSlotsError(null);
+        setSelectedSlotKeys(new Set());
+        setGuestEmailInput('');
+        setGuestEmails([]);
     };
 
     return (
@@ -347,6 +433,133 @@ export default function CalendarInvite() {
                             </a>
                         </div>
                     )}
+                    {/* Pick-a-slot composer — host selects slots + guests before generating the link */}
+                    {pickerOpen && sendStatus !== 'booking-sent' && (
+                        <div style={{
+                            marginTop: 12, padding: 14, borderRadius: 'var(--radius-md)',
+                            background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                <Users size={14} style={{ color: 'var(--primary)' }} />
+                                <span style={{ fontSize: 13, fontWeight: 600 }}>Additional guests (optional)</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                                <input
+                                    className="form-input"
+                                    value={guestEmailInput}
+                                    onChange={e => setGuestEmailInput(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addGuestEmail(); } }}
+                                    placeholder="colleague@firm.com"
+                                    style={{ fontSize: 13, flex: 1 }}
+                                />
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={addGuestEmail}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+                                >
+                                    <Plus size={12} /> Add
+                                </button>
+                            </div>
+                            {guestEmails.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                                    {guestEmails.map(email => (
+                                        <span
+                                            key={email}
+                                            style={{
+                                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                padding: '3px 8px', fontSize: 12,
+                                                background: 'rgba(99,102,241,0.1)', color: '#4f46e5',
+                                                border: '1px solid rgba(99,102,241,0.25)', borderRadius: 999,
+                                            }}
+                                        >
+                                            {email}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeGuestEmail(email)}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, display: 'flex' }}
+                                                aria-label={`Remove ${email}`}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                                Everyone added here will be invited to the meeting and receive the Google Meet link once the founder picks a slot.
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Clock size={14} style={{ color: 'var(--primary)' }} />
+                                    <span style={{ fontSize: 13, fontWeight: 600 }}>
+                                        Offer these slots ({selectedSlotKeys.size} selected)
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={loadHostSlots}
+                                    disabled={loadingHostSlots}
+                                    style={{ fontSize: 11 }}
+                                >
+                                    {loadingHostSlots ? <Loader2 size={12} className="spin" /> : 'Refresh'}
+                                </button>
+                            </div>
+
+                            {loadingHostSlots ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)', padding: '12px 0' }}>
+                                    <Loader2 size={14} className="spin" /> Loading your free slots...
+                                </div>
+                            ) : hostSlotsError ? (
+                                <div style={{ fontSize: 12, color: '#ef4444', padding: '8px 0' }}>{hostSlotsError}</div>
+                            ) : hostSlots.length === 0 ? (
+                                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '8px 0' }}>
+                                    No free slots found in the next 7 weekdays between 9am and 7pm IST.
+                                </div>
+                            ) : (
+                                <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    {Object.entries(
+                                        hostSlots.reduce<Record<string, HostSlot[]>>((acc, s) => {
+                                            (acc[s.date] ||= []).push(s);
+                                            return acc;
+                                        }, {}),
+                                    ).map(([d, list]) => (
+                                        <div key={d}>
+                                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                                                {d}
+                                            </div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                                {list.map(s => {
+                                                    const on = selectedSlotKeys.has(s.start);
+                                                    return (
+                                                        <button
+                                                            key={s.start}
+                                                            type="button"
+                                                            onClick={() => toggleSlot(s.start)}
+                                                            style={{
+                                                                padding: '5px 10px', fontSize: 12,
+                                                                border: on ? '1.5px solid #6366f1' : '1px solid var(--border)',
+                                                                borderRadius: 6, cursor: 'pointer',
+                                                                background: on ? 'rgba(99,102,241,0.12)' : 'var(--bg-secondary)',
+                                                                color: on ? '#4f46e5' : 'var(--text-primary)',
+                                                                fontWeight: on ? 600 : 400,
+                                                                fontFamily: 'inherit',
+                                                            }}
+                                                        >
+                                                            {s.time}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Booking link result */}
                     {sendStatus === 'booking-sent' && bookingUrl && (
                         <div style={{
@@ -396,28 +609,32 @@ export default function CalendarInvite() {
                         <>
                             <button
                                 className="btn btn-ghost"
-                                onClick={handleSendBookingLink}
-                                disabled={sendStatus === 'creating' || creatingBooking}
+                                onClick={pickerOpen ? handleSendBookingLink : openPicker}
+                                disabled={sendStatus === 'creating' || creatingBooking || (pickerOpen && selectedSlotKeys.size === 0)}
                                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
                             >
                                 {creatingBooking ? (
                                     <><Loader2 size={14} className="spin" /> Sending...</>
+                                ) : pickerOpen ? (
+                                    <><Send size={14} /> Send {selectedSlotKeys.size > 0 ? `${selectedSlotKeys.size} slot${selectedSlotKeys.size === 1 ? '' : 's'}` : 'slots'}</>
                                 ) : (
                                     <><Calendar size={14} /> Let Them Pick a Slot</>
                                 )}
                             </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleCreateEvent}
-                                disabled={sendStatus === 'creating' || creatingBooking}
-                                style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: sendStatus === 'creating' ? 0.7 : 1 }}
-                            >
-                                {sendStatus === 'creating' ? (
-                                    <><Loader2 size={14} className="spin" /> Creating...</>
-                                ) : (
-                                    <><Send size={14} /> Create Event &amp; Meet</>
-                                )}
-                            </button>
+                            {!pickerOpen && (
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleCreateEvent}
+                                    disabled={sendStatus === 'creating' || creatingBooking}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: sendStatus === 'creating' ? 0.7 : 1 }}
+                                >
+                                    {sendStatus === 'creating' ? (
+                                        <><Loader2 size={14} className="spin" /> Creating...</>
+                                    ) : (
+                                        <><Send size={14} /> Create Event &amp; Meet</>
+                                    )}
+                                </button>
+                            )}
                         </>
                     )}
                 </div>

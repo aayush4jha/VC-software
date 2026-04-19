@@ -64,45 +64,60 @@ export async function GET(request: NextRequest) {
 
         const busySlots = freeBusyRes.data.calendars?.primary?.busy || [];
 
-        // Generate available slots (9 AM to 7 PM IST, in duration-minute increments)
+        const slotConflicts = (start: Date, end: Date) =>
+            busySlots.some(busy => {
+                const busyStart = new Date(busy.start!);
+                const busyEnd = new Date(busy.end!);
+                return start < busyEnd && end > busyStart;
+            });
+
+        const formatSlot = (start: Date, end: Date) => ({
+            start: start.toISOString(),
+            end: end.toISOString(),
+            date: start.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
+            time: start.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+        });
+
         const slots: { start: string; end: string; date: string; time: string }[] = [];
-        const startHour = 9;
-        const endHour = 19; // 7 PM
 
-        for (let day = 0; day < 7; day++) {
-            const date = new Date(timeMin);
-            date.setDate(date.getDate() + day);
+        // If the host pre-selected specific slots for this token, only offer those
+        // (still filtered by current free/busy so stale offers don't get booked on top of new events)
+        const allowed = Array.isArray(booking.allowed_slots) ? booking.allowed_slots as { start: string; end: string }[] : null;
+        if (allowed && allowed.length > 0) {
+            for (const s of allowed) {
+                const start = new Date(s.start);
+                const end = new Date(s.end);
+                if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
+                if (start < new Date()) continue; // skip slots already in the past
+                if (slotConflicts(start, end)) continue;
+                slots.push(formatSlot(start, end));
+            }
+        } else {
+            // Fall back to the original working-hours grid (9am–7pm IST, weekdays)
+            const startHour = 9;
+            const endHour = 19;
 
-            // Skip weekends
-            const dayOfWeek = date.getDay();
-            if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+            for (let day = 0; day < 7; day++) {
+                const date = new Date(timeMin);
+                date.setDate(date.getDate() + day);
 
-            for (let hour = startHour; hour < endHour; hour++) {
-                for (let min = 0; min < 60; min += duration) {
-                    if (hour === endHour - 1 && min + duration > 60) continue;
+                const dayOfWeek = date.getDay();
+                if (dayOfWeek === 0 || dayOfWeek === 6) continue;
 
-                    const slotStart = new Date(date);
-                    slotStart.setHours(hour, min, 0, 0);
+                for (let hour = startHour; hour < endHour; hour++) {
+                    for (let min = 0; min < 60; min += duration) {
+                        if (hour === endHour - 1 && min + duration > 60) continue;
 
-                    const slotEnd = new Date(slotStart);
-                    slotEnd.setMinutes(slotEnd.getMinutes() + duration);
+                        const slotStart = new Date(date);
+                        slotStart.setHours(hour, min, 0, 0);
 
-                    if (slotEnd.getHours() > endHour || (slotEnd.getHours() === endHour && slotEnd.getMinutes() > 0)) continue;
+                        const slotEnd = new Date(slotStart);
+                        slotEnd.setMinutes(slotEnd.getMinutes() + duration);
 
-                    // Check if slot conflicts with any busy period
-                    const conflicts = busySlots.some(busy => {
-                        const busyStart = new Date(busy.start!);
-                        const busyEnd = new Date(busy.end!);
-                        return slotStart < busyEnd && slotEnd > busyStart;
-                    });
+                        if (slotEnd.getHours() > endHour || (slotEnd.getHours() === endHour && slotEnd.getMinutes() > 0)) continue;
+                        if (slotConflicts(slotStart, slotEnd)) continue;
 
-                    if (!conflicts) {
-                        slots.push({
-                            start: slotStart.toISOString(),
-                            end: slotEnd.toISOString(),
-                            date: slotStart.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
-                            time: slotStart.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
-                        });
+                        slots.push(formatSlot(slotStart, slotEnd));
                     }
                 }
             }
