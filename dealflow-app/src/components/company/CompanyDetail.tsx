@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink,
     AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
-    XCircle, ArrowRight, Loader2, Link2, Pause, RotateCcw,
+    XCircle, ArrowRight, Loader2, Link2, RotateCcw,
     FileText, FileSearch, Download, FileDown, Video,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
@@ -44,10 +44,8 @@ export default function CompanyDetail() {
     const [newComment, setNewComment] = useState('');
 
     // Terminal status state
-    const [showTerminalMenu, setShowTerminalMenu] = useState(false);
     const [showResolveModal, setShowResolveModal] = useState(false);
     const [resolveTargetStageId, setResolveTargetStageId] = useState('');
-    const [settingTerminal] = useState(false);
 
     // Deck email search state
     const [searchingDeckEmail, setSearchingDeckEmail] = useState(false);
@@ -425,41 +423,21 @@ export default function CompanyDetail() {
                                 <ChevronRight size={14} /> {nextStage.name}
                             </button>
                         )}
-                        <div style={{ position: 'relative', marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                            <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => setShowTerminalMenu(!showTerminalMenu)}
-                                disabled={settingTerminal}
-                                style={{ fontSize: 12 }}
-                            >
-                                {settingTerminal ? <Loader2 size={12} className="spin" /> : <Pause size={12} />}
+                        <div style={{
+                            marginLeft: 'auto',
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '4px 12px',
+                            background: 'var(--bg-tertiary)',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border)',
+                        }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                 Status
-                                <ChevronDown size={10} />
-                            </button>
-                            {showTerminalMenu && (
-                                <div style={{
-                                    position: 'absolute', top: '100%', right: 0, marginTop: 6,
-                                    background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                                    borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
-                                    minWidth: 260, padding: '6px 0', zIndex: 10,
-                                }}>
-                                    {/* Current status — what this deal is actually in right now */}
-                                    <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
-                                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                                            Current Status
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage?.color, display: 'inline-block' }} />
-                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                Active &middot; {stage?.name || 'In pipeline'}
-                                            </span>
-                                        </div>
-                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                            {days} days in pipeline
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                            </span>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage?.color, display: 'inline-block' }} />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                Active &middot; {stage?.name || 'In pipeline'}
+                            </span>
                         </div>
                     </div>
                 )}
