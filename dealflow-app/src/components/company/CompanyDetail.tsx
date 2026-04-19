@@ -20,7 +20,9 @@ const shareTypes: ShareType[] = ['Primary', 'Secondary'];
 export default function CompanyDetail() {
     const {
         selectedCompany, setSelectedCompany,
-        setShowRejectionFlow, setShowEmailCompose, setShowCalendarInvite,
+        showRejectionFlow, setShowRejectionFlow,
+        showEmailCompose, setShowEmailCompose,
+        showCalendarInvite, setShowCalendarInvite,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         pipelineStages, user, users, companies, industries, dealSourceNames,
         updateCompany, moveCompanyStage, assignAnalyst, addComment,
@@ -83,6 +85,18 @@ export default function CompanyDetail() {
             fetchFeedback(selectedCompany.id).then(setFeedbackList);
         }
     }, [selectedCompany, fetchComments, fetchActivity, fetchScores]);
+
+    // Esc closes the detail panel — but defer to any child modals first
+    useEffect(() => {
+        if (!selectedCompany) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            if (showRejectionFlow || showEmailCompose || showCalendarInvite || showResolveModal) return;
+            setSelectedCompany(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [selectedCompany, showRejectionFlow, showEmailCompose, showCalendarInvite, showResolveModal, setSelectedCompany]);
 
     // Auto-search for deck email when company opens
     useEffect(() => {
