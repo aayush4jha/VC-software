@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { getAuthenticatedClient } from '@/lib/google';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { getRouteUser } from '@/lib/auth-helpers';
+import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(request: NextRequest) {
-    const accessToken = request.cookies.get('google_access_token')?.value;
-    const refreshToken = request.cookies.get('google_refresh_token')?.value;
-
-    if (!accessToken) {
+    const user = await getRouteUser(request);
+    if (!user) {
         return NextResponse.json(
-            { error: 'Not authenticated. Please connect your Google account.' },
+            { error: 'Not authenticated. Please sign in.' },
+            { status: 401 }
+        );
+    }
+
+    const authResult = await getAuthenticatedClientForUser(user.id);
+    if (!authResult) {
+        return NextResponse.json(
+            { error: 'Google account not connected. Please connect your Google account.', code: 'reconnect_required' },
             { status: 401 }
         );
     }
@@ -23,8 +34,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const oauth2Client = getAuthenticatedClient(accessToken, refreshToken);
-        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+        const calendar = google.calendar({ version: 'v3', auth: authResult.oauth2Client });
 
         const duration = durationMinutes || 30;
         const startDateTime = `${date}T${time}:00`;
@@ -82,21 +92,24 @@ export async function POST(request: NextRequest) {
             end: event.data.end,
         });
     } catch (error: unknown) {
-        console.error('Error creating calendar event:', error);
-
         const err = error as { code?: number; message?: string };
-        if (err.code === 401) {
-            const response = NextResponse.json(
-                { error: 'Google session expired. Please reconnect your account.' },
-                { status: 401 }
+        const msg = err.message || '';
+        console.error('Error creating calendar event:', msg);
+
+        if (err.code === 401 || msg.includes('invalid_grant') || msg.includes('Invalid Credentials')) {
+            // Host tokens are stale — clear them so the next status check triggers a reconnect
+            try {
+                const db = createServiceClient(supabaseUrl, serviceRoleKey);
+                await db.from('google_tokens').delete().eq('user_id', user.id);
+            } catch { /* best-effort cleanup */ }
+            return NextResponse.json(
+                { error: 'Google session expired. Please reconnect your account.', code: 'reconnect_required' },
+                { status: 401 },
             );
-            response.cookies.delete('google_access_token');
-            response.cookies.delete('google_connected');
-            return response;
         }
 
         return NextResponse.json(
-            { error: err.message || 'Failed to create calendar event' },
+            { error: msg || 'Failed to create calendar event' },
             { status: 500 }
         );
     }
