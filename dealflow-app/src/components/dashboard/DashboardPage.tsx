@@ -42,23 +42,17 @@ export default function DashboardPage() {
         [pipelineStages],
     );
 
-    const introCallStageIds = useMemo(() => {
-        // Pick stages at order positions 2, 3, 4 (0-indexed: index 1, 2, 3)
-        // The 3rd stage is the primary "Intro Call" stage
-        const ids = new Set<string>();
-        if (sortedStages.length >= 3) ids.add(sortedStages[2].id); // 3rd stage
-        // Also include adjacent stages for "nearby"
-        if (sortedStages.length >= 2) ids.add(sortedStages[1].id); // 2nd stage
-        if (sortedStages.length >= 4) ids.add(sortedStages[3].id); // 4th stage
-        return ids;
-    }, [sortedStages]);
-
-    const introCallCompanies = useMemo(
-        () => activeCompanies.filter(c =>
-            c.analystId === user?.id && introCallStageIds.has(c.pipelineStageId)
-        ),
-        [activeCompanies, user, introCallStageIds],
-    );
+    // All companies with an upcoming scheduled call. Covers both the
+    // "Create Event & Meet" path and the pick-a-slot booking flow — both
+    // persist meetEventDate on the company row when the event is created.
+    // Kept visible for ~10 min past start so an in-progress call doesn't
+    // drop off the dashboard mid-meeting.
+    const scheduledCalls = useMemo(() => {
+        const cutoff = Date.now() - 10 * 60 * 1000;
+        return activeCompanies
+            .filter(c => c.meetEventDate && new Date(c.meetEventDate).getTime() >= cutoff)
+            .sort((a, b) => new Date(a.meetEventDate!).getTime() - new Date(b.meetEventDate!).getTime());
+    }, [activeCompanies]);
 
     // ── 2. New Assignments (assigned to me, created in last 7 days) ──
     const newAssignments = useMemo(
@@ -149,27 +143,43 @@ export default function DashboardPage() {
 
                 {/* ── Main grid: Intro Call + Pipeline Distribution ── */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                    {/* 1. Intro Call / Nearby Stage Companies */}
+                    {/* 1. Scheduled Calls (all upcoming meetings across the pipeline) */}
                     <div className="dashboard-section">
                         <div className="dashboard-section-title">
-                            <PhoneCall size={18} style={{ color: 'var(--primary)' }} /> Intro Call Companies
+                            <PhoneCall size={18} style={{ color: 'var(--primary)' }} /> Scheduled Calls
                         </div>
                         <div className="calls-strip" style={{ flexDirection: 'column' }}>
-                            {introCallCompanies.length === 0 ? (
+                            {scheduledCalls.length === 0 ? (
                                 <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
-                                    No scheduled calls today
+                                    No upcoming calls scheduled
                                 </div>
                             ) : (
-                                introCallCompanies.map(c => {
+                                scheduledCalls.map(c => {
                                     const stage = getStageById(c.pipelineStageId);
+                                    const when = new Date(c.meetEventDate!);
+                                    const now = new Date();
+                                    const sameDay = when.toDateString() === now.toDateString();
+                                    const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
+                                    const isTomorrow = when.toDateString() === tomorrow.toDateString();
+                                    const datePart = sameDay
+                                        ? 'Today'
+                                        : isTomorrow
+                                            ? 'Tomorrow'
+                                            : when.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+                                    const timePart = when.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
                                     return (
                                         <div key={c.id} className="call-card" style={{ minWidth: 'auto' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
                                                     <div className="call-card-company">{c.companyName}</div>
                                                     <div className="call-card-founder">{c.founderName}</div>
-                                                    <div style={{ marginTop: 4 }}>
-                                                        <span className="badge badge-primary" style={{ fontSize: 11 }}>{stage?.name}</span>
+                                                    <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                                                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
+                                                            {datePart} &middot; {timePart}
+                                                        </span>
+                                                        {stage && (
+                                                            <span className="badge badge-primary" style={{ fontSize: 11 }}>{stage.name}</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <button className="btn btn-secondary btn-sm" onClick={() => setSelectedCompany(c)}>View</button>
