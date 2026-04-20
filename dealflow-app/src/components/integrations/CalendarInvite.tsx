@@ -12,8 +12,18 @@ interface HostSlot { start: string; end: string; date: string; time: string }
 export default function CalendarInvite() {
     const { showCalendarInvite, setShowCalendarInvite, selectedCompany, user, updateCompany } = useAppContext();
     const { isConnected, isChecking, connect } = useGoogleAuth();
-    const [date, setDate] = useState('2026-02-20');
-    const [time, setTime] = useState('14:00');
+    // Sensible defaults: today, rounded up to the next half-hour
+    const defaultDateTime = () => {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() + (30 - (d.getMinutes() % 30)), 0, 0);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return {
+            date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+            time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+        };
+    };
+    const [date, setDate] = useState(defaultDateTime().date);
+    const [time, setTime] = useState(defaultDateTime().time);
     const [duration, setDuration] = useState('30');
     const [notes, setNotes] = useState('');
     const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
@@ -59,6 +69,16 @@ export default function CalendarInvite() {
         if (pickerOpen) loadHostSlots();
     }, [pickerOpen, loadHostSlots]);
 
+    // Refresh the default date/time each time the modal opens so stale state
+    // from a previous open doesn't push the next booking into the past.
+    useEffect(() => {
+        if (showCalendarInvite) {
+            const { date: nd, time: nt } = defaultDateTime();
+            setDate(nd);
+            setTime(nt);
+        }
+    }, [showCalendarInvite]);
+
     if (!showCalendarInvite || !selectedCompany) return null;
 
     const eventTitle = `Intro Call: ${selectedCompany.companyName}`;
@@ -67,6 +87,15 @@ export default function CalendarInvite() {
         if (!isConnected) {
             setSendStatus('auth-required');
             setStatusMessage('Connect your Google account to create events directly.');
+            return;
+        }
+
+        // Refuse past datetimes so the booking doesn't silently vanish from
+        // the "Scheduled Calls" dashboard (which only lists upcoming meetings).
+        const when = new Date(`${date}T${time}:00`);
+        if (Number.isNaN(when.getTime()) || when.getTime() < Date.now() - 60 * 1000) {
+            setSendStatus('error');
+            setStatusMessage('Pick a date and time in the future.');
             return;
         }
 
