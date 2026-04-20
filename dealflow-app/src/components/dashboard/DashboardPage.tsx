@@ -224,6 +224,7 @@ export default function DashboardPage() {
                                                                 background: '#00897B', color: '#fff',
                                                                 display: 'inline-flex', alignItems: 'center', gap: 4,
                                                                 fontSize: 13, padding: '7px 14px', whiteSpace: 'nowrap', fontWeight: 600,
+                                                                textDecoration: 'none',
                                                             }}
                                                         >
                                                             <Video size={14} /> Join
@@ -238,6 +239,7 @@ export default function DashboardPage() {
                                                                 background: '#00897B', color: '#fff',
                                                                 display: 'inline-flex', alignItems: 'center', gap: 4,
                                                                 fontSize: 13, padding: '7px 14px', whiteSpace: 'nowrap', fontWeight: 600,
+                                                                textDecoration: 'none',
                                                             }}
                                                             title="Opens Google Calendar — Meet link is inside the event"
                                                         >
