@@ -33,6 +33,7 @@ export default function CalendarInvite() {
     const [selectedSlotKeys, setSelectedSlotKeys] = useState<Set<string>>(new Set());
     const [guestEmailInput, setGuestEmailInput] = useState('');
     const [guestEmails, setGuestEmails] = useState<string[]>([]);
+    const [migrationSql, setMigrationSql] = useState<string | null>(null);
 
     if (!showCalendarInvite || !selectedCompany) return null;
 
@@ -188,7 +189,10 @@ export default function CalendarInvite() {
             if (!res.ok) { setStatusMessage(data.error || 'Failed'); setCreatingBooking(false); return; }
             setBookingUrl(data.bookingUrl);
             setSendStatus('booking-sent');
-            setStatusMessage('Booking link generated. Sending email to founder...');
+            setMigrationSql(data.migrationSql || null);
+            setStatusMessage(data.degraded
+                ? 'Booking link generated, but per-link slot filtering isn\u2019t enabled yet. Run the SQL below, then re-send the link.'
+                : 'Booking link generated. Sending email to founder...');
 
             // Also send it via email — check the response so we surface failures
             try {
@@ -237,6 +241,7 @@ export default function CalendarInvite() {
         setSelectedSlotKeys(new Set());
         setGuestEmailInput('');
         setGuestEmails([]);
+        setMigrationSql(null);
     };
 
     return (
@@ -596,6 +601,36 @@ export default function CalendarInvite() {
                             {emailError && (
                                 <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>
                                     {emailError}
+                                </div>
+                            )}
+                            {migrationSql && (
+                                <div style={{
+                                    marginTop: 10, padding: '10px 12px',
+                                    borderRadius: 'var(--radius-md)',
+                                    background: 'rgba(234,179,8,0.08)',
+                                    border: '1px solid rgba(234,179,8,0.3)',
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#b45309', marginBottom: 6 }}>
+                                        <AlertCircle size={14} />
+                                        One-time setup: enable per-link slot & guest storage
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                                        Paste this into your Supabase SQL editor (Dashboard &rarr; SQL &rarr; New query &rarr; Run). Then regenerate the link and your chosen slots and guests will be honoured.
+                                    </div>
+                                    <pre style={{
+                                        margin: 0, padding: 10,
+                                        fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                                        background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+                                        border: '1px solid var(--border)', borderRadius: 6,
+                                        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                    }}>{migrationSql}</pre>
+                                    <button
+                                        className="btn btn-sm"
+                                        onClick={() => navigator.clipboard.writeText(migrationSql)}
+                                        style={{ marginTop: 8, padding: '4px 10px', fontSize: 11 }}
+                                    >
+                                        <Link2 size={12} /> Copy SQL
+                                    </button>
                                 </div>
                             )}
                         </div>
