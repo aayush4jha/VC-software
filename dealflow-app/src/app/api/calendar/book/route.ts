@@ -109,19 +109,23 @@ export async function POST(request: NextRequest) {
             ep => ep.entryPointType === 'video'
         )?.uri;
 
-        // Mark token as booked
-        await db.from('booking_tokens').update({
+        // Mark token as booked, including the Meet link so the dashboard can
+        // render a Join button. Retry without the optional columns if the
+        // admin hasn't run the migration yet.
+        const fullUpdate: Record<string, unknown> = {
             booked: true,
             booked_slot: slotStart,
-        }).eq('id', booking.id);
-
-        // Update company's meetEventTitle and meetEventDate if company_id exists
-        if (booking.company_id) {
-            await db.from('companies').update({
-                meet_event_title: booking.event_title,
-                meet_event_date: slotStart,
-            }).eq('id', booking.company_id);
+            meet_link: meetLink || null,
+            event_link: event.data.htmlLink || null,
+        };
+        let { error: updateErr } = await db.from('booking_tokens').update(fullUpdate).eq('id', booking.id);
+        if (updateErr && /column|schema cache/i.test(updateErr.message) && /(meet_link|event_link)/i.test(updateErr.message)) {
+            ({ error: updateErr } = await db.from('booking_tokens').update({
+                booked: true,
+                booked_slot: slotStart,
+            }).eq('id', booking.id));
         }
+        if (updateErr) console.error('[calendar/book] booking update failed:', updateErr.message);
 
         // Log for admin audit trail so it's visible in the activity feed
         const slotLocal = new Date(slotStart).toLocaleString('en-IN', {

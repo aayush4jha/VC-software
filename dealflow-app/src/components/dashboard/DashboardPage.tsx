@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useEffect, useState, useCallback } from 'react';
-import { BarChart3, AlertTriangle, ArrowRight, Users, Sparkles, PhoneCall, UserPlus } from 'lucide-react';
+import { BarChart3, AlertTriangle, ArrowRight, Users, Sparkles, PhoneCall, UserPlus, Video } from 'lucide-react';
 import TopHeader from '@/components/layout/TopHeader';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { useAppContext } from '@/lib/context';
@@ -17,6 +17,8 @@ interface ScheduledCall {
     eventTitle: string;
     durationMinutes: number;
     bookedSlot: string;
+    meetLink: string | null;
+    eventLink: string | null;
 }
 
 export default function DashboardPage() {
@@ -211,9 +213,26 @@ export default function DashboardPage() {
                                                         )}
                                                     </div>
                                                 </div>
-                                                {company && (
-                                                    <button className="btn btn-secondary btn-sm" onClick={() => setSelectedCompany(company)}>View</button>
-                                                )}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                                    {call.meetLink && (
+                                                        <a
+                                                            href={call.meetLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="btn btn-sm"
+                                                            style={{
+                                                                background: '#00897B', color: '#fff',
+                                                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                                fontSize: 12, padding: '6px 10px', whiteSpace: 'nowrap',
+                                                            }}
+                                                        >
+                                                            <Video size={12} /> Join
+                                                        </a>
+                                                    )}
+                                                    {company && (
+                                                        <button className="btn btn-secondary btn-sm" onClick={() => setSelectedCompany(company)}>View</button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     );

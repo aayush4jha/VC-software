@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS booking_tokens (
 -- Additive migration for existing installs
 ALTER TABLE booking_tokens ADD COLUMN IF NOT EXISTS allowed_slots JSONB;
 ALTER TABLE booking_tokens ADD COLUMN IF NOT EXISTS additional_guests JSONB;
+ALTER TABLE booking_tokens ADD COLUMN IF NOT EXISTS meet_link TEXT;
+ALTER TABLE booking_tokens ADD COLUMN IF NOT EXISTS event_link TEXT;
 
 ALTER TABLE booking_tokens ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service role full access on booking_tokens" ON booking_tokens FOR ALL USING (true) WITH CHECK (true);

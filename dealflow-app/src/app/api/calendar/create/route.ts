@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { title, date, time, durationMinutes, attendeeEmail, attendeeName, notes, hostEmail, hostName, companyId, companyName } = await request.json();
+        const { title, startISO, durationMinutes, attendeeEmail, attendeeName, notes, hostEmail, hostName, companyId, companyName } = await request.json();
 
-        if (!title || !date || !time || !attendeeEmail) {
+        if (!title || !startISO || !attendeeEmail) {
             return NextResponse.json(
-                { error: 'Missing required fields: title, date, time, attendeeEmail' },
+                { error: 'Missing required fields: title, startISO, attendeeEmail' },
                 { status: 400 }
             );
         }
@@ -37,8 +37,10 @@ export async function POST(request: NextRequest) {
         const calendar = google.calendar({ version: 'v3', auth: authResult.oauth2Client });
 
         const duration = durationMinutes || 30;
-        const startDateTime = `${date}T${time}:00`;
-        const startDate = new Date(startDateTime);
+        const startDate = new Date(startISO);
+        if (Number.isNaN(startDate.getTime())) {
+            return NextResponse.json({ error: 'Invalid start time' }, { status: 400 });
+        }
         const endDate = new Date(startDate.getTime() + duration * 60000);
 
         const event = await calendar.events.insert({
@@ -50,11 +52,11 @@ export async function POST(request: NextRequest) {
                 description: notes || `Meeting with ${attendeeName || attendeeEmail}`,
                 start: {
                     dateTime: startDate.toISOString(),
-                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    timeZone: 'Asia/Kolkata',
                 },
                 end: {
                     dateTime: endDate.toISOString(),
-                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    timeZone: 'Asia/Kolkata',
                 },
                 attendees: [
                     { email: attendeeEmail, displayName: attendeeName },
@@ -88,7 +90,7 @@ export async function POST(request: NextRequest) {
         try {
             const db = createServiceClient(supabaseUrl, serviceRoleKey);
             const token = crypto.randomUUID().replace(/-/g, '');
-            await db.from('booking_tokens').insert({
+            const baseRow: Record<string, unknown> = {
                 token,
                 user_id: user.id,
                 company_id: companyId || null,
@@ -101,7 +103,20 @@ export async function POST(request: NextRequest) {
                 duration_minutes: duration,
                 booked: true,
                 booked_slot: startDate.toISOString(),
-            });
+            };
+            const fullRow = {
+                ...baseRow,
+                meet_link: meetLink || null,
+                event_link: event.data.htmlLink || null,
+            };
+            let { error: insertErr } = await db.from('booking_tokens').insert(fullRow);
+            if (insertErr && /column|schema cache/i.test(insertErr.message) && /(meet_link|event_link)/i.test(insertErr.message)) {
+                // Columns not migrated yet — retry with legacy shape
+                ({ error: insertErr } = await db.from('booking_tokens').insert(baseRow));
+            }
+            if (insertErr) {
+                console.error('[calendar/create] booking_tokens insert failed:', insertErr.message);
+            }
         } catch (logErr) {
             console.error('[calendar/create] failed to persist scheduled meeting:', logErr);
         }

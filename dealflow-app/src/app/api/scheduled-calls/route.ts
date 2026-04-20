@@ -20,12 +20,28 @@ export async function GET(request: NextRequest) {
     // fall off the dashboard mid-meeting.
     const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-    const { data, error } = await db
+    // Try with meet_link/event_link columns; retry with the legacy subset if
+    // the migration hasn't been applied yet.
+    const fullCols = 'id, company_id, company_name, attendee_name, attendee_email, host_name, host_email, event_title, duration_minutes, booked_slot, meet_link, event_link';
+    const legacyCols = 'id, company_id, company_name, attendee_name, attendee_email, host_name, host_email, event_title, duration_minutes, booked_slot';
+
+    let data: Record<string, unknown>[] | null = null;
+    let error: { message: string } | null = null;
+    ({ data, error } = await db
         .from('booking_tokens')
-        .select('id, company_id, company_name, attendee_name, attendee_email, host_name, host_email, event_title, duration_minutes, booked_slot')
+        .select(fullCols)
         .eq('booked', true)
         .gte('booked_slot', cutoff)
-        .order('booked_slot', { ascending: true });
+        .order('booked_slot', { ascending: true }));
+
+    if (error && /column|schema cache/i.test(error.message) && /(meet_link|event_link)/i.test(error.message)) {
+        ({ data, error } = await db
+            .from('booking_tokens')
+            .select(legacyCols)
+            .eq('booked', true)
+            .gte('booked_slot', cutoff)
+            .order('booked_slot', { ascending: true }));
+    }
 
     if (error) {
         console.error('[scheduled-calls] error:', error.message);
@@ -34,16 +50,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
         calls: (data || []).map(r => ({
-            id: r.id,
-            companyId: r.company_id,
-            companyName: r.company_name,
-            attendeeName: r.attendee_name,
-            attendeeEmail: r.attendee_email,
-            hostName: r.host_name,
-            hostEmail: r.host_email,
-            eventTitle: r.event_title,
-            durationMinutes: r.duration_minutes,
-            bookedSlot: r.booked_slot,
+            id: r.id as string,
+            companyId: (r.company_id as string | null) ?? null,
+            companyName: (r.company_name as string) ?? '',
+            attendeeName: (r.attendee_name as string) ?? '',
+            attendeeEmail: (r.attendee_email as string) ?? '',
+            hostName: (r.host_name as string) ?? '',
+            hostEmail: (r.host_email as string) ?? '',
+            eventTitle: (r.event_title as string) ?? '',
+            durationMinutes: (r.duration_minutes as number) ?? 30,
+            bookedSlot: r.booked_slot as string,
+            meetLink: (r.meet_link as string | null | undefined) ?? null,
+            eventLink: (r.event_link as string | null | undefined) ?? null,
         })),
     });
 }

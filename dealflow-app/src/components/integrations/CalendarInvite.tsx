@@ -105,13 +105,18 @@ export default function CalendarInvite() {
         setEventLink(null);
 
         try {
+            // Convert the user's local-time pick to a timezone-unambiguous ISO
+            // string. Vercel runs in UTC; if we let the server parse
+            // `${date}T${time}:00` it would interpret the wall-clock as UTC,
+            // shifting the displayed time by the client's offset.
+            const startISO = new Date(`${date}T${time}:00`).toISOString();
+
             const res = await fetch('/api/calendar/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: eventTitle,
-                    date,
-                    time,
+                    startISO,
                     durationMinutes: parseInt(duration),
                     attendeeEmail: selectedCompany.founderEmail,
                     attendeeName: selectedCompany.founderName,
