@@ -214,7 +214,7 @@ export default function DashboardPage() {
                                                     </div>
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                                                    {call.meetLink && (
+                                                    {call.meetLink ? (
                                                         <a
                                                             href={call.meetLink}
                                                             target="_blank"
@@ -223,14 +223,41 @@ export default function DashboardPage() {
                                                             style={{
                                                                 background: '#00897B', color: '#fff',
                                                                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                                                                fontSize: 12, padding: '6px 10px', whiteSpace: 'nowrap',
+                                                                fontSize: 13, padding: '7px 14px', whiteSpace: 'nowrap', fontWeight: 600,
                                                             }}
                                                         >
-                                                            <Video size={12} /> Join
+                                                            <Video size={14} /> Join
                                                         </a>
-                                                    )}
-                                                    {company && (
-                                                        <button className="btn btn-secondary btn-sm" onClick={() => setSelectedCompany(company)}>View</button>
+                                                    ) : call.eventLink ? (
+                                                        <a
+                                                            href={call.eventLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="btn btn-sm"
+                                                            style={{
+                                                                background: '#00897B', color: '#fff',
+                                                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                                fontSize: 13, padding: '7px 14px', whiteSpace: 'nowrap', fontWeight: 600,
+                                                            }}
+                                                            title="Opens Google Calendar — Meet link is inside the event"
+                                                        >
+                                                            <Video size={14} /> Join
+                                                        </a>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm"
+                                                            disabled
+                                                            title="Meet link not available for this booking"
+                                                            style={{
+                                                                background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)',
+                                                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                                fontSize: 13, padding: '7px 14px', whiteSpace: 'nowrap', fontWeight: 600,
+                                                                cursor: 'not-allowed',
+                                                            }}
+                                                        >
+                                                            <Video size={14} /> Join
+                                                        </button>
                                                     )}
                                                 </div>
                                             </div>

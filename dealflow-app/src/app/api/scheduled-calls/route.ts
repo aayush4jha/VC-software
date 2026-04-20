@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
+import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
 // Returns all booked meetings (from both direct "Create Event & Meet" and
 // founder-pick-a-slot flows) whose time hasn't fully passed yet. Source of
@@ -48,8 +50,61 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const rows = data || [];
+
+    // Best-effort backfill: for rows where meet_link is missing (e.g. created
+    // before we started persisting it), look the event up on Google Calendar
+    // and fill it in. Runs once per row per request and writes back so future
+    // loads are cheap.
+    const missing = rows.filter(r => !r.meet_link && r.booked_slot);
+    if (missing.length > 0) {
+        try {
+            const authResult = await getAuthenticatedClientForUser(user.id);
+            if (authResult) {
+                const calendar = google.calendar({ version: 'v3', auth: authResult.oauth2Client });
+                for (const row of missing) {
+                    const slot = new Date(row.booked_slot as string);
+                    const duration = (row.duration_minutes as number) || 30;
+                    const timeMin = new Date(slot.getTime() - 60 * 1000).toISOString();
+                    const timeMax = new Date(slot.getTime() + duration * 60 * 1000 + 60 * 1000).toISOString();
+                    try {
+                        const res = await calendar.events.list({
+                            calendarId: 'primary',
+                            timeMin,
+                            timeMax,
+                            singleEvents: true,
+                            maxResults: 10,
+                        });
+                        const titleNeedle = String(row.event_title || '').toLowerCase();
+                        const attendee = String(row.attendee_email || '').toLowerCase();
+                        const match = (res.data.items || []).find(ev => {
+                            const summaryMatch = titleNeedle && ev.summary?.toLowerCase().includes(titleNeedle.slice(0, 30));
+                            const attendeeMatch = attendee && (ev.attendees || []).some(a => a.email?.toLowerCase() === attendee);
+                            return summaryMatch || attendeeMatch;
+                        }) || res.data.items?.[0];
+                        const link = match?.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri || null;
+                        const htmlLink = match?.htmlLink || null;
+                        if (link || htmlLink) {
+                            row.meet_link = link;
+                            row.event_link = htmlLink;
+                            // Persist the backfill (best-effort; ignore if columns missing)
+                            await db.from('booking_tokens')
+                                .update({ meet_link: link, event_link: htmlLink })
+                                .eq('id', row.id as string)
+                                .then(({ error: e }) => { if (e) console.warn('[scheduled-calls] backfill write failed:', e.message); });
+                        }
+                    } catch (lookupErr) {
+                        console.warn('[scheduled-calls] event lookup failed:', (lookupErr as Error).message);
+                    }
+                }
+            }
+        } catch (backfillErr) {
+            console.warn('[scheduled-calls] backfill skipped:', (backfillErr as Error).message);
+        }
+    }
+
     return NextResponse.json({
-        calls: (data || []).map(r => ({
+        calls: rows.map(r => ({
             id: r.id as string,
             companyId: (r.company_id as string | null) ?? null,
             companyName: (r.company_name as string) ?? '',
