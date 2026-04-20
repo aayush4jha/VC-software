@@ -35,6 +35,30 @@ export default function CalendarInvite() {
     const [guestEmails, setGuestEmails] = useState<string[]>([]);
     const [migrationSql, setMigrationSql] = useState<string | null>(null);
 
+    // Load host's own free slots once the picker opens — must stay above any
+    // early return so the hook count stays stable across renders
+    const loadHostSlots = useCallback(async () => {
+        setLoadingHostSlots(true);
+        setHostSlotsError(null);
+        try {
+            const res = await fetch(`/api/calendar/my-slots?duration=${parseInt(duration)}`);
+            const data = await res.json();
+            if (!res.ok) {
+                setHostSlotsError(data.error || 'Failed to load your availability.');
+                setHostSlots([]);
+            } else {
+                setHostSlots(data.slots || []);
+            }
+        } catch {
+            setHostSlotsError('Network error while loading your availability.');
+        }
+        setLoadingHostSlots(false);
+    }, [duration]);
+
+    useEffect(() => {
+        if (pickerOpen) loadHostSlots();
+    }, [pickerOpen, loadHostSlots]);
+
     if (!showCalendarInvite || !selectedCompany) return null;
 
     const eventTitle = `Intro Call: ${selectedCompany.companyName}`;
@@ -95,29 +119,6 @@ export default function CalendarInvite() {
             setStatusMessage('Network error. Please try again.');
         }
     };
-
-    // Load host's own free slots once the picker opens
-    const loadHostSlots = useCallback(async () => {
-        setLoadingHostSlots(true);
-        setHostSlotsError(null);
-        try {
-            const res = await fetch(`/api/calendar/my-slots?duration=${parseInt(duration)}`);
-            const data = await res.json();
-            if (!res.ok) {
-                setHostSlotsError(data.error || 'Failed to load your availability.');
-                setHostSlots([]);
-            } else {
-                setHostSlots(data.slots || []);
-            }
-        } catch {
-            setHostSlotsError('Network error while loading your availability.');
-        }
-        setLoadingHostSlots(false);
-    }, [duration]);
-
-    useEffect(() => {
-        if (pickerOpen) loadHostSlots();
-    }, [pickerOpen, loadHostSlots]);
 
     const openPicker = () => {
         if (!isConnected) {
