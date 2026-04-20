@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink,
-    AlertTriangle, MessageSquare, Sparkles, Send, Pencil, Check, Phone,
+    AlertTriangle, MessageSquare, Sparkles, Send, Check, Phone,
     XCircle, ArrowRight, Loader2, Link2, RotateCcw,
     FileText, FileSearch, Download, FileDown, Video,
 } from 'lucide-react';
@@ -16,6 +16,53 @@ const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 
 const priorities: PriorityLevel[] = ['Low', 'Medium', 'High'];
 const dealSourceTypes: DealSourceType[] = ['Founder Network', 'Investment Banker', 'Friends & Family', 'VC & PE'];
 const shareTypes: ShareType[] = ['Primary', 'Secondary'];
+
+// Always-editable inline input. Declared at module scope so it has a stable
+// component identity across parent renders — otherwise React would remount on
+// every keystroke and the input would lose focus.
+function InlineInput({ value, placeholder, style, onCommit }: {
+    value: string;
+    placeholder?: string;
+    style?: React.CSSProperties;
+    onCommit: (next: string) => void | Promise<void>;
+}) {
+    const [draft, setDraft] = useState(value);
+    useEffect(() => { setDraft(value); }, [value]);
+    const flush = () => { if (draft !== value) void onCommit(draft); };
+    return (
+        <input
+            className="form-input"
+            value={draft}
+            placeholder={placeholder}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={flush}
+            onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLInputElement).blur(); }
+                if (e.key === 'Escape') { setDraft(value); (e.currentTarget as HTMLInputElement).blur(); }
+            }}
+            style={{ fontSize: 14, padding: '4px 8px', height: 30, width: '100%', ...style }}
+        />
+    );
+}
+
+function InlineSelect({ value, options, placeholder, onCommit }: {
+    value: string;
+    options: { value: string; label: string }[];
+    placeholder?: string;
+    onCommit: (next: string) => void | Promise<void>;
+}) {
+    return (
+        <select
+            className="form-select"
+            value={value || ''}
+            onChange={e => void onCommit(e.target.value)}
+            style={{ fontSize: 14, padding: '4px 8px', height: 30, width: '100%' }}
+        >
+            {placeholder && <option value="">{placeholder}</option>}
+            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+    );
+}
 
 export default function CompanyDetail() {
     const {
@@ -38,8 +85,6 @@ export default function CompanyDetail() {
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('overview');
-    const [editingField, setEditingField] = useState<string | null>(null);
-    const [editValue, setEditValue] = useState('');
     const [showMoveStageDropdown, setShowMoveStageDropdown] = useState(false);
     const [comments, setComments] = useState<import('@/types/database').Comment[]>([]);
     const [activities, setActivities] = useState<import('@/types/database').ActivityLog[]>([]);
@@ -151,22 +196,13 @@ export default function CompanyDetail() {
         ...(c.terminalStatus === 'Rejected' ? [{ id: 'rejection', label: 'Rejection Reasons' }] : []),
     ];
 
-    const startEdit = (field: string, currentValue: string) => {
-        setEditingField(field);
-        setEditValue(currentValue);
-    };
-
-    const saveEdit = async () => {
-        if (!editingField || !selectedCompany) return;
-
-        // Handle analyst assignment separately
-        if (editingField === 'analystId') {
-            await assignAnalyst(selectedCompany.id, editValue || null);
-            setEditingField(null);
-            setEditValue('');
+    // Commits a single field's value, handling analyst + numeric + snake_case mapping
+    const commitField = async (fieldKey: string, value: string) => {
+        if (!selectedCompany) return;
+        if (fieldKey === 'analystId') {
+            await assignAnalyst(selectedCompany.id, value || null);
             return;
         }
-
         const fieldMap: Record<string, string> = {
             founderName: 'founder_name', founderEmail: 'founder_email',
             companyRound: 'company_round', subIndustry: 'sub_industry',
@@ -176,18 +212,12 @@ export default function CompanyDetail() {
             industryId: 'industry_id', dealSourceNameId: 'deal_source_name_id',
             priorityLevel: 'priority_level',
         };
-        const dbField = fieldMap[editingField];
-        if (dbField) {
-            const val = ['total_fund_raise', 'valuation'].includes(dbField) ? parseFloat(editValue) || null : editValue;
-            await updateCompany(selectedCompany.id, { [dbField]: val });
-        }
-        setEditingField(null);
-        setEditValue('');
-    };
-
-    const cancelEdit = () => {
-        setEditingField(null);
-        setEditValue('');
+        const dbField = fieldMap[fieldKey];
+        if (!dbField) return;
+        const val = ['total_fund_raise', 'valuation'].includes(dbField)
+            ? (value === '' ? null : parseFloat(value) || null)
+            : value;
+        await updateCompany(selectedCompany.id, { [dbField]: val });
     };
 
     const nextStage = pipelineStages.find(s => s.order === (stage?.order || 0) + 1);
@@ -247,89 +277,29 @@ export default function CompanyDetail() {
         setGeneratingMemo(false);
     };
 
-    const EditableField = ({ fieldKey, value, style }: { fieldKey: string; value: string; style?: React.CSSProperties }) => {
-        if (editingField === fieldKey) {
-            return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input
-                        className="form-input"
-                        value={editValue}
-                        onChange={e => setEditValue(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
-                        autoFocus
-                        style={{ fontSize: 14, padding: '4px 8px', height: 30 }}
-                    />
-                    <button className="btn btn-ghost btn-sm" onClick={saveEdit} style={{ padding: 4, minWidth: 'auto' }}>
-                        <Check size={14} style={{ color: 'var(--success)' }} />
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={cancelEdit} style={{ padding: 4, minWidth: 'auto' }}>
-                        <X size={14} style={{ color: 'var(--text-tertiary)' }} />
-                    </button>
-                </div>
-            );
-        }
-        return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={style}>{value}</div>
-                <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => startEdit(fieldKey, value)}
-                    style={{ padding: 4, minWidth: 'auto', opacity: 0.4, transition: 'opacity 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
-                    title={`Edit ${fieldKey}`}
-                >
-                    <Pencil size={12} />
-                </button>
-            </div>
-        );
-    };
+    const EditableField = ({ fieldKey, value, style, placeholder }: { fieldKey: string; value: string; style?: React.CSSProperties; placeholder?: string }) => (
+        <InlineInput
+            value={value}
+            placeholder={placeholder}
+            style={style}
+            onCommit={next => commitField(fieldKey, next)}
+        />
+    );
 
-    const DropdownField = ({ fieldKey, value, displayValue, options, placeholder }: {
+    const DropdownField = ({ fieldKey, value, options, placeholder }: {
         fieldKey: string;
         value: string;
-        displayValue: string;
+        displayValue?: string;
         options: { value: string; label: string }[];
         placeholder?: string;
-    }) => {
-        if (editingField === fieldKey) {
-            return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <select
-                        className="form-select"
-                        value={editValue}
-                        onChange={e => setEditValue(e.target.value)}
-                        autoFocus
-                        style={{ fontSize: 14, padding: '4px 8px', height: 30 }}
-                    >
-                        {placeholder && <option value="">{placeholder}</option>}
-                        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                    <button className="btn btn-ghost btn-sm" onClick={saveEdit} style={{ padding: 4, minWidth: 'auto' }}>
-                        <Check size={14} style={{ color: 'var(--success)' }} />
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={cancelEdit} style={{ padding: 4, minWidth: 'auto' }}>
-                        <X size={14} style={{ color: 'var(--text-tertiary)' }} />
-                    </button>
-                </div>
-            );
-        }
-        return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{displayValue || '—'}</div>
-                <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => startEdit(fieldKey, value)}
-                    style={{ padding: 4, minWidth: 'auto', opacity: 0.4, transition: 'opacity 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
-                    title={`Edit ${fieldKey}`}
-                >
-                    <Pencil size={12} />
-                </button>
-            </div>
-        );
-    };
+    }) => (
+        <InlineSelect
+            value={value}
+            options={options}
+            placeholder={placeholder}
+            onCommit={next => commitField(fieldKey, next)}
+        />
+    );
 
     const terminalStatusColor: Record<string, string> = {
         'Portfolio': '#10b981',
@@ -591,43 +561,20 @@ export default function CompanyDetail() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Google Drive</label>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {c.googleDriveLink ? (
-                                            <a href={c.googleDriveLink} target="_blank" rel="noopener" style={{ fontSize: 14, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                Open Data Room <ExternalLink size={12} />
-                                            </a>
-                                        ) : (
-                                            <span style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>Not linked</span>
-                                        )}
-                                        <button
-                                            className="btn btn-ghost btn-sm"
-                                            onClick={() => startEdit('googleDriveLink', c.googleDriveLink || '')}
-                                            style={{ padding: 4, minWidth: 'auto', opacity: 0.4, transition: 'opacity 0.15s' }}
-                                            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                                            onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
-                                            title="Edit Google Drive Link"
+                                    <InlineInput
+                                        value={c.googleDriveLink || ''}
+                                        placeholder="https://drive.google.com/..."
+                                        onCommit={next => commitField('googleDriveLink', next)}
+                                    />
+                                    {c.googleDriveLink && (
+                                        <a
+                                            href={c.googleDriveLink}
+                                            target="_blank"
+                                            rel="noopener"
+                                            style={{ fontSize: 12, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}
                                         >
-                                            <Pencil size={12} />
-                                        </button>
-                                    </div>
-                                    {editingField === 'googleDriveLink' && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                                            <input
-                                                className="form-input"
-                                                value={editValue}
-                                                onChange={e => setEditValue(e.target.value)}
-                                                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
-                                                autoFocus
-                                                placeholder="https://drive.google.com/..."
-                                                style={{ fontSize: 14, padding: '4px 8px', height: 30 }}
-                                            />
-                                            <button className="btn btn-ghost btn-sm" onClick={saveEdit} style={{ padding: 4, minWidth: 'auto' }}>
-                                                <Check size={14} style={{ color: 'var(--success)' }} />
-                                            </button>
-                                            <button className="btn btn-ghost btn-sm" onClick={cancelEdit} style={{ padding: 4, minWidth: 'auto' }}>
-                                                <X size={14} style={{ color: 'var(--text-tertiary)' }} />
-                                            </button>
-                                        </div>
+                                            Open Data Room <ExternalLink size={12} />
+                                        </a>
                                     )}
                                 </div>
                                 <div className="form-group">
