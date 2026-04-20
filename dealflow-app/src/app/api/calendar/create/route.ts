@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { title, date, time, durationMinutes, attendeeEmail, attendeeName, notes, hostEmail } = await request.json();
+        const { title, date, time, durationMinutes, attendeeEmail, attendeeName, notes, hostEmail, hostName, companyId, companyName } = await request.json();
 
         if (!title || !date || !time || !attendeeEmail) {
             return NextResponse.json(
@@ -82,6 +82,29 @@ export async function POST(request: NextRequest) {
         const meetLink = event.data.conferenceData?.entryPoints?.find(
             (ep) => ep.entryPointType === 'video'
         )?.uri;
+
+        // Record the scheduled meeting in booking_tokens so the dashboard can
+        // list it (we don't rely on the missing companies.meet_event_date column)
+        try {
+            const db = createServiceClient(supabaseUrl, serviceRoleKey);
+            const token = crypto.randomUUID().replace(/-/g, '');
+            await db.from('booking_tokens').insert({
+                token,
+                user_id: user.id,
+                company_id: companyId || null,
+                company_name: companyName || '',
+                attendee_name: attendeeName || '',
+                attendee_email: attendeeEmail,
+                host_name: hostName || '',
+                host_email: hostEmail || '',
+                event_title: title,
+                duration_minutes: duration,
+                booked: true,
+                booked_slot: startDate.toISOString(),
+            });
+        } catch (logErr) {
+            console.error('[calendar/create] failed to persist scheduled meeting:', logErr);
+        }
 
         return NextResponse.json({
             success: true,

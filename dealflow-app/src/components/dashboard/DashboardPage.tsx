@@ -1,10 +1,23 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { BarChart3, AlertTriangle, ArrowRight, Users, Sparkles, PhoneCall, UserPlus } from 'lucide-react';
 import TopHeader from '@/components/layout/TopHeader';
 import { formatCurrency, getDaysInPipeline } from '@/lib/context';
 import { useAppContext } from '@/lib/context';
+
+interface ScheduledCall {
+    id: string;
+    companyId: string | null;
+    companyName: string;
+    attendeeName: string;
+    attendeeEmail: string;
+    hostName: string;
+    hostEmail: string;
+    eventTitle: string;
+    durationMinutes: number;
+    bookedSlot: string;
+}
 
 export default function DashboardPage() {
     const {
@@ -42,17 +55,29 @@ export default function DashboardPage() {
         [pipelineStages],
     );
 
-    // All companies with an upcoming scheduled call. Covers both the
-    // "Create Event & Meet" path and the pick-a-slot booking flow — both
-    // persist meetEventDate on the company row when the event is created.
-    // Kept visible for ~10 min past start so an in-progress call doesn't
-    // drop off the dashboard mid-meeting.
-    const scheduledCalls = useMemo(() => {
-        const cutoff = Date.now() - 10 * 60 * 1000;
-        return activeCompanies
-            .filter(c => c.meetEventDate && new Date(c.meetEventDate).getTime() >= cutoff)
-            .sort((a, b) => new Date(a.meetEventDate!).getTime() - new Date(b.meetEventDate!).getTime());
-    }, [activeCompanies]);
+    // Upcoming scheduled calls come from booking_tokens (both the direct
+    // "Create Event & Meet" path and the founder-pick-a-slot flow write
+    // there). Fetched from a dedicated endpoint rather than filtering the
+    // companies list so it stays correct even without the non-existent
+    // companies.meet_event_date column.
+    const [scheduledCalls, setScheduledCalls] = useState<ScheduledCall[]>([]);
+    const refreshScheduledCalls = useCallback(async () => {
+        try {
+            const res = await fetch('/api/scheduled-calls');
+            if (!res.ok) return;
+            const data = await res.json();
+            setScheduledCalls(data.calls || []);
+        } catch {
+            /* ignore — dashboard will just show empty state */
+        }
+    }, []);
+    useEffect(() => { refreshScheduledCalls(); }, [refreshScheduledCalls]);
+    // Pick up newly-scheduled calls when the user returns to this tab
+    useEffect(() => {
+        const onFocus = () => refreshScheduledCalls();
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [refreshScheduledCalls]);
 
     // ── 2. New Assignments (assigned to me, created in last 7 days) ──
     const newAssignments = useMemo(
@@ -154,9 +179,10 @@ export default function DashboardPage() {
                                     No upcoming calls scheduled
                                 </div>
                             ) : (
-                                scheduledCalls.map(c => {
-                                    const stage = getStageById(c.pipelineStageId);
-                                    const when = new Date(c.meetEventDate!);
+                                scheduledCalls.map(call => {
+                                    const company = call.companyId ? companies.find(co => co.id === call.companyId) : null;
+                                    const stage = company ? getStageById(company.pipelineStageId) : null;
+                                    const when = new Date(call.bookedSlot);
                                     const now = new Date();
                                     const sameDay = when.toDateString() === now.toDateString();
                                     const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
@@ -168,21 +194,26 @@ export default function DashboardPage() {
                                             : when.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
                                     const timePart = when.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
                                     return (
-                                        <div key={c.id} className="call-card" style={{ minWidth: 'auto' }}>
+                                        <div key={call.id} className="call-card" style={{ minWidth: 'auto' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                                                 <div style={{ minWidth: 0, flex: 1 }}>
-                                                    <div className="call-card-company">{c.companyName}</div>
-                                                    <div className="call-card-founder">{c.founderName}</div>
+                                                    <div className="call-card-company">{call.companyName || call.eventTitle}</div>
+                                                    <div className="call-card-founder">{call.attendeeName}{call.attendeeEmail ? ` · ${call.attendeeEmail}` : ''}</div>
                                                     <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
                                                         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
                                                             {datePart} &middot; {timePart}
+                                                        </span>
+                                                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                                                            {call.durationMinutes} min
                                                         </span>
                                                         {stage && (
                                                             <span className="badge badge-primary" style={{ fontSize: 11 }}>{stage.name}</span>
                                                         )}
                                                     </div>
                                                 </div>
-                                                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedCompany(c)}>View</button>
+                                                {company && (
+                                                    <button className="btn btn-secondary btn-sm" onClick={() => setSelectedCompany(company)}>View</button>
+                                                )}
                                             </div>
                                         </div>
                                     );

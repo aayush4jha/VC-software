@@ -116,6 +116,9 @@ export default function CalendarInvite() {
                     attendeeEmail: selectedCompany.founderEmail,
                     attendeeName: selectedCompany.founderName,
                     hostEmail: user?.email || '',
+                    hostName: user?.name || '',
+                    companyId: selectedCompany.id,
+                    companyName: selectedCompany.companyName,
                     notes: notes || `Meeting with ${selectedCompany.founderName} from ${selectedCompany.companyName}.\n\nHost: ${user?.name || ''} (${user?.email || ''})`,
                 }),
             });
