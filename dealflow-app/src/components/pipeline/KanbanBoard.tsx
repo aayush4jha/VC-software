@@ -3,20 +3,21 @@
 import React, { useState } from 'react';
 import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText, Clock, Flag } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { formatCurrency, getDaysInPipeline } from '@/lib/context';
+import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import { Company, PipelineStage, RejectionRecord } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 function CompanyKanbanCard({ company, index }: { company: Company; index: number }) {
-    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, deleteCompany, setTerminalStatus, deckEmailLinks, updateCompany } = useAppContext();
+    const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, getStageById, deleteCompany, setTerminalStatus, deckEmailLinks, updateCompany } = useAppContext();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showPortfolioConfirm, setShowPortfolioConfirm] = useState(false);
     const analyst = company.analystId ? getUserById(company.analystId) : null;
     const industry = getIndustryById(company.industryId);
+    const currentStage = getStageById(company.pipelineStageId);
     const days = getDaysInPipeline(company.createdAt);
 
-    // Stage deadline countdown
-    const stageDeadline = company.stageDeadlines?.[company.pipelineStageId];
+    // Stage deadline countdown — derived from the predefined per-stage SLA.
+    const stageDeadline = getStageDeadline(currentStage?.name, company.createdAt);
     let deadlineLabel = '';
     let deadlineColor = '';
     if (stageDeadline) {
@@ -42,6 +43,7 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
             deadlineColor = '#10b981';
         }
     }
+    const overdueFlag = stageDeadline ? Date.now() > stageDeadline.getTime() : false;
 
     const handleEdit = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -108,7 +110,7 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                     ref={provided.innerRef}
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
-                    className={`kanban-card ${isHighPriority ? 'high-priority' : ''} ${company.isOverdue ? 'overdue' : ''} ${company.needsReview ? 'needs-review' : ''}`}
+                    className={`kanban-card ${isHighPriority ? 'high-priority' : ''} ${overdueFlag ? 'overdue' : ''} ${company.needsReview ? 'needs-review' : ''}`}
                     onClick={() => setSelectedCompany(company)}
                     style={{
                         ...provided.draggableProps.style,

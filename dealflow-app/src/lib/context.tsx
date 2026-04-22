@@ -156,6 +156,34 @@ export function getDaysInPipeline(createdAt: string): number {
     return Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// Fixed per-stage SLA offsets from the day the deal entered the pipeline.
+// Stage keys are matched case-insensitively against pipeline_stages.name.
+// Due Diligence is intentionally absent — it has no deadline.
+export const STAGE_DEADLINE_DAYS: Record<string, number> = {
+    'thesis check': 2,
+    'initial screening': 5,
+    'intro call': 10,
+    'filter discussion': 18,
+    'filter ic': 25,
+};
+
+export function getStageDeadline(stageName: string | null | undefined, createdAt: string | null | undefined): Date | null {
+    if (!stageName || !createdAt) return null;
+    const days = STAGE_DEADLINE_DAYS[stageName.trim().toLowerCase()];
+    if (days == null) return null;
+    const d = new Date(createdAt);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setDate(d.getDate() + days);
+    d.setHours(23, 59, 59, 999);
+    return d;
+}
+
+export function isStageOverdue(stageName: string | null | undefined, createdAt: string | null | undefined): boolean {
+    const deadline = getStageDeadline(stageName, createdAt);
+    if (!deadline) return false;
+    return Date.now() > deadline.getTime();
+}
+
 // ──────────────────────────────────────────────────
 // Context Type
 // ──────────────────────────────────────────────────

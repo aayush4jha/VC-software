@@ -3,7 +3,7 @@
 import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { BarChart3, AlertTriangle, ArrowRight, Users, Sparkles, PhoneCall, UserPlus, Video } from 'lucide-react';
 import TopHeader from '@/components/layout/TopHeader';
-import { formatCurrency, getDaysInPipeline } from '@/lib/context';
+import { formatCurrency, getDaysInPipeline, isStageOverdue } from '@/lib/context';
 import { useAppContext } from '@/lib/context';
 
 interface ScheduledCall {
@@ -101,10 +101,15 @@ export default function DashboardPage() {
     );
 
     // ── 4. Overdue: analyst sees own, partner/admin sees all ──
+    // A company is overdue when its current stage's predefined SLA
+    // (see STAGE_DEADLINE_DAYS in lib/context) has passed.
     const overdueCompanies = useMemo(() => {
         const pool = isPartnerOrAdmin ? activeCompanies : myCompanies;
-        return pool.filter(c => c.isOverdue || getDaysInPipeline(c.createdAt) > 25);
-    }, [activeCompanies, myCompanies, isPartnerOrAdmin]);
+        return pool.filter(c => {
+            const stageName = getStageById(c.pipelineStageId)?.name;
+            return isStageOverdue(stageName, c.createdAt);
+        });
+    }, [activeCompanies, myCompanies, isPartnerOrAdmin, getStageById]);
 
     // ── 6. AI Insights: only companies with actual quickSummary ──
     const companiesWithInsights = useMemo(

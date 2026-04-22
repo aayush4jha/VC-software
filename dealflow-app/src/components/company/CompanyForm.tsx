@@ -271,11 +271,6 @@ export default function CompanyForm() {
                         <input className="form-input" placeholder="Enter tags separated by commas" value={form.custom_tags} onChange={upd('custom_tags')} />
                     </div>
 
-                    <div className="form-group">
-                        <label className="form-label">SLA Deadline</label>
-                        <input className="form-input" type="date" value={form.sla_deadline} onChange={upd('sla_deadline')} />
-                    </div>
-
                     <div className="form-group" ref={linkDropdownRef} style={{ position: 'relative' }}>
                         <label className="form-label">Link to Previous Entry</label>
                         <div style={{ position: 'relative' }}>

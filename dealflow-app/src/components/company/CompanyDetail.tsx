@@ -8,7 +8,7 @@ import {
     FileText, FileSearch, Download, FileDown, Video,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { formatCurrency, getDaysInPipeline } from '@/lib/context';
+import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import type { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
 import { downloadAsDocx, downloadAsPdf } from '@/lib/report-download';
 
@@ -620,23 +620,30 @@ export default function CompanyDetail() {
                                 </div>
                             </div>
 
-                            {/* Stage Deadlines */}
+                            {/* Stage Deadlines — predefined from the day the deal entered the pipeline */}
                             <div style={{ marginTop: 20, padding: 16, background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
-                                    Stage Deadlines
+                                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                        Stage Deadlines
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                                        Auto-calculated from pipeline entry
+                                    </div>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {pipelineStages.map(s => {
-                                        const dl = c.stageDeadlines?.[s.id];
                                         const isCurrent = c.pipelineStageId === s.id;
+                                        const deadline = getStageDeadline(s.name, c.createdAt);
                                         let countdown = '';
                                         let countdownColor = '';
-                                        if (dl) {
-                                            const now = new Date();
-                                            now.setHours(0, 0, 0, 0);
-                                            const deadline = new Date(dl);
-                                            deadline.setHours(0, 0, 0, 0);
-                                            const diff = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                        let deadlineLabel = 'No deadline';
+                                        if (deadline) {
+                                            deadlineLabel = `By ${deadline.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`;
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const dlDay = new Date(deadline);
+                                            dlDay.setHours(0, 0, 0, 0);
+                                            const diff = Math.ceil((dlDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                                             if (diff < 0) { countdown = `Overdue by ${Math.abs(diff)}d`; countdownColor = '#ef4444'; }
                                             else if (diff === 0) { countdown = 'Last day'; countdownColor = '#ef4444'; }
                                             else if (diff === 1) { countdown = '1 day left'; countdownColor = '#f59e0b'; }
@@ -654,21 +661,14 @@ export default function CompanyDetail() {
                                                 <span style={{ fontSize: 12, fontWeight: isCurrent ? 600 : 400, flex: 1, color: isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
                                                     {s.name}
                                                 </span>
+                                                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                                                    {deadlineLabel}
+                                                </span>
                                                 {countdown && (
-                                                    <span style={{ fontSize: 11, fontWeight: 600, color: countdownColor, whiteSpace: 'nowrap' }}>
+                                                    <span style={{ fontSize: 11, fontWeight: 600, color: countdownColor, whiteSpace: 'nowrap', minWidth: 90, textAlign: 'right' }}>
                                                         {countdown}
                                                     </span>
                                                 )}
-                                                <input
-                                                    type="date"
-                                                    value={dl ? dl.split('T')[0] : ''}
-                                                    onChange={async (e) => {
-                                                        const newDeadlines = { ...(c.stageDeadlines || {}), [s.id]: e.target.value || undefined };
-                                                        if (!e.target.value) delete newDeadlines[s.id];
-                                                        await updateCompany(c.id, { stageDeadlines: newDeadlines });
-                                                    }}
-                                                    style={{ fontSize: 11, padding: '2px 6px', height: 26, width: 120, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                                                />
                                             </div>
                                         );
                                     })}

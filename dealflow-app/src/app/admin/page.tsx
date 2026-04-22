@@ -12,7 +12,7 @@ import { ALL_PAGE_PERMISSIONS, type PagePermission } from '@/types/database';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
-import { formatCurrency, getDaysInPipeline } from '@/lib/context';
+import { formatCurrency, getDaysInPipeline, isStageOverdue } from '@/lib/context';
 
 type AdminSection = 'overview' | 'companies' | 'users' | 'settings';
 
@@ -214,7 +214,7 @@ export default function AdminPage() {
     const avgDays = activeCompanies.length > 0
         ? Math.round(activeCompanies.reduce((sum, c) => sum + getDaysInPipeline(c.createdAt), 0) / activeCompanies.length)
         : 0;
-    const overdueCount = activeCompanies.filter(c => c.isOverdue || getDaysInPipeline(c.createdAt) > 25).length;
+    const overdueCount = activeCompanies.filter(c => isStageOverdue(getStageById(c.pipelineStageId)?.name, c.createdAt)).length;
 
     const stageDistribution = pipelineStages.map(s => ({
         stage: s,
@@ -427,7 +427,7 @@ export default function AdminPage() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {activeCompanies.filter(c => c.isOverdue || getDaysInPipeline(c.createdAt) > 25).map(c => {
+                                                {activeCompanies.filter(c => isStageOverdue(getStageById(c.pipelineStageId)?.name, c.createdAt)).map(c => {
                                                     const stage = getStageById(c.pipelineStageId);
                                                     const analyst = c.analystId ? getUserById(c.analystId) : null;
                                                     return (

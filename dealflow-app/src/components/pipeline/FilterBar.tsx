@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, X, Save, BookmarkCheck, Download, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { CompanyRound, DealSourceType, PriorityLevel, TerminalStatus } from '@/types/database';
-import { formatCurrency, getDaysInPipeline } from '@/lib/context';
+import { formatCurrency, getDaysInPipeline, getStageDeadline, isStageOverdue } from '@/lib/context';
 
 const priorities: PriorityLevel[] = ['High', 'Medium', 'Low'];
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
@@ -179,7 +179,14 @@ export default function FilterBar() {
             const analyst = c.analystId ? getUserById(c.analystId) : null;
             const source = getDealSourceNameById(c.dealSourceNameId);
             const days = getDaysInPipeline(c.createdAt);
-            const slaStatus = c.isOverdue ? 'Overdue' : days > 20 ? 'At Risk' : 'On Track';
+            const stageOverdue = isStageOverdue(stage?.name, c.createdAt);
+            const stageDeadline = getStageDeadline(stage?.name, c.createdAt);
+            const daysToDeadline = stageDeadline
+                ? Math.ceil((stageDeadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                : null;
+            const slaStatus = stageOverdue
+                ? 'Overdue'
+                : (daysToDeadline !== null && daysToDeadline <= 2) ? 'At Risk' : 'On Track';
 
             return [
                 c.companyName,

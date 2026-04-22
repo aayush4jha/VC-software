@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ArrowUpDown, Video, Mail } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { formatCurrency, getDaysInPipeline } from '@/lib/context';
+import { formatCurrency, getDaysInPipeline, getStageDeadline, isStageOverdue } from '@/lib/context';
 
 export default function TableView() {
     const { setSelectedCompany, setShowCalendarInvite, setShowEmailCompose, searchQuery, activeFilters, companies, getUserById, getIndustryById, getStageById, getDealSourceNameById } = useAppContext();
@@ -109,7 +109,16 @@ export default function TableView() {
                         const stage = getStageById(c.pipelineStageId);
                         const source = getDealSourceNameById(c.dealSourceNameId);
                         const days = getDaysInPipeline(c.createdAt);
-                        const slaStatus = c.isOverdue ? 'overdue' : days > 20 ? 'at-risk' : 'on-track';
+                        // Derive SLA status from the predefined per-stage deadline.
+                        // "At risk" = within 2 days of the deadline; "on track" otherwise.
+                        const stageOverdue = isStageOverdue(stage?.name, c.createdAt);
+                        const stageDeadline = getStageDeadline(stage?.name, c.createdAt);
+                        const daysToDeadline = stageDeadline
+                            ? Math.ceil((stageDeadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                            : null;
+                        const slaStatus = stageOverdue
+                            ? 'overdue'
+                            : (daysToDeadline !== null && daysToDeadline <= 2) ? 'at-risk' : 'on-track';
 
                         return (
                             <tr key={c.id} onClick={() => setSelectedCompany(c)}>
