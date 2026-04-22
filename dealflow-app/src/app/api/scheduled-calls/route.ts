@@ -22,27 +22,54 @@ export async function GET(request: NextRequest) {
     // fall off the dashboard mid-meeting.
     const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-    // Try with meet_link/event_link columns; retry with the legacy subset if
-    // the migration hasn't been applied yet.
-    const fullCols = 'id, company_id, company_name, attendee_name, attendee_email, host_name, host_email, event_title, duration_minutes, booked_slot, meet_link, event_link';
-    const legacyCols = 'id, company_id, company_name, attendee_name, attendee_email, host_name, host_email, event_title, duration_minutes, booked_slot';
+    // A call is "mine" when I'm the host, attendee, or one of the guests.
+    // Try the rich column set first; fall back to a slimmer one if newer
+    // columns (meet_link, event_link, additional_guests) aren't migrated.
+    const fullCols = 'id, user_id, company_id, company_name, attendee_name, attendee_email, host_name, host_email, event_title, duration_minutes, booked_slot, meet_link, event_link, additional_guests';
+    const legacyCols = 'id, user_id, company_id, company_name, attendee_name, attendee_email, host_name, host_email, event_title, duration_minutes, booked_slot';
 
-    let data: Record<string, unknown>[] | null = null;
-    let error: { message: string } | null = null;
-    ({ data, error } = await db
-        .from('booking_tokens')
-        .select(fullCols)
-        .eq('booked', true)
-        .gte('booked_slot', cutoff)
-        .order('booked_slot', { ascending: true }));
+    const userEmail = (user.email || '').toLowerCase();
+    const baseOr = `user_id.eq.${user.id}${userEmail ? `,host_email.ilike.${userEmail},attendee_email.ilike.${userEmail}` : ''}`;
 
-    if (error && /column|schema cache/i.test(error.message) && /(meet_link|event_link)/i.test(error.message)) {
-        ({ data, error } = await db
+    const runQuery = async (cols: string) => {
+        // Main query: host / attendee match
+        const main = await db
             .from('booking_tokens')
-            .select(legacyCols)
+            .select(cols)
             .eq('booked', true)
             .gte('booked_slot', cutoff)
-            .order('booked_slot', { ascending: true }));
+            .or(baseOr)
+            .order('booked_slot', { ascending: true });
+
+        if (main.error) return main;
+
+        // Secondary query: current user listed in additional_guests JSONB array.
+        // Skip if the column isn't being selected (legacy cols).
+        let guestRows: Record<string, unknown>[] = [];
+        if (userEmail && cols.includes('additional_guests')) {
+            const guestRes = await db
+                .from('booking_tokens')
+                .select(cols)
+                .eq('booked', true)
+                .gte('booked_slot', cutoff)
+                .contains('additional_guests', [userEmail])
+                .order('booked_slot', { ascending: true });
+            if (!guestRes.error) guestRows = (guestRes.data as unknown as Record<string, unknown>[]) || [];
+        }
+
+        const merged = new Map<string, Record<string, unknown>>();
+        for (const r of ((main.data as unknown as Record<string, unknown>[]) || [])) merged.set(r.id as string, r);
+        for (const r of guestRows) merged.set(r.id as string, r);
+        const rows = Array.from(merged.values()).sort((a, b) =>
+            new Date(a.booked_slot as string).getTime() - new Date(b.booked_slot as string).getTime(),
+        );
+        return { data: rows, error: null as null | { message: string } };
+    };
+
+    let { data, error } = await runQuery(fullCols);
+
+    if (error && /column|schema cache/i.test(error.message) && /(meet_link|event_link|additional_guests)/i.test(error.message)) {
+        ({ data, error } = await runQuery(legacyCols));
     }
 
     if (error) {

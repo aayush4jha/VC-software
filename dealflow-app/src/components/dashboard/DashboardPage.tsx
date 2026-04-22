@@ -90,12 +90,14 @@ export default function DashboardPage() {
     );
 
     // ── 3. Pipeline stage distribution ──
+    // Analysts see their own book; partners/admins still get the org-wide view.
+    const pipelineScope = isPartnerOrAdmin ? activeCompanies : myCompanies;
     const stageDistribution = useMemo(
         () => pipelineStages.map(s => ({
             stage: s,
-            count: activeCompanies.filter(c => c.pipelineStageId === s.id).length,
+            count: pipelineScope.filter(c => c.pipelineStageId === s.id).length,
         })),
-        [pipelineStages, activeCompanies],
+        [pipelineStages, pipelineScope],
     );
 
     // ── 4. Overdue: analyst sees own, partner/admin sees all ──
