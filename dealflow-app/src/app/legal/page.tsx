@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Plus, Search, UserCircle, ArrowRight, FileWarning, ChevronDown } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, Plus, Search, UserCircle, ArrowRight, FileWarning, ChevronDown, Briefcase } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
@@ -35,6 +36,7 @@ function daysSince(iso: string): number {
 }
 
 function LegalContent() {
+    const router = useRouter();
     const { companies, users, setSelectedCompany } = useAppContext();
 
     const [search, setSearch] = useState('');
@@ -282,7 +284,10 @@ function LegalContent() {
                                                                         users={users}
                                                                         onStageChange={handleStageDropdown}
                                                                         onOwnerChange={handleSetOwner}
-                                                                        onOpenPortfolio={() => setSelectedCompany(card.company)}
+                                                                        onOpenPortfolio={() => {
+                                                                            setSelectedCompany(card.company);
+                                                                            router.push('/portfolio');
+                                                                        }}
                                                                     />
                                                                 </div>
                                                             )}
@@ -392,11 +397,15 @@ function LegalCardInner({ card, users, onStageChange, onOwnerChange, onOpenPortf
             </div>
 
             <div className="legal-card-footer">
-                <Link href={`/legal/${company.id}`} className="legal-card-link">
-                    Open
+                <Link href={`/legal/${company.id}`} className="legal-card-footer-btn open">
+                    Open Legal
                 </Link>
-                <button className="legal-card-link-secondary" onClick={onOpenPortfolio}>
-                    Portfolio
+                <button
+                    className="legal-card-footer-btn portfolio"
+                    onClick={e => { e.stopPropagation(); onOpenPortfolio(); }}
+                    title={`View ${company.companyName} in Portfolio`}
+                >
+                    <Briefcase size={11} /> Go to Portfolio
                 </button>
             </div>
         </>

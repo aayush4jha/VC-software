@@ -3397,31 +3397,46 @@ textarea.inline-input {
 
 .legal-card-footer {
   display: flex;
-  gap: 10px;
-  justify-content: space-between;
+  gap: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--border-light);
   font-size: 11px;
 }
-.legal-card-link {
-  color: var(--primary);
-  font-weight: 700;
-  text-decoration: none;
-}
-.legal-card-link:hover {
-  text-decoration: underline;
-}
-.legal-card-link-secondary {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  cursor: pointer;
+.legal-card-footer-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
   font-size: 11px;
-  padding: 0;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
-.legal-card-link-secondary:hover {
+.legal-card-footer-btn.open {
+  background: var(--primary-bg);
   color: var(--primary);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+.legal-card-footer-btn.open:hover {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+.legal-card-footer-btn.portfolio {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+.legal-card-footer-btn.portfolio:hover {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
 }
 
 /* ─── Legal Detail Page ───────────────────────────── */
