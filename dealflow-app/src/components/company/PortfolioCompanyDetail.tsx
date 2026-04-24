@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, FileText, Loader2, Pencil, Check } from 'lucide-react';
+import { X, Plus, Trash2, FileText, Loader2, Pencil, Check, Scale } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/lib/context';
 import {
     getTotalInvested, getLatestValuation, getCurrentOwnership,
@@ -21,6 +22,7 @@ function avatarColor(name: string) {
 }
 
 export default function PortfolioCompanyDetail() {
+    const router = useRouter();
     const {
         selectedCompany, setSelectedCompany,
         getIndustryById, getDealSourceNameById, getUserById,
@@ -452,6 +454,13 @@ export default function PortfolioCompanyDetail() {
                         Delete
                     </button>
                     <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                            className="btn btn-outline"
+                            onClick={() => { setSelectedCompany(null); router.push(`/legal/${c.id}`); }}
+                            title="Open this company in the Legal tab"
+                        >
+                            <Scale size={14} /> Go to Legal
+                        </button>
                         <button className="btn btn-ghost" onClick={handleClose}>Close</button>
                         <button className="btn btn-primary" onClick={handleEdit}>Edit Company</button>
                     </div>
