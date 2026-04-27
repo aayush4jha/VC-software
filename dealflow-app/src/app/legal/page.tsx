@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Plus, Search, UserCircle, ArrowRight, FileWarning, ChevronDown, Briefcase } from 'lucide-react';
+import { AlertTriangle, Plus, Search, UserCircle, ChevronDown, Briefcase } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
@@ -14,11 +14,9 @@ import {
     LEGAL_STAGES,
     type LegalStageId,
     type LegalRecord,
-    type CriticalAlert,
     getLegalRecord,
     updateLegalRecord,
     subscribeLegalUpdates,
-    getCompanyAlerts,
     getMissingMustHaveRights,
 } from '@/lib/legal-data';
 import type { Company, User } from '@/types/database';
@@ -42,7 +40,6 @@ function LegalContent() {
     const [search, setSearch] = useState('');
     const [stageFilter, setStageFilter] = useState<LegalStageId | 'all'>('all');
     const [ownerFilter, setOwnerFilter] = useState<string>('all');
-    const [showAlerts, setShowAlerts] = useState(true);
     const [tick, setTick] = useState(0);
 
     // Keep only portfolio companies (those that reached investment).
@@ -97,14 +94,6 @@ function LegalContent() {
         return byStage;
     }, [filteredCards]);
 
-    const allAlerts: CriticalAlert[] = useMemo(() => {
-        const out: CriticalAlert[] = [];
-        filteredCards.forEach(c => {
-            getCompanyAlerts(c.record, c.company.companyName).forEach(a => out.push(a));
-        });
-        return out;
-    }, [filteredCards]);
-
     const uniqueOwners = useMemo(() => {
         const set = new Set<string>();
         cards.forEach(c => { if (c.record.legalOwner) set.add(c.record.legalOwner); });
@@ -141,11 +130,9 @@ function LegalContent() {
         return acc;
     }, {});
 
-    const totalMustHaveMissing = allAlerts.filter(a => a.type === 'missing_must_have').length;
-
     return (
         <>
-            <TopHeader title="Legal Management" subtitle={`${filteredCards.length} companies · ${allAlerts.length} active alerts`} />
+            <TopHeader title="Legal Management" subtitle={`${filteredCards.length} companies`} />
             <div className="page-content">
                 {/* Toolbar */}
                 <div className="toolbar">
@@ -195,50 +182,6 @@ function LegalContent() {
                         </div>
                     </div>
                 </div>
-
-                {/* Alerts Panel */}
-                {showAlerts && allAlerts.length > 0 && (
-                    <div className="legal-alerts-panel">
-                        <div className="legal-alerts-header">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <AlertTriangle size={16} color="#b91c1c" />
-                                <strong>{allAlerts.length} alert{allAlerts.length === 1 ? '' : 's'} across portfolio</strong>
-                                {totalMustHaveMissing > 0 && (
-                                    <span className="legal-alerts-badge">
-                                        {totalMustHaveMissing} missing critical rights
-                                    </span>
-                                )}
-                            </div>
-                            <button className="btn-ghost-sm" onClick={() => setShowAlerts(false)}>Hide</button>
-                        </div>
-                        <div className="legal-alerts-body">
-                            {allAlerts.slice(0, 6).map((a, idx) => (
-                                <Link
-                                    key={`${a.companyId}-${a.type}-${idx}`}
-                                    href={`/legal/${a.companyId}`}
-                                    className={`legal-alert-item ${a.severity === 'high' ? 'high' : 'medium'}`}
-                                >
-                                    <FileWarning size={14} />
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: 600 }}>{a.message}</div>
-                                        {a.details && <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{a.details}</div>}
-                                    </div>
-                                    <ArrowRight size={14} />
-                                </Link>
-                            ))}
-                            {allAlerts.length > 6 && (
-                                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 8px' }}>
-                                    +{allAlerts.length - 6} more
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-                {!showAlerts && allAlerts.length > 0 && (
-                    <button className="btn-ghost-sm" style={{ marginBottom: 16 }} onClick={() => setShowAlerts(true)}>
-                        Show {allAlerts.length} alert{allAlerts.length === 1 ? '' : 's'}
-                    </button>
-                )}
 
                 {portfolioCompanies.length === 0 ? (
                     <div className="empty-state">
