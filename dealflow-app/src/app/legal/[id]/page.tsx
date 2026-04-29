@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
-    ArrowLeft, Briefcase, AlertTriangle, Info,
+    ArrowLeft, Briefcase, AlertTriangle, Info, LayoutDashboard,
     ShieldCheck, GitCompareArrows, ClipboardList, BadgeDollarSign, FileText, FolderOpen,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
@@ -18,6 +18,7 @@ import {
     getLegalRecord, updateLegalRecord, subscribeLegalUpdates,
     getCompanyAlerts,
 } from '@/lib/legal-data';
+import LegalDashboard from '@/components/legal/LegalDashboard';
 import RightsMatrix from '@/components/legal/RightsMatrix';
 import RightsChanges from '@/components/legal/RightsChanges';
 import SOPTracker from '@/components/legal/SOPTracker';
@@ -25,9 +26,10 @@ import PostInvestmentTracker from '@/components/legal/PostInvestmentTracker';
 import SHAGrid from '@/components/legal/SHAGrid';
 import DocumentManager from '@/components/legal/DocumentManager';
 
-type LegalTabId = 'rights' | 'changes' | 'sop' | 'post' | 'sha' | 'documents';
+type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'sop' | 'post' | 'sha' | 'documents';
 
 const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'rights', label: 'Rights', icon: ShieldCheck },
     { id: 'changes', label: 'Changes', icon: GitCompareArrows },
     { id: 'sop', label: 'SOP', icon: ClipboardList },
@@ -39,7 +41,7 @@ const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: 
 function LegalDetailContent({ companyId }: { companyId: string }) {
     const router = useRouter();
     const { companies, getIndustryById, setSelectedCompany } = useAppContext();
-    const [activeTab, setActiveTab] = useState<LegalTabId>('rights');
+    const [activeTab, setActiveTab] = useState<LegalTabId>('dashboard');
     const [tick, setTick] = useState(0);
 
     const company = useMemo(() => companies.find(c => c.id === companyId), [companies, companyId]);
@@ -200,6 +202,9 @@ function LegalDetailContent({ companyId }: { companyId: string }) {
                 </div>
 
                 <div className="legal-tab-content">
+                    {activeTab === 'dashboard' && (
+                        <LegalDashboard company={company} record={record} />
+                    )}
                     {activeTab === 'rights' && (
                         <RightsMatrix record={record} onUpdate={updateRecord} />
                     )}
