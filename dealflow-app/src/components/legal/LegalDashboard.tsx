@@ -12,6 +12,7 @@ import {
     RIGHT_DEFINITIONS,
     detectRightsChanges,
     getMissingMustHaveRights,
+    presenceForVersion,
 } from '@/lib/legal-data';
 import {
     formatPortfolioCurrency, formatMOIC, formatXIRR,
@@ -116,7 +117,7 @@ export default function LegalDashboard({ company, record }: Props) {
         record.rights.forEach(row => {
             const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
             if (!def) return;
-            const s = row.shaStatus[record.currentSHAVersion];
+            const s = presenceForVersion(row, record.currentSHAVersion);
             if (s === 'present') present.push(def.name);
             else if (s === 'modified') modified.push(def.name);
             else if (s === 'absent') absent.push(def.name);

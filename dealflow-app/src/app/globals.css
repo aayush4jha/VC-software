@@ -4196,50 +4196,128 @@ textarea.inline-input {
   border-color: var(--border);
 }
 
+/* Required-By colored cells: full background tint + free text input + hover cycle button. */
 .rights-tier-cell {
+  position: relative;
   text-align: center;
-  padding: 4px !important;
+  padding: 0 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  min-width: 96px;
 }
-.rights-status-chip {
+.rights-tier-input {
+  width: 100%;
+  height: 100%;
+  min-height: 40px;
+  padding: 8px 22px 8px 10px;
+  text-align: center;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  color: inherit;
+}
+.rights-tier-input::placeholder {
+  color: rgba(0, 0, 0, 0.25);
+  font-weight: 500;
+}
+.rights-tier-input:focus {
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.5);
+}
+.rights-tier-cycle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
+  border-radius: 50%;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-  white-space: nowrap;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
-.rights-status-chip:hover {
-  transform: scale(1.05);
+.rights-tier-cell:hover .rights-tier-cycle {
+  opacity: 1;
 }
-.rights-status-chip .status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
+.rights-tier-cycle:hover {
+  transform: rotate(90deg);
+  color: var(--primary);
 }
 
+/* SHA-version cells: free text + auto-tint based on inferred presence. */
 .rights-sha-cell {
-  padding: 4px !important;
+  padding: 0 !important;
+  min-width: 110px;
+  border-left: 1px solid var(--border-light);
 }
-.rights-presence-select {
+.rights-sha-input {
   width: 100%;
-  padding: 5px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  border: 1.5px solid;
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  cursor: pointer;
+  min-height: 40px;
+  padding: 8px 10px;
+  text-align: center;
+  background: transparent;
+  border: none;
   outline: none;
+  font-size: 12.5px;
+  font-weight: 700;
   font-family: var(--font-sans);
-  min-width: 100px;
+  color: var(--text-primary);
 }
+.rights-sha-input::placeholder {
+  color: var(--text-tertiary);
+}
+.rights-sha-cell.sha-present {
+  background: rgba(34, 197, 94, 0.15);
+}
+.rights-sha-cell.sha-present .rights-sha-input { color: #166534; }
+.rights-sha-cell.sha-absent {
+  background: rgba(239, 68, 68, 0.13);
+}
+.rights-sha-cell.sha-absent .rights-sha-input { color: #b91c1c; }
+.rights-sha-cell.sha-modified {
+  background: rgba(245, 158, 11, 0.15);
+}
+.rights-sha-cell.sha-modified .rights-sha-input { color: #b45309; }
+.rights-sha-cell.sha-neutral {
+  background: var(--bg-secondary);
+}
+.rights-sha-input:focus {
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.5);
+}
+
+/* Legend matching the spreadsheet reference. */
+.rights-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.rights-legend-swatch {
+  width: 22px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  margin-right: 4px;
+}
+.rights-legend-swatch.must_have { background: rgba(34, 197, 94, 0.42); }
+.rights-legend-swatch.situational { background: rgba(34, 197, 94, 0.16); }
+.rights-legend-swatch.optional { background: rgba(251, 146, 60, 0.30); }
 
 .rights-expanded-row {
   background: var(--bg-tertiary) !important;

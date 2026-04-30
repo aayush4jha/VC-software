@@ -36,10 +36,10 @@ export interface RightDefinition {
 export interface RightRow {
     rightId: string;
     requiredBy: Record<InvestorTier, RightStatus>;
+    requiredByText: Record<InvestorTier, string>;
     remarks: string;
-    shaStatus: Record<string, RightPresence | null>; // keyed by SHA version id
-    shaRemarks: Record<string, string>;
-    // Extended fields for deep rights
+    shaStatus: Record<string, RightPresence | null>; // keyed by SHA version id (derived from shaRemarks)
+    shaRemarks: Record<string, string>; // free text per SHA version
     extra?: Record<string, string>;
 }
 
@@ -157,10 +157,12 @@ export const INVESTOR_TIERS: { id: InvestorTier; label: string }[] = [
     { id: 'investor', label: 'Investor' },
 ];
 
+// Colors match the spreadsheet legend: solid green = Needed, pale green
+// = Needed in some situations, soft orange = Optional.
 export const RIGHT_STATUS_COLORS: Record<RightStatus, { bg: string; text: string; label: string; dot: string }> = {
-    must_have: { bg: 'rgba(16, 185, 129, 0.18)', text: '#047857', dot: '#10b981', label: 'Must Have' },
-    situational: { bg: 'rgba(245, 158, 11, 0.18)', text: '#b45309', dot: '#f59e0b', label: 'Situational' },
-    optional: { bg: 'rgba(239, 68, 68, 0.18)', text: '#b91c1c', dot: '#ef4444', label: 'Optional' },
+    must_have: { bg: 'rgba(34, 197, 94, 0.42)', text: '#14532d', dot: '#15803d', label: 'Needed' },
+    situational: { bg: 'rgba(34, 197, 94, 0.16)', text: '#166534', dot: '#86efac', label: 'Needed in some situations' },
+    optional: { bg: 'rgba(251, 146, 60, 0.30)', text: '#9a3412', dot: '#fb923c', label: 'Optional' },
 };
 
 export const RIGHT_DEFINITIONS: RightDefinition[] = [
@@ -389,6 +391,7 @@ export function createDefaultRightRow(rightId: string): RightRow {
     return {
         rightId,
         requiredBy,
+        requiredByText: { lead: '', large: '', angel: '', investor: '' },
         remarks: '',
         shaStatus,
         shaRemarks,
@@ -485,14 +488,41 @@ export function getLegalRecord(companyId: string): LegalRecord {
             record.rights.push(createDefaultRightRow(def.id));
         }
     });
+    record.rights.forEach(r => {
+        // Backfill requiredByText for records created before the field existed.
+        if (!r.requiredByText) {
+            r.requiredByText = { lead: '', large: '', angel: '', investor: '' };
+        } else {
+            (['lead', 'large', 'angel', 'investor'] as InvestorTier[]).forEach(t => {
+                if (typeof r.requiredByText[t] !== 'string') r.requiredByText[t] = '';
+            });
+        }
+    });
     // Migrate: ensure all known SHA versions have keys in each right row.
     record.shaVersions.forEach(v => {
         record.rights.forEach(r => {
             if (!(v.id in r.shaStatus)) r.shaStatus[v.id] = null;
             if (!(v.id in r.shaRemarks)) r.shaRemarks[v.id] = '';
+            // Re-derive shaStatus from text so legacy records work with the new
+            // free-text editor.
+            const inferred = inferPresenceFromText(r.shaRemarks[v.id]);
+            if (inferred !== null) r.shaStatus[v.id] = inferred;
+            else if (!r.shaStatus[v.id]) r.shaStatus[v.id] = null;
         });
     });
     return record;
+}
+
+// Infer presence from free-text user input ("Yes" / "Given" → present,
+// "Removed" / "No" / "Absent" → absent, etc.).
+export function inferPresenceFromText(text: string | null | undefined): RightPresence | null {
+    if (!text) return null;
+    const t = text.trim().toLowerCase();
+    if (!t) return null;
+    if (/^(no|n)\b/.test(t) || /\b(removed|absent|not\s+given|not\s+present|n\/a|none)\b/.test(t)) return 'absent';
+    if (/\b(modified|amended|changed|partial|reduced|capped|altered)\b/.test(t)) return 'modified';
+    if (/^(yes|y|✓|✔|done)\b/.test(t) || /\b(given|granted|present|included|provided|in\s+place)\b/.test(t)) return 'present';
+    return null;
 }
 
 export function saveLegalRecord(record: LegalRecord): LegalRecord {
@@ -526,6 +556,10 @@ export interface CriticalAlert {
     details?: string;
 }
 
+export function presenceForVersion(row: RightRow, versionId: string): RightPresence | null {
+    return inferPresenceFromText(row.shaRemarks[versionId]) ?? row.shaStatus[versionId] ?? null;
+}
+
 export function getMissingMustHaveRights(record: LegalRecord): { rightId: string; rightName: string }[] {
     const current = record.currentSHAVersion;
     const missing: { rightId: string; rightName: string }[] = [];
@@ -533,7 +567,7 @@ export function getMissingMustHaveRights(record: LegalRecord): { rightId: string
     record.rights.forEach(row => {
         const isMustHaveForAnyTier = Object.values(row.requiredBy).some(s => s === 'must_have');
         if (!isMustHaveForAnyTier) return;
-        const status = row.shaStatus[current];
+        const status = presenceForVersion(row, current);
         if (status !== 'present') {
             const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
             if (def) missing.push({ rightId: row.rightId, rightName: def.name });
@@ -596,8 +630,8 @@ export function detectRightsChanges(
     toVersionId: string,
 ): { rightId: string; rightName: string; from: RightPresence | null; to: RightPresence | null; change: 'ADDED' | 'REMOVED' | 'MODIFIED' | 'UNCHANGED'; remark: string }[] {
     return record.rights.map(row => {
-        const from = row.shaStatus[fromVersionId] ?? null;
-        const to = row.shaStatus[toVersionId] ?? null;
+        const from = presenceForVersion(row, fromVersionId);
+        const to = presenceForVersion(row, toVersionId);
         const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
         let change: 'ADDED' | 'REMOVED' | 'MODIFIED' | 'UNCHANGED' = 'UNCHANGED';
         if (from !== 'present' && to === 'present') change = 'ADDED';

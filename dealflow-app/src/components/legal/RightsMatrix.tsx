@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Info, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Info, Plus, Trash2, RotateCw } from 'lucide-react';
 import {
     type LegalRecord,
     type RightStatus,
-    type RightPresence,
     type InvestorTier,
     type SHAVersion,
     RIGHT_DEFINITIONS,
     INVESTOR_TIERS,
     RIGHT_STATUS_COLORS,
+    inferPresenceFromText,
+    presenceForVersion,
 } from '@/lib/legal-data';
 
 interface Props {
@@ -19,13 +20,6 @@ interface Props {
 }
 
 const STATUS_CYCLE: RightStatus[] = ['must_have', 'situational', 'optional'];
-
-const PRESENCE_OPTIONS: { value: RightPresence | ''; label: string; color: string }[] = [
-    { value: '', label: '—', color: '#94a3b8' },
-    { value: 'present', label: 'Present', color: '#10b981' },
-    { value: 'absent', label: 'Absent', color: '#ef4444' },
-    { value: 'modified', label: 'Modified', color: '#f59e0b' },
-];
 
 export default function RightsMatrix({ record, onUpdate }: Props) {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -50,12 +44,12 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
         }));
     };
 
-    const setPresence = (rightId: string, versionId: string, value: RightPresence | '') => {
+    const setRequiredByText = (rightId: string, tier: InvestorTier, value: string) => {
         onUpdate(r => ({
             ...r,
             rights: r.rights.map(row => {
                 if (row.rightId !== rightId) return row;
-                return { ...row, shaStatus: { ...row.shaStatus, [versionId]: value === '' ? null : value } };
+                return { ...row, requiredByText: { ...row.requiredByText, [tier]: value } };
             }),
         }));
     };
@@ -67,12 +61,19 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
         }));
     };
 
-    const setShaRemark = (rightId: string, versionId: string, value: string) => {
+    // Free text in SHA version columns. Re-derive shaStatus from the typed
+    // value so missing-rights alerts and the changes diff still work.
+    const setShaText = (rightId: string, versionId: string, value: string) => {
         onUpdate(r => ({
             ...r,
             rights: r.rights.map(row => {
                 if (row.rightId !== rightId) return row;
-                return { ...row, shaRemarks: { ...row.shaRemarks, [versionId]: value } };
+                const inferred = inferPresenceFromText(value);
+                return {
+                    ...row,
+                    shaRemarks: { ...row.shaRemarks, [versionId]: value },
+                    shaStatus: { ...row.shaStatus, [versionId]: inferred },
+                };
             }),
         }));
     };
@@ -133,23 +134,31 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
         if (!row) return false;
         const hasMustHave = Object.values(row.requiredBy).some(s => s === 'must_have');
         if (!hasMustHave) return false;
-        return row.shaStatus[record.currentSHAVersion] !== 'present';
+        return presenceForVersion(row, record.currentSHAVersion) !== 'present';
     };
 
     return (
         <div className="rights-matrix">
             <div className="legal-section-header">
                 <div>
-                    <h3>SHA Rights Matrix</h3>
+                    <h3>SHA Rights Matrix · Our Needed Rights Based on Our Position</h3>
                     <p className="legal-section-subtitle">
-                        Click status chips to cycle: <span style={{ color: '#10b981' }}>● Must Have</span> ·{' '}
-                        <span style={{ color: '#f59e0b' }}>● Situational</span> ·{' '}
-                        <span style={{ color: '#ef4444' }}>● Optional</span>
+                        Type into any cell to add notes (e.g. <em>Yes</em>, <em>Given</em>, <em>Removed</em>, <em>Min 1x without cap</em>).
+                        SHA columns auto-tint as you type. Hover a tier cell and click <RotateCw size={10} /> to change its color.
                     </p>
                 </div>
                 <button className="btn btn-outline btn-sm" onClick={() => setShowAddVersion(v => !v)}>
                     <Plus size={14} /> Add SHA Version
                 </button>
+            </div>
+
+            <div className="rights-legend">
+                <div className="rights-legend-swatch must_have" />
+                <span>Needed</span>
+                <div className="rights-legend-swatch situational" />
+                <span>Needed in some situations</span>
+                <div className="rights-legend-swatch optional" />
+                <span>Optional</span>
             </div>
 
             {showAddVersion && (
@@ -253,34 +262,45 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                                             const status = row.requiredBy[tier.id];
                                             const colors = RIGHT_STATUS_COLORS[status];
                                             return (
-                                                <td key={tier.id} className="rights-tier-cell">
+                                                <td
+                                                    key={tier.id}
+                                                    className={`rights-tier-cell tier-${status}`}
+                                                    style={{ backgroundColor: colors.bg }}
+                                                >
+                                                    <input
+                                                        className="rights-tier-input"
+                                                        style={{ color: colors.text }}
+                                                        value={row.requiredByText[tier.id] || ''}
+                                                        onChange={e => setRequiredByText(def.id, tier.id, e.target.value)}
+                                                        placeholder=""
+                                                        title={`${tier.label}: ${colors.label}`}
+                                                    />
                                                     <button
-                                                        className="rights-status-chip"
-                                                        style={{ backgroundColor: colors.bg, color: colors.text }}
+                                                        type="button"
+                                                        className="rights-tier-cycle"
                                                         onClick={() => cycleStatus(def.id, tier.id)}
-                                                        title={`${tier.label}: ${colors.label} — click to cycle`}
+                                                        title={`Cycle status (${colors.label})`}
                                                     >
-                                                        <span className="status-dot" style={{ backgroundColor: colors.dot }} />
-                                                        {colors.label}
+                                                        <RotateCw size={10} />
                                                     </button>
                                                 </td>
                                             );
                                         })}
                                         {record.shaVersions.map(v => {
-                                            const value = row.shaStatus[v.id] || '';
-                                            const opt = PRESENCE_OPTIONS.find(o => o.value === value) || PRESENCE_OPTIONS[0];
+                                            const text = row.shaRemarks[v.id] || '';
+                                            const inferred = inferPresenceFromText(text);
+                                            const tone = inferred === 'present' ? 'present'
+                                                : inferred === 'absent' ? 'absent'
+                                                : inferred === 'modified' ? 'modified'
+                                                : 'neutral';
                                             return (
-                                                <td key={v.id} className="rights-sha-cell">
-                                                    <select
-                                                        className="rights-presence-select"
-                                                        style={{ color: opt.color, borderColor: opt.color }}
-                                                        value={value}
-                                                        onChange={e => setPresence(def.id, v.id, e.target.value as RightPresence | '')}
-                                                    >
-                                                        {PRESENCE_OPTIONS.map(o => (
-                                                            <option key={o.value} value={o.value}>{o.label}</option>
-                                                        ))}
-                                                    </select>
+                                                <td key={v.id} className={`rights-sha-cell sha-${tone}`}>
+                                                    <input
+                                                        className="rights-sha-input"
+                                                        value={text}
+                                                        onChange={e => setShaText(def.id, v.id, e.target.value)}
+                                                        placeholder=""
+                                                    />
                                                 </td>
                                             );
                                         })}
@@ -292,7 +312,7 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                                                     def={def}
                                                     row={row}
                                                     versions={record.shaVersions}
-                                                    onShaRemarkChange={(vId, val) => setShaRemark(def.id, vId, val)}
+                                                    onShaRemarkChange={(vId, val) => setShaText(def.id, vId, val)}
                                                     onExtraChange={(key, val) => setExtra(def.id, key, val)}
                                                 />
                                             </td>
