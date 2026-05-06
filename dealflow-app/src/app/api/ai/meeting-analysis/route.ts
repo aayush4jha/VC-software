@@ -1,45 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-interface GeminiPart {
-    text?: string;
-    inlineData?: { mimeType: string; data: string };
-}
-
-async function callGemini(apiKey: string, parts: GeminiPart[]): Promise<string> {
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
-    const body = JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 16000 },
-    });
-
-    for (const model of models) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-                const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-                const data = await res.json().catch(() => ({ error: { code: res.status } }));
-                if (res.ok) {
-                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                    if (text) return text;
-                    break;
-                }
-                const code = data?.error?.code;
-                if (code === 429) {
-                    const waitMs = 20000;
-                    await new Promise(r => setTimeout(r, waitMs));
-                    continue;
-                }
-                if (code === 404) break;
-                break;
-            } catch { break; }
-        }
-    }
-    throw new Error('All Gemini models failed. Please try again.');
-}
+import { callGeminiMultimodal, getGeminiApiKeys, type GeminiPart } from '@/lib/gemini';
 
 export async function POST(request: NextRequest) {
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
+    if (getGeminiApiKeys().length === 0) {
         return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
 
@@ -101,7 +64,11 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
             { inlineData: { mimeType: fileMimeType, data: fileData } },
         ];
 
-        const rawText = await callGemini(GEMINI_API_KEY, geminiParts);
+        const rawText = await callGeminiMultimodal(geminiParts, {
+            temperature: 0.2,
+            maxOutputTokens: 16000,
+            label: 'meeting-analysis',
+        });
 
         let analysis;
         try {

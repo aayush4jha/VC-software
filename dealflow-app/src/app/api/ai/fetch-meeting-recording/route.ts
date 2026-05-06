@@ -2,43 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-interface GeminiPart {
-    text?: string;
-    inlineData?: { mimeType: string; data: string };
-}
-
-async function callGemini(apiKey: string, parts: GeminiPart[]): Promise<string> {
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
-    const body = JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 16000 },
-    });
-    for (const model of models) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-                const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-                const data = await res.json().catch(() => ({ error: { code: res.status } }));
-                if (res.ok) {
-                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                    if (text) return text;
-                    break;
-                }
-                if (data?.error?.code === 429) { await new Promise(r => setTimeout(r, 20000)); continue; }
-                break;
-            } catch { break; }
-        }
-    }
-    throw new Error('All Gemini models failed. Please try again.');
-}
+import { callGeminiMultimodal, getGeminiApiKeys, type GeminiPart } from '@/lib/gemini';
 
 export async function POST(request: NextRequest) {
     const user = await getRouteUser(request);
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    if (!GEMINI_API_KEY) return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+    if (getGeminiApiKeys().length === 0) return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
 
     const authResult = await getAuthenticatedClientForUser(user.id);
     if (!authResult) return NextResponse.json({ error: 'Google not connected. Please reconnect with Drive permissions.' }, { status: 401 });
@@ -174,7 +143,11 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks):
             { inlineData: { mimeType: recordingFile.mimeType, data: base64 } },
         ];
 
-        const rawText = await callGemini(GEMINI_API_KEY, geminiParts);
+        const rawText = await callGeminiMultimodal(geminiParts, {
+            temperature: 0.2,
+            maxOutputTokens: 16000,
+            label: 'fetch-meeting-recording',
+        });
 
         let analysis;
         try {

@@ -3,67 +3,10 @@ import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { callGeminiMultimodal, getGeminiApiKeys, type GeminiPart } from '@/lib/gemini';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
-
-interface GeminiPart {
-    text?: string;
-    inlineData?: { mimeType: string; data: string };
-}
-
-async function callGeminiMultimodal(apiKey: string, parts: GeminiPart[]): Promise<string> {
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
-    const body = JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 8000 },
-    });
-
-    for (const model of models) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-        for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body,
-                });
-
-                const data = await res.json().catch(() => ({ error: { code: res.status } }));
-
-                if (res.ok) {
-                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                    if (text) return text;
-                    // No text in response — try next model
-                    break;
-                }
-
-                const code = data?.error?.code;
-
-                if (code === 429) {
-                    const retryDelay = data?.error?.details?.find(
-                        (d: { retryDelay?: string }) => d.retryDelay
-                    )?.retryDelay;
-                    const waitMs = retryDelay ? parseInt(retryDelay) * 1000 : 20000;
-                    console.log(`Rate limited on ${model}, waiting ${waitMs}ms...`);
-                    await new Promise(r => setTimeout(r, Math.min(waitMs, 30000)));
-                    continue;
-                }
-
-                if (code === 404) break;
-
-                console.error(`Gemini ${model} error (${code}):`, JSON.stringify(data.error?.message || '').slice(0, 100));
-                break;
-            } catch (e) {
-                console.error(`Gemini ${model} fetch error:`, (e as Error).message);
-                break;
-            }
-        }
-    }
-
-    throw new Error('All Gemini models failed or quota exhausted. Please try again in a few minutes.');
-}
 
 function isPitchDeckAttachment(filename: string): boolean {
     const lower = filename.toLowerCase();
@@ -81,8 +24,7 @@ function getMimeType(filename: string): string {
 }
 
 export async function POST(request: NextRequest) {
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
+    if (getGeminiApiKeys().length === 0) {
         return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
 
@@ -268,7 +210,11 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
             ...attachmentParts,
         ];
 
-        const rawText = await callGeminiMultimodal(GEMINI_API_KEY, geminiParts);
+        const rawText = await callGeminiMultimodal(geminiParts, {
+            temperature: 0.3,
+            maxOutputTokens: 8000,
+            label: 'deck-analysis',
+        });
 
         let analysis;
         try {
