@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Info, Plus, Trash2, RotateCw } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Info, Plus, Trash2 } from 'lucide-react';
 import {
     type LegalRecord,
-    type RightStatus,
     type InvestorTier,
     type SHAVersion,
     RIGHT_DEFINITIONS,
@@ -19,29 +18,15 @@ interface Props {
     onUpdate: (mutator: (r: LegalRecord) => LegalRecord) => void;
 }
 
-const STATUS_CYCLE: RightStatus[] = ['must_have', 'situational', 'optional'];
-
 export default function RightsMatrix({ record, onUpdate }: Props) {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [showAddVersion, setShowAddVersion] = useState(false);
     const [newVersionLabel, setNewVersionLabel] = useState('');
     const [newVersionDate, setNewVersionDate] = useState('');
+    const [selectedTier, setSelectedTier] = useState<InvestorTier>('lead');
 
     const toggleExpand = (rightId: string) => {
         setExpanded(prev => ({ ...prev, [rightId]: !prev[rightId] }));
-    };
-
-    const cycleStatus = (rightId: string, tier: InvestorTier) => {
-        onUpdate(r => ({
-            ...r,
-            rights: r.rights.map(row => {
-                if (row.rightId !== rightId) return row;
-                const current = row.requiredBy[tier];
-                const idx = STATUS_CYCLE.indexOf(current);
-                const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
-                return { ...row, requiredBy: { ...row.requiredBy, [tier]: next } };
-            }),
-        }));
     };
 
     const setRequiredByText = (rightId: string, tier: InvestorTier, value: string) => {
@@ -143,13 +128,29 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                 <div>
                     <h3>SHA Rights Matrix · Our Needed Rights Based on Our Position</h3>
                     <p className="legal-section-subtitle">
-                        Type into any cell to add notes (e.g. <em>Yes</em>, <em>Given</em>, <em>Removed</em>, <em>Min 1x without cap</em>).
-                        SHA columns auto-tint as you type. Hover a tier cell and click <RotateCw size={10} /> to change its color.
+                        Pick the investor tier that applies — only that column is coloured. Choose <em>Yes</em> or <em>No</em> per right.
+                        SHA columns still accept free-text and auto-tint based on what you type.
                     </p>
                 </div>
                 <button className="btn btn-outline btn-sm" onClick={() => setShowAddVersion(v => !v)}>
                     <Plus size={14} /> Add SHA Version
                 </button>
+            </div>
+
+            <div className="rights-tier-picker" role="tablist" aria-label="Investor tier">
+                <span className="rights-tier-picker-label">Investor tier:</span>
+                {INVESTOR_TIERS.map(t => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={selectedTier === t.id}
+                        className={`rights-tier-pill ${selectedTier === t.id ? 'active' : ''}`}
+                        onClick={() => setSelectedTier(t.id)}
+                    >
+                        {t.label}
+                    </button>
+                ))}
             </div>
 
             <div className="rights-legend">
@@ -188,7 +189,7 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                             <th style={{ width: 36 }}>#</th>
                             <th style={{ minWidth: 180 }}>Right</th>
                             <th>Remarks</th>
-                            <th colSpan={INVESTOR_TIERS.length} className="rights-th-group">Required By</th>
+                            <th className="rights-th-group">Required By</th>
                             {record.shaVersions.map(v => (
                                 <th key={v.id} className="rights-th-sha">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'space-between' }}>
@@ -214,7 +215,7 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                             <th></th>
                             <th></th>
                             <th></th>
-                            {INVESTOR_TIERS.map(t => (
+                            {INVESTOR_TIERS.filter(t => t.id === selectedTier).map(t => (
                                 <th key={t.id} className="rights-th-subheader">{t.label}</th>
                             ))}
                             {record.shaVersions.map(v => (
@@ -258,31 +259,27 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                                                 onChange={e => setRemarks(def.id, e.target.value)}
                                             />
                                         </td>
-                                        {INVESTOR_TIERS.map(tier => {
+                                        {INVESTOR_TIERS.filter(t => t.id === selectedTier).map(tier => {
                                             const status = row.requiredBy[tier.id];
                                             const colors = RIGHT_STATUS_COLORS[status];
+                                            const value = row.requiredByText[tier.id] || '';
                                             return (
                                                 <td
                                                     key={tier.id}
-                                                    className={`rights-tier-cell tier-${status}`}
+                                                    className={`rights-tier-cell tier-${status} tier-active`}
                                                     style={{ backgroundColor: colors.bg }}
+                                                    title={`${tier.label}: ${colors.label}`}
                                                 >
-                                                    <input
-                                                        className="rights-tier-input"
+                                                    <select
+                                                        className="rights-tier-select"
                                                         style={{ color: colors.text }}
-                                                        value={row.requiredByText[tier.id] || ''}
+                                                        value={value}
                                                         onChange={e => setRequiredByText(def.id, tier.id, e.target.value)}
-                                                        placeholder=""
-                                                        title={`${tier.label}: ${colors.label}`}
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        className="rights-tier-cycle"
-                                                        onClick={() => cycleStatus(def.id, tier.id)}
-                                                        title={`Cycle status (${colors.label})`}
                                                     >
-                                                        <RotateCw size={10} />
-                                                    </button>
+                                                        <option value="">—</option>
+                                                        <option value="Yes">Yes</option>
+                                                        <option value="No">No</option>
+                                                    </select>
                                                 </td>
                                             );
                                         })}
@@ -307,7 +304,7 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                                     </tr>
                                     {isOpen && (
                                         <tr className="rights-expanded-row">
-                                            <td colSpan={4 + INVESTOR_TIERS.length + record.shaVersions.length}>
+                                            <td colSpan={5 + record.shaVersions.length}>
                                                 <ExpandedDetails
                                                     def={def}
                                                     row={row}
