@@ -5018,6 +5018,7 @@ textarea.inline-input {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .fund-entity-title {
   display: flex;
@@ -5098,19 +5099,29 @@ textarea.inline-input {
 .fund-row-positive { color: #15803d; }
 
 .fund-entity-name-input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
   font-size: 14px;
   font-weight: 600;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 4px 8px;
+  padding: 6px 10px;
   outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-sizing: border-box;
 }
 .fund-entity-name-input:focus {
   border-color: var(--primary);
 }
 .fund-entity-cur-select {
-  width: 70px;
+  flex: 0 0 78px;
+  width: 78px;
+  min-width: 78px;
+  max-width: 78px;
+  padding: 6px 6px 6px 10px;
+  box-sizing: border-box;
 }
 .fund-entity-notes {
   width: 100%;
