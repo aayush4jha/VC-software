@@ -43,10 +43,16 @@ export default function PortfolioCompanyDetail() {
 
     // New round form
     const [roundForm, setRoundForm] = useState({
-        round_name: '', round_date: '', total_raised: '', our_investment: '',
-        did_we_invest: true, round_valuation: '', ownership_after: '',
+        round_name: 'Series A', round_date: '', total_raised: '', our_investment: '',
+        did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
+        share_price: '', num_shares: '', ownership_sought: '', ownership_after: '',
         investor_names: '', notes: '',
     });
+
+    const FOLLOWON_ROUND_OPTIONS = [
+        'Pre-Seed', 'Seed', 'Pre-Series A', 'Series A',
+        'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO',
+    ] as const;
 
     const c = selectedCompany;
 
@@ -95,14 +101,21 @@ export default function PortfolioCompanyDetail() {
     const saveField = async () => {
         if (!editField) return;
         const data: Record<string, unknown> = {};
-        const numericFields = ['initialInvestment', 'entryValuation', 'entryOwnership', 'currentOwnership', 'latestValuation', 'exitValue'];
+        const numericFields = [
+            'initialInvestment', 'entryValuation', 'entryOwnership', 'currentOwnership',
+            'latestValuation', 'exitValue', 'sharePrice', 'numShares',
+            'entryPreMoneyValuation', 'entryPostMoneyValuation',
+        ];
         if (numericFields.includes(editField)) {
             data[editField] = editValue ? parseFloat(editValue) : null;
+            // Keep legacy entryValuation in sync with post-money on save.
+            if (editField === 'entryPostMoneyValuation' && data[editField] != null) {
+                data.entryValuation = data[editField];
+            }
         } else {
             data[editField] = editValue || null;
         }
         await updateCompany(c.id, data);
-        // Update selectedCompany so the modal reflects changes immediately
         setSelectedCompany({ ...c, ...data } as Company);
         setEditField(null);
         setEditValue('');
@@ -130,50 +143,72 @@ export default function PortfolioCompanyDetail() {
         if (!roundForm.round_name || !roundForm.round_date) return;
         setSavingRound(true);
 
-        const ourInv = roundForm.our_investment ? parseFloat(roundForm.our_investment) : null;
-        const roundVal = roundForm.round_valuation ? parseFloat(roundForm.round_valuation) : null;
-        const ownerAfter = roundForm.ownership_after ? parseFloat(roundForm.ownership_after) : null;
+        const toNum = (s: string): number | null => {
+            if (!s) return null;
+            const n = parseFloat(s);
+            return Number.isFinite(n) ? n : null;
+        };
 
-        await addFollowOn({
+        const ourInv = toNum(roundForm.our_investment);
+        const postMoney = toNum(roundForm.post_money_valuation);
+        const preMoney = toNum(roundForm.pre_money_valuation);
+        const sharePrice = toNum(roundForm.share_price);
+        const numShares = toNum(roundForm.num_shares);
+        const ownerAfter = toNum(roundForm.ownership_after);
+        const ownerSought = toNum(roundForm.ownership_sought);
+        const impliedRaised = postMoney != null && preMoney != null ? postMoney - preMoney : null;
+        const totalRaised = toNum(roundForm.total_raised) ?? impliedRaised;
+
+        const created = await addFollowOn({
             companyId: c.id,
             organizationId: ORGANIZATION_ID,
             roundName: roundForm.round_name,
             roundDate: roundForm.round_date,
-            totalRaised: roundForm.total_raised ? parseFloat(roundForm.total_raised) : null,
-            ourInvestment: ourInv,
+            totalRaised,
+            ourInvestment: roundForm.did_we_invest ? ourInv : null,
             didWeInvest: roundForm.did_we_invest,
-            roundValuation: roundVal,
+            preMoneyValuation: preMoney,
+            postMoneyValuation: postMoney,
+            roundValuation: postMoney,
+            sharePrice,
+            numShares,
+            ownershipSought: roundForm.did_we_invest ? ownerSought : null,
             ownershipAfter: ownerAfter,
             investorNames: roundForm.investor_names,
             notes: roundForm.notes,
         });
 
-        // Auto-update company fields based on the new round
-        const companyUpdates: Record<string, unknown> = {};
-
-        // Update latest valuation from round's post-money valuation
-        if (roundVal && roundVal > 0) {
-            companyUpdates.latestValuation = roundVal;
+        // Optimistically update local state so the new round shows immediately,
+        // even if the reload below races.
+        if (created) {
+            setFollowOns(prev => [...prev, created]);
         }
 
-        // Update current ownership if provided
+        // Auto-update company fields based on the new round
+        const companyUpdates: Record<string, unknown> = {};
+        if (postMoney != null && postMoney > 0) {
+            companyUpdates.latestValuation = postMoney;
+        }
         if (ownerAfter != null) {
             companyUpdates.currentOwnership = ownerAfter;
         }
-
-        // Update current stage to match the round name if it's a known stage
         const knownStages = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
         if (knownStages.includes(roundForm.round_name)) {
             companyUpdates.companyRound = roundForm.round_name;
         }
-
         if (Object.keys(companyUpdates).length > 0) {
             await updateCompany(c.id, companyUpdates);
         }
 
-        setRoundForm({ round_name: '', round_date: '', total_raised: '', our_investment: '', did_we_invest: true, round_valuation: '', ownership_after: '', investor_names: '', notes: '' });
+        setRoundForm({
+            round_name: 'Series A', round_date: '', total_raised: '', our_investment: '',
+            did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
+            share_price: '', num_shares: '', ownership_sought: '', ownership_after: '',
+            investor_names: '', notes: '',
+        });
         setShowAddRound(false);
         setSavingRound(false);
+        // Re-load from server to get the canonical row (including server-generated fields)
         loadFollowOns();
     };
 
@@ -267,8 +302,11 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="Entry Date" value={entryDate} field="createdAt" type="date" rawValue={c.createdAt?.split('T')[0] || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Stage" value={c.companyRound || '--'} field="companyRound" rawValue={c.companyRound || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Initial Investment" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : '--'} field="initialInvestment" type="number" rawValue={c.initialInvestment?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="Entry Valuation" value={c.entryValuation ? formatPortfolioCurrency(c.entryValuation) : '--'} field="entryValuation" type="number" rawValue={c.entryValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="Entry Ownership %" value={c.entryOwnership ? `${c.entryOwnership}%` : '--'} field="entryOwnership" type="number" rawValue={c.entryOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Share Price" value={c.sharePrice != null ? `₹${c.sharePrice.toLocaleString('en-IN')}` : '--'} field="sharePrice" type="number" rawValue={c.sharePrice?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="No. of Shares" value={c.numShares != null ? c.numShares.toLocaleString('en-IN') : '--'} field="numShares" type="number" rawValue={c.numShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Entry Pre-money" value={c.entryPreMoneyValuation ? formatPortfolioCurrency(c.entryPreMoneyValuation) : '--'} field="entryPreMoneyValuation" type="number" rawValue={c.entryPreMoneyValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Entry Post-money" value={(c.entryPostMoneyValuation ?? c.entryValuation) ? formatPortfolioCurrency((c.entryPostMoneyValuation ?? c.entryValuation) as number) : '--'} field="entryPostMoneyValuation" type="number" rawValue={(c.entryPostMoneyValuation ?? c.entryValuation)?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Entry Ownership %" value={c.entryOwnership ? `${c.entryOwnership}%` : (c.initialInvestment && (c.entryPostMoneyValuation || c.entryValuation) ? `${((c.initialInvestment / ((c.entryPostMoneyValuation || c.entryValuation) as number)) * 100).toFixed(2)}%` : '--')} field="entryOwnership" type="number" rawValue={c.entryOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Current Ownership %" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'} field="currentOwnership" type="number" rawValue={c.currentOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <DetailRow label="MOIC" value={totalInvested > 0 ? formatMOIC(moic) : '--'} />
                             </div>
@@ -312,13 +350,31 @@ export default function PortfolioCompanyDetail() {
                         </div>
 
                         {/* Add Round Form */}
-                        {showAddRound && (
+                        {showAddRound && (() => {
+                            const toNum = (s: string) => {
+                                if (!s) return null;
+                                const n = parseFloat(s);
+                                return Number.isFinite(n) ? n : null;
+                            };
+                            const previewPre = toNum(roundForm.pre_money_valuation);
+                            const previewPost = toNum(roundForm.post_money_valuation);
+                            const previewShares = toNum(roundForm.num_shares);
+                            const previewPrice = toNum(roundForm.share_price);
+                            const previewOwn = toNum(roundForm.ownership_after);
+                            const previewImpliedRaised = previewPre != null && previewPost != null ? previewPost - previewPre : null;
+                            const previewValueByShares = previewShares != null && previewPrice != null ? previewShares * previewPrice : null;
+                            const previewValueByEquity = previewOwn != null && previewPost != null ? (previewOwn / 100) * previewPost : null;
+                            const previewValueToday = previewValueByShares ?? previewValueByEquity;
+
+                            return (
                             <div style={{ padding: 16, background: 'var(--bg-tertiary)', borderRadius: 10, marginBottom: 12, border: '1px solid var(--border)' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                                     <div className="form-group">
                                         <label className="form-label">Round Name *</label>
-                                        <input className="form-input" placeholder="e.g. Series A" value={roundForm.round_name}
-                                            onChange={e => setRoundForm(f => ({ ...f, round_name: e.target.value }))} />
+                                        <select className="form-select" value={roundForm.round_name}
+                                            onChange={e => setRoundForm(f => ({ ...f, round_name: e.target.value }))}>
+                                            {FOLLOWON_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                                        </select>
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">Date *</label>
@@ -326,14 +382,36 @@ export default function PortfolioCompanyDetail() {
                                             onChange={e => setRoundForm(f => ({ ...f, round_date: e.target.value }))} />
                                     </div>
                                     <div className="form-group">
-                                        <label className="form-label">Total Raised (all investors)</label>
-                                        <input className="form-input" type="number" placeholder="Total round size"
-                                            value={roundForm.total_raised} onChange={e => setRoundForm(f => ({ ...f, total_raised: e.target.value }))} />
+                                        <label className="form-label">Pre-money Valuation (&#8377;)</label>
+                                        <input className="form-input" type="number" placeholder="Pre-money"
+                                            value={roundForm.pre_money_valuation} onChange={e => setRoundForm(f => ({ ...f, pre_money_valuation: e.target.value }))} />
                                     </div>
                                     <div className="form-group">
-                                        <label className="form-label">Round Valuation (post-money)</label>
-                                        <input className="form-input" type="number" placeholder="Post-money valuation"
-                                            value={roundForm.round_valuation} onChange={e => setRoundForm(f => ({ ...f, round_valuation: e.target.value }))} />
+                                        <label className="form-label">Post-money Valuation (&#8377;)</label>
+                                        <input className="form-input" type="number" placeholder="Post-money"
+                                            value={roundForm.post_money_valuation} onChange={e => setRoundForm(f => ({ ...f, post_money_valuation: e.target.value }))} />
+                                        {previewImpliedRaised != null && previewImpliedRaised > 0 && (
+                                            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                Pre + Raised = Post &rarr; Raised: {formatPortfolioCurrency(previewImpliedRaised)}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Share Price (&#8377;)</label>
+                                        <input className="form-input" type="number" placeholder="e.g. 1500"
+                                            value={roundForm.share_price} onChange={e => setRoundForm(f => ({ ...f, share_price: e.target.value }))} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">No. of Shares</label>
+                                        <input className="form-input" type="number" placeholder="e.g. 5000"
+                                            value={roundForm.num_shares} onChange={e => setRoundForm(f => ({ ...f, num_shares: e.target.value }))} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Total Raised (&#8377;)</label>
+                                        <input className="form-input" type="number"
+                                            placeholder={previewImpliedRaised != null && previewImpliedRaised > 0 ? `Auto: ${formatPortfolioCurrency(previewImpliedRaised)}` : 'Total round size'}
+                                            value={roundForm.total_raised}
+                                            onChange={e => setRoundForm(f => ({ ...f, total_raised: e.target.value }))} />
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">Did We Invest?</label>
@@ -344,21 +422,52 @@ export default function PortfolioCompanyDetail() {
                                         </select>
                                     </div>
                                     {roundForm.did_we_invest && (
+                                        <>
+                                            <div className="form-group">
+                                                <label className="form-label">Our Investment (&#8377;)</label>
+                                                <input className="form-input" type="number" placeholder="Our cheque size"
+                                                    value={roundForm.our_investment} onChange={e => setRoundForm(f => ({ ...f, our_investment: e.target.value }))} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Ownership Sought in Round (%)</label>
+                                                <input className="form-input" type="number" step="0.01" placeholder="e.g. 2.5"
+                                                    value={roundForm.ownership_sought}
+                                                    onChange={e => setRoundForm(f => ({ ...f, ownership_sought: e.target.value }))} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Total Ownership After Round (%)</label>
+                                                <input className="form-input" type="number" step="0.01" placeholder="e.g. 8.5"
+                                                    value={roundForm.ownership_after}
+                                                    onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
+                                            </div>
+                                        </>
+                                    )}
+                                    {!roundForm.did_we_invest && (
                                         <div className="form-group">
-                                            <label className="form-label">Our Investment (our cheque)</label>
-                                            <input className="form-input" type="number" placeholder="Our cheque size"
-                                                value={roundForm.our_investment} onChange={e => setRoundForm(f => ({ ...f, our_investment: e.target.value }))} />
+                                            <label className="form-label">Ownership After Dilution (%)</label>
+                                            <input className="form-input" type="number" step="0.01" placeholder="e.g. 6.0"
+                                                value={roundForm.ownership_after}
+                                                onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
                                         </div>
                                     )}
-                                    <div className="form-group">
-                                        <label className="form-label">Ownership After (%)</label>
-                                        <input className="form-input" type="number" step="0.01" placeholder="e.g. 8.5"
-                                            value={roundForm.ownership_after} onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
-                                    </div>
                                     <div className="form-group">
                                         <label className="form-label">Other Investors</label>
                                         <input className="form-input" placeholder="e.g. Sequoia, Accel"
                                             value={roundForm.investor_names} onChange={e => setRoundForm(f => ({ ...f, investor_names: e.target.value }))} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Our Value Today</label>
+                                        <div className="form-input" style={{
+                                            display: 'flex', alignItems: 'center',
+                                            background: 'var(--bg-secondary)',
+                                            color: previewValueToday != null ? '#10b981' : 'var(--text-tertiary)',
+                                            fontWeight: 600,
+                                        }}>
+                                            {previewValueToday != null ? formatPortfolioCurrency(previewValueToday) : '—'}
+                                            <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 8, fontWeight: 400 }}>
+                                                {previewValueByShares != null ? '(shares × price)' : previewValueByEquity != null ? '(equity% × post)' : ''}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
@@ -368,7 +477,8 @@ export default function PortfolioCompanyDetail() {
                                     </button>
                                 </div>
                             </div>
-                        )}
+                            );
+                        })()}
 
                         {/* Existing rounds */}
                         {loading ? (
@@ -379,7 +489,12 @@ export default function PortfolioCompanyDetail() {
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {sortedFollowOns.map(fo => (
+                                {sortedFollowOns.map(fo => {
+                                    const post = fo.postMoneyValuation ?? fo.roundValuation ?? null;
+                                    const valueByShares = fo.numShares != null && fo.sharePrice != null ? fo.numShares * fo.sharePrice : null;
+                                    const valueByEquity = fo.ownershipAfter != null && post != null ? (fo.ownershipAfter / 100) * post : null;
+                                    const valueToday = valueByShares ?? valueByEquity;
+                                    return (
                                     <div key={fo.id} style={{
                                         padding: 14, background: 'var(--bg-tertiary)', borderRadius: 8,
                                         border: '1px solid var(--border)', fontSize: 13,
@@ -413,14 +528,54 @@ export default function PortfolioCompanyDetail() {
                                                 <div style={{ fontWeight: 600 }}>{fo.ownershipAfter != null ? `${fo.ownershipAfter}%` : '--'}</div>
                                             </div>
                                         </div>
-                                        {fo.roundValuation && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
+                                            <div>
+                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Pre-money</div>
+                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.preMoneyValuation ? formatPortfolioCurrency(fo.preMoneyValuation) : '--'}</div>
+                                            </div>
+                                            <div>
+                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Post-money</div>
+                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{post ? formatPortfolioCurrency(post) : '--'}</div>
+                                            </div>
+                                            <div>
+                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Share Price</div>
+                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.sharePrice != null ? `\u20b9${fo.sharePrice.toLocaleString('en-IN')}` : '--'}</div>
+                                            </div>
+                                            <div>
+                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>No. Shares</div>
+                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.numShares != null ? fo.numShares.toLocaleString('en-IN') : '--'}</div>
+                                            </div>
+                                        </div>
+                                        {fo.didWeInvest && fo.ownershipSought != null && (
                                             <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
-                                                Valuation: {formatPortfolioCurrency(fo.roundValuation)}
-                                                {fo.investorNames ? ` \u2022 Investors: ${fo.investorNames}` : ''}
+                                                Ownership sought this round: <strong style={{ color: 'var(--text-primary)' }}>{fo.ownershipSought}%</strong>
+                                            </div>
+                                        )}
+                                        <div style={{
+                                            marginTop: 8,
+                                            paddingTop: 8,
+                                            borderTop: '1px dashed var(--border)',
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            fontSize: 12,
+                                        }}>
+                                            <span style={{ color: 'var(--text-tertiary)' }}>
+                                                Our Value Today
+                                                <span style={{ marginLeft: 6, fontSize: 10 }}>
+                                                    {valueByShares != null ? '(shares \u00d7 price)' : valueByEquity != null ? '(equity% \u00d7 post)' : ''}
+                                                </span>
+                                            </span>
+                                            <span style={{ fontWeight: 700, color: valueToday != null ? '#10b981' : 'var(--text-tertiary)' }}>
+                                                {valueToday != null ? formatPortfolioCurrency(valueToday) : '--'}
+                                            </span>
+                                        </div>
+                                        {fo.investorNames && (
+                                            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                                Investors: {fo.investorNames}
                                             </div>
                                         )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

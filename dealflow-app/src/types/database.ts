@@ -172,6 +172,11 @@ export interface Company {
   exitDate: string | null;
   hqLocation: string;
   notes: string;
+  // Entry round detail (Portfolio)
+  sharePrice: number | null;
+  numShares: number | null;
+  entryPreMoneyValuation: number | null;
+  entryPostMoneyValuation: number | null;
 }
 
 export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
@@ -185,10 +190,17 @@ export interface FollowOnRound {
   totalRaised: number | null;
   ourInvestment: number | null;
   didWeInvest: boolean;
+  // Legacy alias for post_money_valuation (kept for backwards compat).
   roundValuation: number | null;
   ownershipAfter: number | null;
   investorNames: string;
   notes: string;
+  // Follow-on round breakdown
+  sharePrice: number | null;
+  numShares: number | null;
+  preMoneyValuation: number | null;
+  postMoneyValuation: number | null;
+  ownershipSought: number | null;
   createdAt: string;
   updatedAt: string;
 }

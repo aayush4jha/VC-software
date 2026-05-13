@@ -39,7 +39,12 @@ ADD COLUMN IF NOT EXISTS portfolio_status TEXT DEFAULT 'Active' CHECK (portfolio
 ADD COLUMN IF NOT EXISTS exit_value BIGINT DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS exit_date TIMESTAMPTZ DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS hq_location TEXT DEFAULT '',
-ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
+ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '',
+-- Entry round share / valuation breakdown
+ADD COLUMN IF NOT EXISTS share_price NUMERIC(18,4) DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS num_shares BIGINT DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS entry_pre_money_valuation BIGINT DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS entry_post_money_valuation BIGINT DEFAULT NULL;
 
 -- Create follow-on rounds table
 CREATE TABLE IF NOT EXISTS portfolio_follow_ons (
@@ -58,6 +63,14 @@ CREATE TABLE IF NOT EXISTS portfolio_follow_ons (
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Additional valuation columns for follow-on rounds (safe to re-run)
+ALTER TABLE portfolio_follow_ons
+ADD COLUMN IF NOT EXISTS share_price NUMERIC(18,4) DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS num_shares BIGINT DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS pre_money_valuation BIGINT DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS post_money_valuation BIGINT DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS ownership_sought NUMERIC(10,4) DEFAULT NULL;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_follow_ons_company ON portfolio_follow_ons(company_id);

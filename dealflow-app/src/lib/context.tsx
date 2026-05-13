@@ -91,10 +91,16 @@ function mapCompany(r: any): Company {
         exitDate: r.exit_date ?? null,
         hqLocation: r.hq_location ?? '',
         notes: r.notes ?? '',
+        sharePrice: r.share_price != null ? Number(r.share_price) : null,
+        numShares: r.num_shares != null ? Number(r.num_shares) : null,
+        entryPreMoneyValuation: r.entry_pre_money_valuation ?? null,
+        entryPostMoneyValuation: r.entry_post_money_valuation ?? null,
     };
 }
 
 function mapFollowOn(r: any): FollowOnRound {
+    // Prefer the new post_money_valuation column, fall back to legacy round_valuation.
+    const postMoney = r.post_money_valuation ?? r.round_valuation ?? null;
     return {
         id: r.id,
         companyId: r.company_id,
@@ -104,10 +110,15 @@ function mapFollowOn(r: any): FollowOnRound {
         totalRaised: r.total_raised ?? null,
         ourInvestment: r.our_investment ?? null,
         didWeInvest: r.did_we_invest ?? false,
-        roundValuation: r.round_valuation ?? null,
+        roundValuation: postMoney,
         ownershipAfter: r.ownership_after != null ? Number(r.ownership_after) : null,
         investorNames: r.investor_names ?? '',
         notes: r.notes ?? '',
+        sharePrice: r.share_price != null ? Number(r.share_price) : null,
+        numShares: r.num_shares != null ? Number(r.num_shares) : null,
+        preMoneyValuation: r.pre_money_valuation ?? null,
+        postMoneyValuation: postMoney,
+        ownershipSought: r.ownership_sought != null ? Number(r.ownership_sought) : null,
         createdAt: r.created_at ?? '',
         updatedAt: r.updated_at ?? '',
     };
@@ -712,6 +723,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ...(data.exitDate ? { exit_date: data.exitDate } : {}),
                 ...(data.hqLocation ? { hq_location: data.hqLocation } : {}),
                 ...(data.notes ? { notes: data.notes } : {}),
+                ...(data.sharePrice != null ? { share_price: data.sharePrice } : {}),
+                ...(data.numShares != null ? { num_shares: data.numShares } : {}),
+                ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: data.entryPreMoneyValuation } : {}),
+                ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: data.entryPostMoneyValuation } : {}),
             },
         });
 
@@ -782,6 +797,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             latestValuation: 'latest_valuation', portfolioStatus: 'portfolio_status',
             exitValue: 'exit_value', exitDate: 'exit_date',
             hqLocation: 'hq_location', notes: 'notes',
+            sharePrice: 'share_price', numShares: 'num_shares',
+            entryPreMoneyValuation: 'entry_pre_money_valuation',
+            entryPostMoneyValuation: 'entry_post_money_valuation',
         };
         for (const [key, val] of Object.entries(data)) {
             const dbKey = fieldMap[key] || key;
@@ -1052,6 +1070,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, [apiDb]);
 
     const addFollowOn = useCallback(async (data: Record<string, unknown>): Promise<FollowOnRound | null> => {
+        // Prefer post_money_valuation; fall back to roundValuation alias so older code paths keep working.
+        const postMoney = data.postMoneyValuation ?? data.roundValuation ?? null;
         const { data: row, error } = await apiDb({
             table: 'portfolio_follow_ons', operation: 'insert',
             data: {
@@ -1062,8 +1082,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 total_raised: data.totalRaised || null,
                 our_investment: data.ourInvestment || null,
                 did_we_invest: data.didWeInvest || false,
-                round_valuation: data.roundValuation || null,
-                ownership_after: data.ownershipAfter || null,
+                round_valuation: postMoney,
+                post_money_valuation: postMoney,
+                pre_money_valuation: data.preMoneyValuation ?? null,
+                share_price: data.sharePrice ?? null,
+                num_shares: data.numShares ?? null,
+                ownership_sought: data.ownershipSought ?? null,
+                ownership_after: data.ownershipAfter ?? null,
                 investor_names: data.investorNames || '',
                 notes: data.notes || '',
             },
@@ -1079,7 +1104,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.totalRaised !== undefined) dbData.total_raised = data.totalRaised;
         if (data.ourInvestment !== undefined) dbData.our_investment = data.ourInvestment;
         if (data.didWeInvest !== undefined) dbData.did_we_invest = data.didWeInvest;
-        if (data.roundValuation !== undefined) dbData.round_valuation = data.roundValuation;
+        // Mirror post-money to legacy round_valuation column so older readers stay correct.
+        if (data.postMoneyValuation !== undefined) {
+            dbData.post_money_valuation = data.postMoneyValuation;
+            dbData.round_valuation = data.postMoneyValuation;
+        } else if (data.roundValuation !== undefined) {
+            dbData.round_valuation = data.roundValuation;
+            dbData.post_money_valuation = data.roundValuation;
+        }
+        if (data.preMoneyValuation !== undefined) dbData.pre_money_valuation = data.preMoneyValuation;
+        if (data.sharePrice !== undefined) dbData.share_price = data.sharePrice;
+        if (data.numShares !== undefined) dbData.num_shares = data.numShares;
+        if (data.ownershipSought !== undefined) dbData.ownership_sought = data.ownershipSought;
         if (data.ownershipAfter !== undefined) dbData.ownership_after = data.ownershipAfter;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;

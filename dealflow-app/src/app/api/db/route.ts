@@ -7,6 +7,7 @@ const ALLOWED_TABLES = new Set([
     'rejection_reason_categories', 'rejection_sub_reasons', 'rejection_records',
     'comments', 'activity_logs', 'notifications', 'saved_views', 'email_logs',
     'profiles', 'ingested_emails', 'company_scores', 'company_feedback', 'audit_logs', 'booking_tokens',
+    'portfolio_follow_ons',
 ]);
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';
@@ -46,11 +47,17 @@ export async function POST(request: NextRequest) {
         operation: Operation;
         data?: Record<string, unknown>;
         match?: Record<string, unknown>;
-        order?: { column: string; ascending?: boolean };
+        order?: { column: string; ascending?: boolean } | string;
         filter?: { column: string; op: string; value: unknown }[];
         single?: boolean;
         limit?: number;
     };
+
+    // Normalize order: allow `order: 'column_name'` as shorthand for ascending order.
+    const normalizedOrder =
+        typeof order === 'string'
+            ? { column: order, ascending: true }
+            : order;
 
     if (!ALLOWED_TABLES.has(table)) {
         return NextResponse.json({ error: `Table '${table}' not allowed` }, { status: 400 });
@@ -68,7 +75,13 @@ export async function POST(request: NextRequest) {
                     else if (f.op === 'neq') query = query.neq(f.column, f.value);
                 }
             }
-            if (order) query = query.order(order.column, { ascending: order.ascending ?? true });
+            // `match` shorthand: applies eq filters for each key/value
+            if (match) {
+                for (const [key, val] of Object.entries(match)) {
+                    query = query.eq(key, val as never);
+                }
+            }
+            if (normalizedOrder) query = query.order(normalizedOrder.column, { ascending: normalizedOrder.ascending ?? true });
             if (queryLimit) query = query.limit(queryLimit);
             if (single) {
                 const { data: result, error } = await query.single();

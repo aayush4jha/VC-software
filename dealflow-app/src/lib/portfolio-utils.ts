@@ -34,8 +34,10 @@ export function getTotalInvested(company: Company, followOns: FollowOnRound[]): 
 // ─── Ownership Calculation ────────────────────────
 
 export function getInitialOwnership(company: Company): number {
-    if (company.entryValuation && company.entryValuation > 0 && company.initialInvestment && company.initialInvestment > 0) {
-        return (company.initialInvestment / company.entryValuation) * 100;
+    // Prefer Entry Post-money valuation if available; fall back to legacy entryValuation.
+    const post = company.entryPostMoneyValuation ?? company.entryValuation;
+    if (post && post > 0 && company.initialInvestment && company.initialInvestment > 0) {
+        return (company.initialInvestment / post) * 100;
     }
     return company.entryOwnership || company.currentOwnership || 0;
 }
@@ -55,12 +57,14 @@ export function getCurrentOwnership(company: Company, followOns: FollowOnRound[]
 // ─── Valuation ────────────────────────────────────
 
 export function getLatestValuation(company: Company, followOns: FollowOnRound[]): number {
-    // Most recent follow-on's roundValuation sorted by DATE, or company.latestValuation
+    // Most recent follow-on's post-money valuation (or legacy roundValuation), sorted by DATE.
     const sorted = [...followOns]
-        .filter(fo => fo.roundValuation && fo.roundValuation > 0)
+        .map(fo => ({ ...fo, _post: fo.postMoneyValuation ?? fo.roundValuation }))
+        .filter(fo => fo._post && fo._post > 0)
         .sort((a, b) => new Date(b.roundDate).getTime() - new Date(a.roundDate).getTime());
-    if (sorted.length > 0) return sorted[0].roundValuation!;
+    if (sorted.length > 0) return sorted[0]._post!;
     if (company.latestValuation) return company.latestValuation;
+    if (company.entryPostMoneyValuation) return company.entryPostMoneyValuation;
     if (company.entryValuation) return company.entryValuation;
     return company.valuation || 0;
 }
