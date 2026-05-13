@@ -35,6 +35,7 @@ export default function PortfolioCompanyDetail() {
     const [loading, setLoading] = useState(false);
     const [showAddRound, setShowAddRound] = useState(false);
     const [savingRound, setSavingRound] = useState(false);
+    const [saveRoundError, setSaveRoundError] = useState<string | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [notesValue, setNotesValue] = useState('');
     const [notesDirty, setNotesDirty] = useState(false);
@@ -140,7 +141,14 @@ export default function PortfolioCompanyDetail() {
     };
 
     const handleAddRound = async () => {
-        if (!roundForm.round_name || !roundForm.round_date) return;
+        setSaveRoundError(null);
+        if (!roundForm.round_name) {
+            setSaveRoundError('Pick a round name.');
+            return;
+        }
+        // Default to today if no date was entered, instead of silently failing.
+        const roundDate = roundForm.round_date || new Date().toISOString().slice(0, 10);
+
         setSavingRound(true);
 
         const toNum = (s: string): number | null => {
@@ -163,7 +171,7 @@ export default function PortfolioCompanyDetail() {
             companyId: c.id,
             organizationId: ORGANIZATION_ID,
             roundName: roundForm.round_name,
-            roundDate: roundForm.round_date,
+            roundDate,
             totalRaised,
             ourInvestment: roundForm.did_we_invest ? ourInv : null,
             didWeInvest: roundForm.did_we_invest,
@@ -178,11 +186,14 @@ export default function PortfolioCompanyDetail() {
             notes: roundForm.notes,
         });
 
-        // Optimistically update local state so the new round shows immediately,
-        // even if the reload below races.
-        if (created) {
-            setFollowOns(prev => [...prev, created]);
+        if (!created) {
+            setSavingRound(false);
+            setSaveRoundError('Could not save round. Check the browser console for the database error (e.g. the new columns may not be applied to the DB yet — run supabase/portfolio-extras.sql).');
+            return;
         }
+
+        // Optimistically show the new round immediately.
+        setFollowOns(prev => [...prev, created]);
 
         // Auto-update company fields based on the new round
         const companyUpdates: Record<string, unknown> = {};
@@ -470,8 +481,19 @@ export default function PortfolioCompanyDetail() {
                                         </div>
                                     </div>
                                 </div>
+                                {saveRoundError && (
+                                    <div style={{
+                                        marginTop: 12, padding: '8px 12px',
+                                        background: 'var(--danger-bg, #fef2f2)',
+                                        color: 'var(--danger, #b91c1c)',
+                                        border: '1px solid var(--danger, #b91c1c)',
+                                        borderRadius: 6, fontSize: 12,
+                                    }}>
+                                        {saveRoundError}
+                                    </div>
+                                )}
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                                    <button className="btn btn-ghost btn-sm" onClick={() => setShowAddRound(false)}>Cancel</button>
+                                    <button className="btn btn-ghost btn-sm" onClick={() => { setShowAddRound(false); setSaveRoundError(null); }}>Cancel</button>
                                     <button className="btn btn-primary btn-sm" onClick={handleAddRound} disabled={savingRound}>
                                         {savingRound ? <><Loader2 size={14} className="spin" /> Saving...</> : 'Save Round'}
                                     </button>

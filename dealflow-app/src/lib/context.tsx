@@ -1072,27 +1072,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const addFollowOn = useCallback(async (data: Record<string, unknown>): Promise<FollowOnRound | null> => {
         // Prefer post_money_valuation; fall back to roundValuation alias so older code paths keep working.
         const postMoney = data.postMoneyValuation ?? data.roundValuation ?? null;
-        const { data: row, error } = await apiDb({
-            table: 'portfolio_follow_ons', operation: 'insert',
-            data: {
-                company_id: data.companyId,
-                organization_id: ORGANIZATION_ID,
-                round_name: data.roundName || '',
-                round_date: data.roundDate || new Date().toISOString(),
-                total_raised: data.totalRaised || null,
-                our_investment: data.ourInvestment || null,
-                did_we_invest: data.didWeInvest || false,
-                round_valuation: postMoney,
-                post_money_valuation: postMoney,
-                pre_money_valuation: data.preMoneyValuation ?? null,
-                share_price: data.sharePrice ?? null,
-                num_shares: data.numShares ?? null,
-                ownership_sought: data.ownershipSought ?? null,
-                ownership_after: data.ownershipAfter ?? null,
-                investor_names: data.investorNames || '',
-                notes: data.notes || '',
-            },
+
+        // Columns the schema has always had — guaranteed safe.
+        const legacyRow: Record<string, unknown> = {
+            company_id: data.companyId,
+            organization_id: ORGANIZATION_ID,
+            round_name: data.roundName || '',
+            round_date: data.roundDate || new Date().toISOString(),
+            total_raised: data.totalRaised || null,
+            our_investment: data.ourInvestment || null,
+            did_we_invest: data.didWeInvest || false,
+            round_valuation: postMoney,
+            ownership_after: data.ownershipAfter ?? null,
+            investor_names: data.investorNames || '',
+            notes: data.notes || '',
+        };
+        // Columns added by supabase/portfolio-extras.sql. If the migration
+        // hasn't been applied yet, Postgres rejects the whole insert.
+        const newRow: Record<string, unknown> = {
+            ...legacyRow,
+            post_money_valuation: postMoney,
+            pre_money_valuation: data.preMoneyValuation ?? null,
+            share_price: data.sharePrice ?? null,
+            num_shares: data.numShares ?? null,
+            ownership_sought: data.ownershipSought ?? null,
+        };
+
+        let { data: row, error } = await apiDb({
+            table: 'portfolio_follow_ons', operation: 'insert', data: newRow,
         });
+        // Fall back to the legacy column set if the new columns are missing on the DB.
+        if (error && /column .* does not exist|schema cache|could not find the/i.test(error)) {
+            console.warn('addFollowOn: new columns missing, retrying with legacy schema. Run supabase/portfolio-extras.sql to enable share price / pre-money / ownership-sought fields.');
+            ({ data: row, error } = await apiDb({
+                table: 'portfolio_follow_ons', operation: 'insert', data: legacyRow,
+            }));
+        }
         if (error || !row) { console.error('addFollowOn error:', error); return null; }
         return mapFollowOn(row);
     }, [apiDb]);
