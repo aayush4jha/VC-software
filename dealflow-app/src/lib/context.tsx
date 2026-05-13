@@ -98,6 +98,16 @@ function mapCompany(r: any): Company {
     };
 }
 
+// Postgres BIGINT columns can't accept decimals — round before sending.
+// Money fields are stored as whole rupees. Decimal-friendly columns
+// (share_price, ownership_after, ownership_sought, etc.) skip this.
+function toBigint(v: unknown): number | null {
+    if (v == null || v === '') return null;
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.round(n);
+}
+
 function mapFollowOn(r: any): FollowOnRound {
     // Prefer the new post_money_valuation column, fall back to legacy round_valuation.
     const postMoney = r.post_money_valuation ?? r.round_valuation ?? null;
@@ -713,20 +723,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 sla_deadline: data.slaDeadline || null,
                 linked_previous_entry_id: data.linkedPreviousEntryId || null,
                 ...(data.terminalStatus ? { terminal_status: data.terminalStatus } : {}),
-                ...(data.initialInvestment != null ? { initial_investment: data.initialInvestment } : {}),
-                ...(data.entryValuation != null ? { entry_valuation: data.entryValuation } : {}),
+                ...(data.initialInvestment != null ? { initial_investment: toBigint(data.initialInvestment) } : {}),
+                ...(data.entryValuation != null ? { entry_valuation: toBigint(data.entryValuation) } : {}),
                 ...(data.entryOwnership != null ? { entry_ownership: data.entryOwnership } : {}),
                 ...(data.currentOwnership != null ? { current_ownership: data.currentOwnership } : {}),
-                ...(data.latestValuation != null ? { latest_valuation: data.latestValuation } : {}),
+                ...(data.latestValuation != null ? { latest_valuation: toBigint(data.latestValuation) } : {}),
                 ...(data.portfolioStatus ? { portfolio_status: data.portfolioStatus } : {}),
-                ...(data.exitValue != null ? { exit_value: data.exitValue } : {}),
+                ...(data.exitValue != null ? { exit_value: toBigint(data.exitValue) } : {}),
                 ...(data.exitDate ? { exit_date: data.exitDate } : {}),
                 ...(data.hqLocation ? { hq_location: data.hqLocation } : {}),
                 ...(data.notes ? { notes: data.notes } : {}),
                 ...(data.sharePrice != null ? { share_price: data.sharePrice } : {}),
-                ...(data.numShares != null ? { num_shares: data.numShares } : {}),
-                ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: data.entryPreMoneyValuation } : {}),
-                ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: data.entryPostMoneyValuation } : {}),
+                ...(data.numShares != null ? { num_shares: toBigint(data.numShares) } : {}),
+                ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: toBigint(data.entryPreMoneyValuation) } : {}),
+                ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
             },
         });
 
@@ -801,9 +811,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             entryPreMoneyValuation: 'entry_pre_money_valuation',
             entryPostMoneyValuation: 'entry_post_money_valuation',
         };
+        // Postgres BIGINT-bound camelCase keys — round any decimals.
+        const BIGINT_KEYS = new Set([
+            'initialInvestment', 'entryValuation', 'latestValuation', 'exitValue',
+            'numShares', 'entryPreMoneyValuation', 'entryPostMoneyValuation',
+            'totalFundRaise', 'valuation',
+        ]);
         for (const [key, val] of Object.entries(data)) {
             const dbKey = fieldMap[key] || key;
-            dbData[dbKey] = val;
+            dbData[dbKey] = BIGINT_KEYS.has(key) && val != null ? toBigint(val) : val;
         }
         const { data: rows, error } = await apiDb({ table: 'companies', operation: 'update', data: dbData, match: { id } });
         if (error) { console.error('Update company error:', error); return; }
@@ -1071,7 +1087,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const addFollowOn = useCallback(async (data: Record<string, unknown>): Promise<FollowOnRound | null> => {
         // Prefer post_money_valuation; fall back to roundValuation alias so older code paths keep working.
-        const postMoney = data.postMoneyValuation ?? data.roundValuation ?? null;
+        const postMoneyRaw = data.postMoneyValuation ?? data.roundValuation ?? null;
+        const postMoney = toBigint(postMoneyRaw);
 
         // Columns the schema has always had — guaranteed safe.
         const legacyRow: Record<string, unknown> = {
@@ -1079,8 +1096,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             organization_id: ORGANIZATION_ID,
             round_name: data.roundName || '',
             round_date: data.roundDate || new Date().toISOString(),
-            total_raised: data.totalRaised || null,
-            our_investment: data.ourInvestment || null,
+            total_raised: toBigint(data.totalRaised),
+            our_investment: toBigint(data.ourInvestment),
             did_we_invest: data.didWeInvest || false,
             round_valuation: postMoney,
             ownership_after: data.ownershipAfter ?? null,
@@ -1092,9 +1109,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const newRow: Record<string, unknown> = {
             ...legacyRow,
             post_money_valuation: postMoney,
-            pre_money_valuation: data.preMoneyValuation ?? null,
+            pre_money_valuation: toBigint(data.preMoneyValuation),
             share_price: data.sharePrice ?? null,
-            num_shares: data.numShares ?? null,
+            num_shares: toBigint(data.numShares),
             ownership_sought: data.ownershipSought ?? null,
         };
 
@@ -1116,20 +1133,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const dbData: Record<string, unknown> = {};
         if (data.roundName !== undefined) dbData.round_name = data.roundName;
         if (data.roundDate !== undefined) dbData.round_date = data.roundDate;
-        if (data.totalRaised !== undefined) dbData.total_raised = data.totalRaised;
-        if (data.ourInvestment !== undefined) dbData.our_investment = data.ourInvestment;
+        if (data.totalRaised !== undefined) dbData.total_raised = toBigint(data.totalRaised);
+        if (data.ourInvestment !== undefined) dbData.our_investment = toBigint(data.ourInvestment);
         if (data.didWeInvest !== undefined) dbData.did_we_invest = data.didWeInvest;
         // Mirror post-money to legacy round_valuation column so older readers stay correct.
         if (data.postMoneyValuation !== undefined) {
-            dbData.post_money_valuation = data.postMoneyValuation;
-            dbData.round_valuation = data.postMoneyValuation;
+            const v = toBigint(data.postMoneyValuation);
+            dbData.post_money_valuation = v;
+            dbData.round_valuation = v;
         } else if (data.roundValuation !== undefined) {
-            dbData.round_valuation = data.roundValuation;
-            dbData.post_money_valuation = data.roundValuation;
+            const v = toBigint(data.roundValuation);
+            dbData.round_valuation = v;
+            dbData.post_money_valuation = v;
         }
-        if (data.preMoneyValuation !== undefined) dbData.pre_money_valuation = data.preMoneyValuation;
+        if (data.preMoneyValuation !== undefined) dbData.pre_money_valuation = toBigint(data.preMoneyValuation);
         if (data.sharePrice !== undefined) dbData.share_price = data.sharePrice;
-        if (data.numShares !== undefined) dbData.num_shares = data.numShares;
+        if (data.numShares !== undefined) dbData.num_shares = toBigint(data.numShares);
         if (data.ownershipSought !== undefined) dbData.ownership_sought = data.ownershipSought;
         if (data.ownershipAfter !== undefined) dbData.ownership_after = data.ownershipAfter;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
