@@ -4901,16 +4901,18 @@ textarea.inline-input {
 /* Currency totals strip */
 .fund-totals-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: 14px;
+  /* Each card needs ~5 narrow stats; pack two per row only when there's plenty of width. */
+  grid-template-columns: repeat(auto-fit, minmax(640px, 1fr));
+  gap: 16px;
 }
 .fund-total-card {
   position: relative;
-  padding: 18px 20px 16px;
+  padding: 18px 22px 16px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 .fund-total-card.tone-inr {
   border-left: 4px solid #6366f1;
@@ -4927,21 +4929,25 @@ textarea.inline-input {
   letter-spacing: 1.2px;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .fund-total-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px 22px;
 }
-@media (max-width: 720px) {
-  .fund-total-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 960px) {
+  .fund-total-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .fund-total-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .fund-stat {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
 }
 .fund-stat-label {
   font-size: 10.5px;
@@ -4949,11 +4955,18 @@ textarea.inline-input {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .fund-stat-value {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 .fund-stat-bold { font-size: 16px; font-weight: 700; }
 .fund-stat-negative { color: #dc2626; }
