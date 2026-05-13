@@ -345,15 +345,42 @@ function Row({ label, value, icon, bold, negative, positive }: { label: string; 
 }
 
 function NumField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+    // Keep the raw string locally so users can type partial decimals like
+    // "0.", "1.2", or clear the field. The parent only sees finished numbers.
+    const [text, setText] = useState<string>(value === 0 ? '' : String(value));
+
+    useEffect(() => {
+        const parsed = text === '' || text === '-' || text === '.' ? 0 : parseFloat(text);
+        if (Number.isFinite(parsed) && parsed !== value) {
+            setText(String(value));
+        }
+        // Intentionally depend on `value` only — text is the user's draft.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [value]);
+
     return (
         <label className="fund-field">
             <span>{label}</span>
             <input
                 className="inline-input"
-                type="number"
-                step="0.01"
-                value={value}
-                onChange={e => onChange(parseFloat(e.target.value) || 0)}
+                type="text"
+                inputMode="decimal"
+                value={text}
+                onChange={e => {
+                    const raw = e.target.value;
+                    // Allow empty, optional minus, optional digits, optional decimal point + digits.
+                    if (raw === '' || /^-?\d*\.?\d*$/.test(raw)) {
+                        setText(raw);
+                        const n = raw === '' || raw === '-' || raw === '.' || raw === '-.' ? 0 : parseFloat(raw);
+                        if (Number.isFinite(n)) onChange(n);
+                    }
+                }}
+                onBlur={() => {
+                    if (text === '' || text === '-' || text === '.' || text === '-.') {
+                        setText('0');
+                        onChange(0);
+                    }
+                }}
             />
         </label>
     );
