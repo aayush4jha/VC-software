@@ -15,6 +15,21 @@ const rounds: CompanyRound[] = [
 const shareTypes: ShareType[] = ['Primary', 'Secondary'];
 const portfolioStatuses: PortfolioStatus[] = ['Active', 'Exited', 'Written Off'];
 
+// Indian states + Union Territories. Datalist suggestions — users can still type any custom location.
+const HQ_LOCATION_SUGGESTIONS: string[] = [
+    // States
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    // Union Territories
+    'Andaman and Nicobar Islands', 'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
 interface LocalFollowOn {
     _tempId?: string;
     id?: string;
@@ -387,7 +402,18 @@ export default function PortfolioCompanyForm() {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">HQ Location *</label>
-                            <input className="form-input" placeholder="e.g. Bangalore, Mumbai" value={form.hq_location} onChange={upd('hq_location')} />
+                            <input
+                                className="form-input"
+                                list="hq-location-options"
+                                placeholder="Pick a state or type a city/country"
+                                value={form.hq_location}
+                                onChange={upd('hq_location')}
+                            />
+                            <datalist id="hq-location-options">
+                                {HQ_LOCATION_SUGGESTIONS.map(loc => (
+                                    <option key={loc} value={loc} />
+                                ))}
+                            </datalist>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Deal Sourcer *</label>
@@ -452,7 +478,7 @@ export default function PortfolioCompanyForm() {
                             <input className="form-input" type="number" placeholder="e.g. 1250.00" value={form.share_price} onChange={upd('share_price')} />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Total No. of Shares</label>
+                            <label className="form-label">No. of Shares at Entry</label>
                             <input className="form-input" type="number" placeholder="e.g. 40000" value={form.num_shares} onChange={upd('num_shares')} />
                         </div>
                     </div>
