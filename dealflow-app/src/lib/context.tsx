@@ -280,7 +280,7 @@ interface AppContextType {
     addPipelineStage: (name: string, color: string, description: string) => Promise<void>;
     updatePipelineStage: (id: string, data: { name?: string; color?: string; description?: string }) => Promise<void>;
     deletePipelineStage: (id: string) => Promise<void>;
-    addIndustry: (name: string) => Promise<void>;
+    addIndustry: (name: string) => Promise<Industry | null>;
     updateIndustry: (id: string, name: string) => Promise<void>;
     deleteIndustry: (id: string) => Promise<void>;
     addDealSourceName: (name: string) => Promise<void>;
@@ -1393,13 +1393,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setPipelineStages(prev => prev.filter(s => s.id !== id));
     }, [apiDb]);
 
-    const addIndustry = useCallback(async (name: string) => {
+    const addIndustry = useCallback(async (name: string): Promise<Industry | null> => {
         const { data, error } = await apiDb({
             table: 'industries', operation: 'insert',
             data: { organization_id: ORGANIZATION_ID, name },
         });
-        if (error) { console.error('addIndustry error:', error); return; }
-        if (data) setIndustries(prev => [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+        if (error || !data) { console.error('addIndustry error:', error); return null; }
+        const created: Industry = { id: data.id, name: data.name };
+        setIndustries(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+        return created;
     }, [apiDb]);
 
     const updateIndustry = useCallback(async (id: string, name: string) => {

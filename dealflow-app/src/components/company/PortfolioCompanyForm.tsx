@@ -62,7 +62,7 @@ export default function PortfolioCompanyForm() {
         editingCompany, setEditingCompany,
         companyFormPortfolioMode, setCompanyFormPortfolioMode,
         industries, users, dealSourceNames, pipelineStages,
-        createCompany, updateCompany,
+        createCompany, updateCompany, addIndustry,
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
     } = useAppContext();
 
@@ -93,6 +93,29 @@ export default function PortfolioCompanyForm() {
     const [deletedFollowOnIds, setDeletedFollowOnIds] = useState<string[]>([]);
     const [saving, setSaving] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [showNewIndustryInput, setShowNewIndustryInput] = useState(false);
+    const [newIndustryName, setNewIndustryName] = useState('');
+    const [savingIndustry, setSavingIndustry] = useState(false);
+
+    const handleSaveNewIndustry = async () => {
+        const trimmed = newIndustryName.trim();
+        if (!trimmed) return;
+        const existing = industries.find(i => i.name.toLowerCase() === trimmed.toLowerCase());
+        if (existing) {
+            setForm(f => ({ ...f, industry_id: existing.id }));
+            setShowNewIndustryInput(false);
+            setNewIndustryName('');
+            return;
+        }
+        setSavingIndustry(true);
+        const created = await addIndustry(trimmed);
+        setSavingIndustry(false);
+        if (created) {
+            setForm(f => ({ ...f, industry_id: created.id }));
+            setShowNewIndustryInput(false);
+            setNewIndustryName('');
+        }
+    };
 
     // Derived calculations for the entry round
     const investmentNum = toNum(form.initial_investment);
@@ -309,10 +332,54 @@ export default function PortfolioCompanyForm() {
                         </div>
                         <div className="form-group">
                             <label className="form-label">Industry *</label>
-                            <select className="form-select" value={form.industry_id} onChange={upd('industry_id')}>
-                                <option value="">Select industry</option>
-                                {industries.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                            </select>
+                            {showNewIndustryInput ? (
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <input
+                                        className="form-input"
+                                        autoFocus
+                                        placeholder="New industry name"
+                                        value={newIndustryName}
+                                        onChange={e => setNewIndustryName(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') { e.preventDefault(); handleSaveNewIndustry(); }
+                                            if (e.key === 'Escape') { setShowNewIndustryInput(false); setNewIndustryName(''); }
+                                        }}
+                                        style={{ flex: 1 }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary btn-sm"
+                                        onClick={handleSaveNewIndustry}
+                                        disabled={savingIndustry || !newIndustryName.trim()}
+                                    >
+                                        {savingIndustry ? '...' : 'Add'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => { setShowNewIndustryInput(false); setNewIndustryName(''); }}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <select
+                                    className="form-select"
+                                    value={form.industry_id}
+                                    onChange={e => {
+                                        if (e.target.value === '__new__') {
+                                            setShowNewIndustryInput(true);
+                                            setNewIndustryName('');
+                                        } else {
+                                            setForm(f => ({ ...f, industry_id: e.target.value }));
+                                        }
+                                    }}
+                                >
+                                    <option value="">Select industry</option>
+                                    {industries.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                    <option value="__new__">+ Add new industry…</option>
+                                </select>
+                            )}
                         </div>
                     </div>
 
