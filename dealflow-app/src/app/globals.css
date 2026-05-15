@@ -211,11 +211,30 @@ html, body {
 }
 
 .sidebar-nav {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;          /* allow shrink + scroll inside the flex column */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 10px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* Thin, on-hover scrollbar so it doesn't shout when not needed */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar-nav:hover {
+  scrollbar-color: var(--border) transparent;
+}
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background: var(--border);
 }
 
 .sidebar-section-label {
