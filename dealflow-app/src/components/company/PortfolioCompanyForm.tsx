@@ -92,6 +92,7 @@ export default function PortfolioCompanyForm() {
     const [followOns, setFollowOns] = useState<LocalFollowOn[]>([]);
     const [deletedFollowOnIds, setDeletedFollowOnIds] = useState<string[]>([]);
     const [saving, setSaving] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     // Derived calculations for the entry round
     const investmentNum = toNum(form.initial_investment);
@@ -166,6 +167,7 @@ export default function PortfolioCompanyForm() {
         setShowCompanyForm(false);
         setEditingCompany(null);
         setCompanyFormPortfolioMode(false);
+        setSubmitError(null);
     };
 
     const upd = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -184,9 +186,20 @@ export default function PortfolioCompanyForm() {
     };
 
     const handleSubmit = async () => {
-        if (!form.company_name || !form.industry_id || !form.hq_location ||
-            !form.deal_source_name_id || !form.analyst_id || !form.entry_date ||
-            !form.initial_investment || !form.portfolio_status) return;
+        setSubmitError(null);
+        const missing: string[] = [];
+        if (!form.company_name.trim()) missing.push('Company Name');
+        if (!form.industry_id) missing.push('Industry');
+        if (!form.hq_location.trim()) missing.push('HQ Location');
+        if (!form.deal_source_name_id) missing.push('Deal Sourcer');
+        if (!form.analyst_id) missing.push('Analyst');
+        if (!form.entry_date) missing.push('Entry Date');
+        if (!form.initial_investment) missing.push('Initial Investment');
+        if (!form.portfolio_status) missing.push('Status');
+        if (missing.length > 0) {
+            setSubmitError(`Please fill: ${missing.join(', ')}.`);
+            return;
+        }
 
         setSaving(true);
 
@@ -261,10 +274,13 @@ export default function PortfolioCompanyForm() {
         } else {
             data.terminalStatus = 'Portfolio';
             const created = await createCompany(data);
-            if (created) {
-                for (const fo of followOns) {
-                    await addFollowOn({ ...buildFollowOnPayload(fo), companyId: created.id });
-                }
+            if (!created) {
+                setSaving(false);
+                setSubmitError('Could not create company. Check the browser console for the database error.');
+                return;
+            }
+            for (const fo of followOns) {
+                await addFollowOn({ ...buildFollowOnPayload(fo), companyId: created.id });
             }
         }
 
@@ -688,11 +704,24 @@ export default function PortfolioCompanyForm() {
                     </div>
                 </div>
 
-                <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={handleClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-                        {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Company'}
-                    </button>
+                <div className="modal-footer" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+                    {submitError && (
+                        <div style={{
+                            padding: '8px 12px',
+                            background: 'var(--danger-bg, #fef2f2)',
+                            color: 'var(--danger, #b91c1c)',
+                            border: '1px solid var(--danger, #b91c1c)',
+                            borderRadius: 6, fontSize: 12,
+                        }}>
+                            {submitError}
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button className="btn btn-secondary" onClick={handleClose}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
+                            {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Company'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
