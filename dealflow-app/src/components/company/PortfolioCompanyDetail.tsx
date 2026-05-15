@@ -14,6 +14,19 @@ import type { Company, FollowOnRound } from '@/types/database';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
+// Indian states + UTs — datalist suggestions; user can still type any custom value.
+const HQ_LOCATION_SUGGESTIONS: string[] = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
 const AVATAR_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 function avatarColor(name: string) {
     let h = 0;
@@ -332,7 +345,7 @@ export default function PortfolioCompanyDetail() {
                             <div style={detailCardStyle}>
                                 <EditableRow label="Founder" value={c.founderName || '--'} field="founderName" rawValue={c.founderName || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Email" value={c.founderEmail || '--'} field="founderEmail" rawValue={c.founderEmail || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} />
                                 <EditableRow label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'} field="latestValuation" type="number" rawValue={c.latestValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Status" value={status} field="portfolioStatus" rawValue={status} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Active', 'Exited', 'Written Off']} />
                                 {status === 'Exited' && (
@@ -700,14 +713,17 @@ interface EditableRowProps {
     type?: string;
     selectOptions?: string[];
     selectLabels?: Record<string, string>;
+    /** Free-text input that also offers these as <datalist> suggestions. */
+    datalistOptions?: string[];
     onStart: (field: string, val: string) => void;
     onChange: (val: string) => void;
     onSave: () => void;
     onCancel: () => void;
 }
 
-function EditableRow({ label, value, field, rawValue, editField, editValue, type, selectOptions, selectLabels, onStart, onChange, onSave, onCancel }: EditableRowProps) {
+function EditableRow({ label, value, field, rawValue, editField, editValue, type, selectOptions, selectLabels, datalistOptions, onStart, onChange, onSave, onCancel }: EditableRowProps) {
     const isEditing = editField === field;
+    const datalistId = datalistOptions ? `editable-row-list-${field}` : undefined;
     return (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8 }}>
             <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flexShrink: 0 }}>{label}</span>
@@ -726,6 +742,23 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
                                 <option key={o} value={o}>{selectLabels ? selectLabels[o] || o : o}</option>
                             ))}
                         </select>
+                    ) : datalistOptions ? (
+                        <>
+                            <input
+                                className="form-input"
+                                type="text"
+                                list={datalistId}
+                                value={editValue}
+                                onChange={e => onChange(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+                                autoFocus
+                                placeholder="Pick a state or type a city/country"
+                                style={{ fontSize: 12, padding: '3px 6px', height: 28, width: 200 }}
+                            />
+                            <datalist id={datalistId}>
+                                {datalistOptions.map(o => <option key={o} value={o} />)}
+                            </datalist>
+                        </>
                     ) : (
                         <input
                             className="form-input"
