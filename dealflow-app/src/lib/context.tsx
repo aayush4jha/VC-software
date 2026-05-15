@@ -93,6 +93,7 @@ function mapCompany(r: any): Company {
         notes: r.notes ?? '',
         sharePrice: r.share_price != null ? Number(r.share_price) : null,
         numShares: r.num_shares != null ? Number(r.num_shares) : null,
+        totalShares: r.total_shares != null ? Number(r.total_shares) : null,
         entryPreMoneyValuation: r.entry_pre_money_valuation ?? null,
         entryPostMoneyValuation: r.entry_post_money_valuation ?? null,
     };
@@ -126,6 +127,7 @@ function mapFollowOn(r: any): FollowOnRound {
         notes: r.notes ?? '',
         sharePrice: r.share_price != null ? Number(r.share_price) : null,
         numShares: r.num_shares != null ? Number(r.num_shares) : null,
+        totalShares: r.total_shares != null ? Number(r.total_shares) : null,
         preMoneyValuation: r.pre_money_valuation ?? null,
         postMoneyValuation: postMoney,
         ownershipSought: r.ownership_sought != null ? Number(r.ownership_sought) : null,
@@ -735,6 +737,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ...(data.notes ? { notes: data.notes } : {}),
                 ...(data.sharePrice != null ? { share_price: data.sharePrice } : {}),
                 ...(data.numShares != null ? { num_shares: toBigint(data.numShares) } : {}),
+                ...(data.totalShares != null ? { total_shares: toBigint(data.totalShares) } : {}),
                 ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: toBigint(data.entryPreMoneyValuation) } : {}),
                 ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
             },
@@ -807,14 +810,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             latestValuation: 'latest_valuation', portfolioStatus: 'portfolio_status',
             exitValue: 'exit_value', exitDate: 'exit_date',
             hqLocation: 'hq_location', notes: 'notes',
-            sharePrice: 'share_price', numShares: 'num_shares',
+            sharePrice: 'share_price', numShares: 'num_shares', totalShares: 'total_shares',
             entryPreMoneyValuation: 'entry_pre_money_valuation',
             entryPostMoneyValuation: 'entry_post_money_valuation',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         const BIGINT_KEYS = new Set([
             'initialInvestment', 'entryValuation', 'latestValuation', 'exitValue',
-            'numShares', 'entryPreMoneyValuation', 'entryPostMoneyValuation',
+            'numShares', 'totalShares',
+            'entryPreMoneyValuation', 'entryPostMoneyValuation',
             'totalFundRaise', 'valuation',
         ]);
         for (const [key, val] of Object.entries(data)) {
@@ -1112,6 +1116,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             pre_money_valuation: toBigint(data.preMoneyValuation),
             share_price: data.sharePrice ?? null,
             num_shares: toBigint(data.numShares),
+            total_shares: toBigint(data.totalShares),
             ownership_sought: data.ownershipSought ?? null,
         };
 
@@ -1149,6 +1154,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.preMoneyValuation !== undefined) dbData.pre_money_valuation = toBigint(data.preMoneyValuation);
         if (data.sharePrice !== undefined) dbData.share_price = data.sharePrice;
         if (data.numShares !== undefined) dbData.num_shares = toBigint(data.numShares);
+        if (data.totalShares !== undefined) dbData.total_shares = toBigint(data.totalShares);
         if (data.ownershipSought !== undefined) dbData.ownership_sought = data.ownershipSought;
         if (data.ownershipAfter !== undefined) dbData.ownership_after = data.ownershipAfter;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;

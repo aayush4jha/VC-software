@@ -42,6 +42,7 @@ interface LocalFollowOn {
     postMoneyValuation: string;
     sharePrice: string;
     numShares: string;
+    totalShares: string;
     ownershipSought: string;
     ownershipAfter: string;
     investorNames: string;
@@ -59,6 +60,7 @@ function emptyFollowOn(): LocalFollowOn {
         postMoneyValuation: '',
         sharePrice: '',
         numShares: '',
+        totalShares: '',
         ownershipSought: '',
         ownershipAfter: '',
         investorNames: '',
@@ -96,6 +98,7 @@ export default function PortfolioCompanyForm() {
         share_type: 'Primary' as ShareType,
         share_price: '',
         num_shares: '',
+        total_shares: '',
         entry_pre_money_valuation: '',
         entry_post_money_valuation: '',
         entry_ownership: '',
@@ -157,6 +160,7 @@ export default function PortfolioCompanyForm() {
                 share_type: editingCompany.shareType,
                 share_price: editingCompany.sharePrice?.toString() || '',
                 num_shares: editingCompany.numShares?.toString() || '',
+                total_shares: editingCompany.totalShares?.toString() || '',
                 entry_pre_money_valuation: editingCompany.entryPreMoneyValuation?.toString() || '',
                 entry_post_money_valuation:
                     editingCompany.entryPostMoneyValuation?.toString()
@@ -181,6 +185,7 @@ export default function PortfolioCompanyForm() {
                         postMoneyValuation: (r.postMoneyValuation ?? r.roundValuation)?.toString() || '',
                         sharePrice: r.sharePrice?.toString() || '',
                         numShares: r.numShares?.toString() || '',
+                        totalShares: r.totalShares?.toString() || '',
                         ownershipSought: r.ownershipSought?.toString() || '',
                         ownershipAfter: r.ownershipAfter?.toString() || '',
                         investorNames: r.investorNames || '',
@@ -260,6 +265,7 @@ export default function PortfolioCompanyForm() {
             initialInvestment: toNum(form.initial_investment),
             sharePrice: toNum(form.share_price),
             numShares: toNum(form.num_shares),
+            totalShares: toNum(form.total_shares),
             entryPreMoneyValuation: preMoney,
             entryPostMoneyValuation: postMoney,
             // Keep entryValuation in sync with post-money for legacy code paths.
@@ -288,6 +294,7 @@ export default function PortfolioCompanyForm() {
                 roundValuation: post,
                 sharePrice: toNum(fo.sharePrice),
                 numShares: toNum(fo.numShares),
+                totalShares: toNum(fo.totalShares),
                 ownershipSought: fo.didWeInvest ? toNum(fo.ownershipSought) : null,
                 ownershipAfter: toNum(fo.ownershipAfter),
                 investorNames: fo.investorNames,
@@ -483,6 +490,15 @@ export default function PortfolioCompanyForm() {
                         </div>
                     </div>
 
+                    {/* Total No. of Shares (company-wide) */}
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Total No. of Shares (company)</label>
+                            <input className="form-input" type="number" placeholder="Company's total outstanding shares" value={form.total_shares} onChange={upd('total_shares')} />
+                        </div>
+                        <div className="form-group" />
+                    </div>
+
                     {/* Entry Pre-money + Post-money */}
                     <div className="form-row">
                         <div className="form-group">
@@ -641,7 +657,7 @@ export default function PortfolioCompanyForm() {
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label className="form-label" style={{ fontSize: 12 }}>No. of Shares</label>
+                                            <label className="form-label" style={{ fontSize: 12 }}>No. of Shares at Entry (this round)</label>
                                             <input
                                                 className="form-input"
                                                 type="number"
@@ -650,6 +666,20 @@ export default function PortfolioCompanyForm() {
                                                 onChange={e => updateFollowOnRow(idx, 'numShares', e.target.value)}
                                             />
                                         </div>
+                                    </div>
+
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label className="form-label" style={{ fontSize: 12 }}>Total No. of Shares (company)</label>
+                                            <input
+                                                className="form-input"
+                                                type="number"
+                                                placeholder="Company's total outstanding shares"
+                                                value={fo.totalShares}
+                                                onChange={e => updateFollowOnRow(idx, 'totalShares', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="form-group" />
                                     </div>
 
                                     <div className="form-row">

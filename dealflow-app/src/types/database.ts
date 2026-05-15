@@ -174,7 +174,8 @@ export interface Company {
   notes: string;
   // Entry round detail (Portfolio)
   sharePrice: number | null;
-  numShares: number | null;
+  numShares: number | null;       // shares we acquired at entry
+  totalShares: number | null;     // company's total outstanding shares at entry
   entryPreMoneyValuation: number | null;
   entryPostMoneyValuation: number | null;
 }
@@ -197,7 +198,8 @@ export interface FollowOnRound {
   notes: string;
   // Follow-on round breakdown
   sharePrice: number | null;
-  numShares: number | null;
+  numShares: number | null;       // shares acquired in this round
+  totalShares: number | null;     // company's total outstanding shares after this round
   preMoneyValuation: number | null;
   postMoneyValuation: number | null;
   ownershipSought: number | null;
