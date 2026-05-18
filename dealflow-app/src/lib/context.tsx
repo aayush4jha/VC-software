@@ -132,6 +132,7 @@ function mapFollowOn(r: any): FollowOnRound {
         postMoneyValuation: postMoney,
         ownershipSought: r.ownership_sought != null ? Number(r.ownership_sought) : null,
         dilutionPercent: r.dilution_percent != null ? Number(r.dilution_percent) : null,
+        ourValueTodayOverride: r.our_value_today_override != null ? Number(r.our_value_today_override) : null,
         createdAt: r.created_at ?? '',
         updatedAt: r.updated_at ?? '',
     };
@@ -1120,6 +1121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             total_shares: toBigint(data.totalShares),
             ownership_sought: data.ownershipSought ?? null,
             dilution_percent: data.dilutionPercent ?? null,
+            our_value_today_override: data.ourValueTodayOverride ?? null,
         };
 
         let { data: row, error } = await apiDb({
@@ -1159,6 +1161,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.totalShares !== undefined) dbData.total_shares = toBigint(data.totalShares);
         if (data.ownershipSought !== undefined) dbData.ownership_sought = data.ownershipSought;
         if (data.dilutionPercent !== undefined) dbData.dilution_percent = data.dilutionPercent;
+        if (data.ourValueTodayOverride !== undefined) dbData.our_value_today_override = data.ourValueTodayOverride;
         if (data.ownershipAfter !== undefined) dbData.ownership_after = data.ownershipAfter;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;

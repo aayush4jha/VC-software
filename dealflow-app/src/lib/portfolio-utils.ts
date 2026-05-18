@@ -34,30 +34,182 @@ export function getTotalInvested(company: Company, followOns: FollowOnRound[]): 
 // ─── Ownership Calculation ────────────────────────
 
 export function getInitialOwnership(company: Company): number {
-    // Prefer Entry Post-money valuation if available; fall back to legacy entryValuation.
+    // Manual override (entry ownership typed by user) wins over auto-calc.
+    if (company.entryOwnership != null) return company.entryOwnership;
     const post = company.entryPostMoneyValuation ?? company.entryValuation;
     if (post && post > 0 && company.initialInvestment && company.initialInvestment > 0) {
         return (company.initialInvestment / post) * 100;
     }
-    return company.entryOwnership || company.currentOwnership || 0;
+    return company.currentOwnership || 0;
+}
+
+// ─── Ownership Chain (per IRR engine spec v2) ─────
+// Walks Entry → followOns in date order, computing for each round:
+//   dilutionFactor, passiveDilution, ownershipSought, ownershipAfter, valueToday
+// Each follow-on field auto-calculates unless the row has a manual override
+// (dilutionPercent, ownershipSought, ownershipAfter, ourValueTodayOverride).
+
+export type ChainSource = 'auto' | 'override';
+
+export interface RoundChainEntry {
+    isEntry: boolean;
+    roundId: string;
+    roundName: string;
+    roundDate: Date;
+    preMoney: number | null;
+    postMoney: number | null;
+    totalRaised: number | null;
+    ourInvestment: number | null;
+    didWeInvest: boolean;
+    dilutionFactor: number | null;     // 0..1 fraction
+    passiveDilution: number;            // percent
+    ownershipSought: number;            // percent
+    ownershipAfter: number;             // percent
+    valueToday: number;                 // ₹ snapshot at this round
+    passiveDilutionSource: ChainSource;
+    ownershipSoughtSource: ChainSource;
+    ownershipAfterSource: ChainSource;
+    valueTodaySource: ChainSource;
+}
+
+export function computeOwnershipChain(
+    company: Company,
+    followOns: FollowOnRound[],
+): RoundChainEntry[] {
+    const chain: RoundChainEntry[] = [];
+
+    const entryPost = company.entryPostMoneyValuation ?? company.entryValuation ?? null;
+    const entryPre = company.entryPreMoneyValuation ?? null;
+    const entryOwnership = getInitialOwnership(company);
+    const entryOwnershipSource: ChainSource = company.entryOwnership != null ? 'override' : 'auto';
+    const entryValueToday = entryPost && entryPost > 0 ? entryPost * entryOwnership / 100 : 0;
+
+    chain.push({
+        isEntry: true,
+        roundId: '',
+        roundName: 'Entry',
+        roundDate: new Date(company.createdAt),
+        preMoney: entryPre,
+        postMoney: entryPost,
+        totalRaised: null,
+        ourInvestment: company.initialInvestment,
+        didWeInvest: true,
+        dilutionFactor: null,
+        passiveDilution: 0,
+        ownershipSought: entryOwnership,
+        ownershipAfter: entryOwnership,
+        valueToday: entryValueToday,
+        passiveDilutionSource: 'auto',
+        ownershipSoughtSource: entryOwnershipSource,
+        ownershipAfterSource: entryOwnershipSource,
+        valueTodaySource: 'auto',
+    });
+
+    const sorted = [...followOns].sort(
+        (a, b) => new Date(a.roundDate).getTime() - new Date(b.roundDate).getTime(),
+    );
+
+    let previousOwnership = entryOwnership;
+
+    for (const fo of sorted) {
+        const post = fo.postMoneyValuation ?? fo.roundValuation ?? null;
+        const pre = fo.preMoneyValuation ?? null;
+        const totalRaised = fo.totalRaised ?? null;
+
+        // Dilution Factor — priority order from spec section 7.1
+        let dilutionFactor: number | null = null;
+        if (post && post > 0) {
+            if (totalRaised != null && totalRaised > 0) {
+                dilutionFactor = totalRaised / post;
+            } else if (pre != null && pre > 0) {
+                dilutionFactor = (post - pre) / post;
+            }
+        }
+
+        // Passive Dilution
+        let passiveDilution: number;
+        let passiveDilutionSource: ChainSource = 'auto';
+        if (fo.dilutionPercent != null) {
+            passiveDilution = fo.dilutionPercent;
+            passiveDilutionSource = 'override';
+        } else if (dilutionFactor != null) {
+            passiveDilution = previousOwnership * dilutionFactor;
+        } else {
+            passiveDilution = 0;
+        }
+
+        // Ownership Sought
+        let ownershipSought: number;
+        let ownershipSoughtSource: ChainSource = 'auto';
+        if (fo.ownershipSought != null) {
+            ownershipSought = fo.ownershipSought;
+            ownershipSoughtSource = 'override';
+        } else if (fo.didWeInvest && fo.ourInvestment && post && post > 0) {
+            ownershipSought = (fo.ourInvestment / post) * 100;
+        } else {
+            ownershipSought = 0;
+        }
+
+        // Total Ownership After Round
+        let ownershipAfter: number;
+        let ownershipAfterSource: ChainSource = 'auto';
+        if (fo.ownershipAfter != null) {
+            ownershipAfter = fo.ownershipAfter;
+            ownershipAfterSource = 'override';
+        } else if (fo.didWeInvest) {
+            ownershipAfter = previousOwnership - passiveDilution + ownershipSought;
+        } else {
+            ownershipAfter = previousOwnership - passiveDilution;
+        }
+
+        // Per-round Our Value Today
+        let valueToday: number;
+        let valueTodaySource: ChainSource = 'auto';
+        if (fo.ourValueTodayOverride != null) {
+            valueToday = fo.ourValueTodayOverride;
+            valueTodaySource = 'override';
+        } else if (post != null && post > 0) {
+            valueToday = post * ownershipAfter / 100;
+        } else {
+            valueToday = 0;
+        }
+
+        chain.push({
+            isEntry: false,
+            roundId: fo.id,
+            roundName: fo.roundName,
+            roundDate: new Date(fo.roundDate),
+            preMoney: pre,
+            postMoney: post,
+            totalRaised,
+            ourInvestment: fo.ourInvestment,
+            didWeInvest: fo.didWeInvest,
+            dilutionFactor,
+            passiveDilution,
+            ownershipSought,
+            ownershipAfter,
+            valueToday,
+            passiveDilutionSource,
+            ownershipSoughtSource,
+            ownershipAfterSource,
+            valueTodaySource,
+        });
+
+        previousOwnership = ownershipAfter;
+    }
+
+    return chain;
 }
 
 export function getCurrentOwnership(company: Company, followOns: FollowOnRound[]): number {
-    // Priority: latest follow-on ownershipAfter > currentOwnership field > calculated initial
-    const sortedFollowOns = [...followOns].sort((a, b) => new Date(a.roundDate).getTime() - new Date(b.roundDate).getTime());
-    for (let i = sortedFollowOns.length - 1; i >= 0; i--) {
-        if (sortedFollowOns[i].ownershipAfter != null) {
-            return sortedFollowOns[i].ownershipAfter!;
-        }
-    }
-    if (company.currentOwnership != null) return company.currentOwnership;
-    return getInitialOwnership(company);
+    const chain = computeOwnershipChain(company, followOns);
+    return chain[chain.length - 1].ownershipAfter;
 }
 
 // ─── Valuation ────────────────────────────────────
 
 export function getLatestValuation(company: Company, followOns: FollowOnRound[]): number {
-    // Most recent follow-on's post-money valuation (or legacy roundValuation), sorted by DATE.
+    // Most recent follow-on's post-money (or legacy roundValuation), sorted by DATE.
     const sorted = [...followOns]
         .map(fo => ({ ...fo, _post: fo.postMoneyValuation ?? fo.roundValuation }))
         .filter(fo => fo._post && fo._post > 0)
@@ -69,13 +221,20 @@ export function getLatestValuation(company: Company, followOns: FollowOnRound[])
     return company.valuation || 0;
 }
 
+// ─── Terminal Value (per IRR engine spec v2 section 7.6) ─────
+// Latest Round's valueToday — which already respects the per-round OUR VALUE TODAY
+// override, and otherwise auto-computes as postMoney × ownershipAfter ÷ 100.
+
+export function getTerminalValue(company: Company, followOns: FollowOnRound[]): number {
+    const chain = computeOwnershipChain(company, followOns);
+    return chain[chain.length - 1].valueToday;
+}
+
 // ─── Unrealized Value ─────────────────────────────
 
 export function getUnrealizedValue(company: Company, followOns: FollowOnRound[]): number {
     if (company.portfolioStatus === 'Exited' || company.portfolioStatus === 'Written Off') return 0;
-    const latestVal = getLatestValuation(company, followOns);
-    const ownership = getCurrentOwnership(company, followOns);
-    return latestVal * (ownership / 100);
+    return getTerminalValue(company, followOns);
 }
 
 // ─── MOIC ─────────────────────────────────────────
@@ -153,35 +312,40 @@ export function calculateXIRR(cashFlows: CashFlow[]): number | null {
 }
 
 // ─── Company IRR ──────────────────────────────────
+// Cash flow series per IRR engine spec v2 section 8.1:
+//   • Negative on ENTRY DATE = OUR INITIAL INVESTMENT
+//   • Negative on each follow-on DATE (where invested) = OUR INVESTMENT
+//   • Positive on today's date = Terminal Value (latest round's valueToday)
+// For Exited companies we honor the existing exitValue/exitDate as a true liquidity event.
+
+function pushCompanyOutflows(
+    cashFlows: CashFlow[],
+    company: Company,
+    followOns: FollowOnRound[],
+): void {
+    if (company.initialInvestment && company.initialInvestment > 0) {
+        cashFlows.push({ date: new Date(company.createdAt), amount: -company.initialInvestment });
+    }
+    for (const fo of followOns) {
+        if (fo.didWeInvest && fo.ourInvestment && fo.ourInvestment > 0) {
+            cashFlows.push({ date: new Date(fo.roundDate), amount: -fo.ourInvestment });
+        }
+    }
+}
 
 export function getCompanyIRR(company: Company, followOns: FollowOnRound[]): number | null {
     if (company.portfolioStatus === 'Written Off') return -1; // -100%
 
     const cashFlows: CashFlow[] = [];
-    const entryDate = new Date(company.createdAt);
-
-    // Initial investment (outflow)
-    if (company.initialInvestment && company.initialInvestment > 0) {
-        cashFlows.push({ date: entryDate, amount: -company.initialInvestment });
-    }
-
-    // Follow-on investments (outflows)
-    followOns.forEach(fo => {
-        if (fo.didWeInvest && fo.ourInvestment && fo.ourInvestment > 0) {
-            cashFlows.push({ date: new Date(fo.roundDate), amount: -fo.ourInvestment });
-        }
-    });
-
+    pushCompanyOutflows(cashFlows, company, followOns);
     if (cashFlows.length === 0) return null;
 
-    // Terminal value (inflow)
     if (company.portfolioStatus === 'Exited' && company.exitValue && company.exitDate) {
         cashFlows.push({ date: new Date(company.exitDate), amount: company.exitValue });
     } else {
-        // Active: use current unrealized value as of today
-        const unrealized = getUnrealizedValue(company, followOns);
-        if (unrealized > 0) {
-            cashFlows.push({ date: new Date(), amount: unrealized });
+        const terminal = getTerminalValue(company, followOns);
+        if (terminal > 0) {
+            cashFlows.push({ date: new Date(), amount: terminal });
         }
     }
 
@@ -198,27 +362,17 @@ export function getPortfolioXIRR(
 
     companies.forEach(c => {
         const followOns = followOnsMap.get(c.id) || [];
-        const entryDate = new Date(c.createdAt);
-
-        if (c.initialInvestment && c.initialInvestment > 0) {
-            allCashFlows.push({ date: entryDate, amount: -c.initialInvestment });
-        }
-
-        followOns.forEach(fo => {
-            if (fo.didWeInvest && fo.ourInvestment && fo.ourInvestment > 0) {
-                allCashFlows.push({ date: new Date(fo.roundDate), amount: -fo.ourInvestment });
-            }
-        });
+        pushCompanyOutflows(allCashFlows, c, followOns);
 
         if (c.portfolioStatus === 'Exited' && c.exitValue && c.exitDate) {
             allCashFlows.push({ date: new Date(c.exitDate), amount: c.exitValue });
         } else if (c.portfolioStatus === 'Active') {
-            const unrealized = getUnrealizedValue(c, followOns);
-            if (unrealized > 0) {
-                allCashFlows.push({ date: new Date(), amount: unrealized });
+            const terminal = getTerminalValue(c, followOns);
+            if (terminal > 0) {
+                allCashFlows.push({ date: new Date(), amount: terminal });
             }
         }
-        // Written Off: no return
+        // Written Off: no terminal cash flow.
     });
 
     return calculateXIRR(allCashFlows);

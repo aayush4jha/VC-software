@@ -204,6 +204,7 @@ export interface FollowOnRound {
   postMoneyValuation: number | null;
   ownershipSought: number | null;
   dilutionPercent: number | null;
+  ourValueTodayOverride: number | null;
   createdAt: string;
   updatedAt: string;
 }
