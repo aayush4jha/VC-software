@@ -15,4 +15,5 @@ ADD COLUMN IF NOT EXISTS num_shares BIGINT DEFAULT NULL,          -- shares acqu
 ADD COLUMN IF NOT EXISTS total_shares BIGINT DEFAULT NULL,        -- company's total outstanding shares after this round
 ADD COLUMN IF NOT EXISTS pre_money_valuation BIGINT DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS post_money_valuation BIGINT DEFAULT NULL,
-ADD COLUMN IF NOT EXISTS ownership_sought NUMERIC(10,4) DEFAULT NULL;
+ADD COLUMN IF NOT EXISTS ownership_sought NUMERIC(10,4) DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS dilution_percent NUMERIC(10,4) DEFAULT NULL;

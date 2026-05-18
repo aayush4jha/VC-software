@@ -203,6 +203,7 @@ export interface FollowOnRound {
   preMoneyValuation: number | null;
   postMoneyValuation: number | null;
   ownershipSought: number | null;
+  dilutionPercent: number | null;
   createdAt: string;
   updatedAt: string;
 }

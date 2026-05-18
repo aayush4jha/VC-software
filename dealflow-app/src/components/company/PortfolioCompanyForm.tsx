@@ -45,6 +45,7 @@ interface LocalFollowOn {
     totalShares: string;
     ownershipSought: string;
     ownershipAfter: string;
+    dilutionPercent: string;
     investorNames: string;
 }
 
@@ -63,6 +64,7 @@ function emptyFollowOn(): LocalFollowOn {
         totalShares: '',
         ownershipSought: '',
         ownershipAfter: '',
+        dilutionPercent: '',
         investorNames: '',
     };
 }
@@ -188,6 +190,7 @@ export default function PortfolioCompanyForm() {
                         totalShares: r.totalShares?.toString() || '',
                         ownershipSought: r.ownershipSought?.toString() || '',
                         ownershipAfter: r.ownershipAfter?.toString() || '',
+                        dilutionPercent: r.dilutionPercent?.toString() || '',
                         investorNames: r.investorNames || '',
                     }))
                 );
@@ -297,6 +300,7 @@ export default function PortfolioCompanyForm() {
                 totalShares: toNum(fo.totalShares),
                 ownershipSought: fo.didWeInvest ? toNum(fo.ownershipSought) : null,
                 ownershipAfter: toNum(fo.ownershipAfter),
+                dilutionPercent: toNum(fo.dilutionPercent),
                 investorNames: fo.investorNames,
             };
         };
@@ -724,7 +728,7 @@ export default function PortfolioCompanyForm() {
                                                     />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label className="form-label" style={{ fontSize: 12 }}>Ownership Sought in Round (%)</label>
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Equity Sought in this Round (%)</label>
                                                     <input
                                                         className="form-input"
                                                         type="number"
@@ -737,6 +741,17 @@ export default function PortfolioCompanyForm() {
                                             </div>
                                             <div className="form-row">
                                                 <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Dilution in this Round (%)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        step="0.01"
+                                                        placeholder="e.g. 15.0"
+                                                        value={fo.dilutionPercent}
+                                                        onChange={e => updateFollowOnRow(idx, 'dilutionPercent', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
                                                     <label className="form-label" style={{ fontSize: 12 }}>Total Ownership After Round (%)</label>
                                                     <input
                                                         className="form-input"
@@ -747,13 +762,23 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(idx, 'ownershipAfter', e.target.value)}
                                                     />
                                                 </div>
-                                                <div className="form-group" />
                                             </div>
                                         </>
                                     )}
 
                                     {!fo.didWeInvest && (
                                         <div className="form-row">
+                                            <div className="form-group">
+                                                <label className="form-label" style={{ fontSize: 12 }}>Dilution in this Round (%)</label>
+                                                <input
+                                                    className="form-input"
+                                                    type="number"
+                                                    step="0.01"
+                                                    placeholder="e.g. 15.0"
+                                                    value={fo.dilutionPercent}
+                                                    onChange={e => updateFollowOnRow(idx, 'dilutionPercent', e.target.value)}
+                                                />
+                                            </div>
                                             <div className="form-group">
                                                 <label className="form-label" style={{ fontSize: 12 }}>Ownership After Dilution (%)</label>
                                                 <input
@@ -765,7 +790,6 @@ export default function PortfolioCompanyForm() {
                                                     onChange={e => updateFollowOnRow(idx, 'ownershipAfter', e.target.value)}
                                                 />
                                             </div>
-                                            <div className="form-group" />
                                         </div>
                                     )}
 

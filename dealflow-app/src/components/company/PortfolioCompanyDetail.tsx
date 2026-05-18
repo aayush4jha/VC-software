@@ -39,7 +39,7 @@ export default function PortfolioCompanyDetail() {
     const {
         selectedCompany, setSelectedCompany,
         getIndustryById, getDealSourceNameById, getUserById,
-        fetchFollowOns, addFollowOn, deleteFollowOn, updateCompany, deleteCompany,
+        fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, updateCompany, deleteCompany,
         setEditingCompany, setShowCompanyForm, setCompanyFormPortfolioMode,
         dealSourceNames, users,
     } = useAppContext();
@@ -47,6 +47,7 @@ export default function PortfolioCompanyDetail() {
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
     const [loading, setLoading] = useState(false);
     const [showAddRound, setShowAddRound] = useState(false);
+    const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
     const [savingRound, setSavingRound] = useState(false);
     const [saveRoundError, setSaveRoundError] = useState<string | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -60,7 +61,15 @@ export default function PortfolioCompanyDetail() {
         round_name: 'Series A', round_date: '', total_raised: '', our_investment: '',
         did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
         share_price: '', num_shares: '', total_shares: '',
-        ownership_sought: '', ownership_after: '',
+        ownership_sought: '', ownership_after: '', dilution_percent: '',
+        investor_names: '', notes: '',
+    });
+
+    const resetRoundForm = () => setRoundForm({
+        round_name: 'Series A', round_date: '', total_raised: '', our_investment: '',
+        did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
+        share_price: '', num_shares: '', total_shares: '',
+        ownership_sought: '', ownership_after: '', dilution_percent: '',
         investor_names: '', notes: '',
     });
 
@@ -154,7 +163,7 @@ export default function PortfolioCompanyDetail() {
         setNotesDirty(false);
     };
 
-    const handleAddRound = async () => {
+    const handleSaveRound = async () => {
         setSaveRoundError(null);
         if (!roundForm.round_name) {
             setSaveRoundError('Pick a round name.');
@@ -179,12 +188,11 @@ export default function PortfolioCompanyDetail() {
         const totalShares = toNum(roundForm.total_shares);
         const ownerAfter = toNum(roundForm.ownership_after);
         const ownerSought = toNum(roundForm.ownership_sought);
+        const dilution = toNum(roundForm.dilution_percent);
         const impliedRaised = postMoney != null && preMoney != null ? postMoney - preMoney : null;
         const totalRaised = toNum(roundForm.total_raised) ?? impliedRaised;
 
-        const created = await addFollowOn({
-            companyId: c.id,
-            organizationId: ORGANIZATION_ID,
+        const payload = {
             roundName: roundForm.round_name,
             roundDate,
             totalRaised,
@@ -198,20 +206,38 @@ export default function PortfolioCompanyDetail() {
             totalShares,
             ownershipSought: roundForm.did_we_invest ? ownerSought : null,
             ownershipAfter: ownerAfter,
+            dilutionPercent: dilution,
             investorNames: roundForm.investor_names,
             notes: roundForm.notes,
-        });
+        };
 
-        if (!created) {
-            setSavingRound(false);
-            setSaveRoundError('Could not save round. Check the browser console for the database error (e.g. the new columns may not be applied to the DB yet — run supabase/portfolio-extras.sql).');
-            return;
+        if (editingRoundId) {
+            try {
+                await updateFollowOn(editingRoundId, payload);
+            } catch (err) {
+                console.error('updateFollowOn error:', err);
+                setSavingRound(false);
+                setSaveRoundError('Could not update round.');
+                return;
+            }
+        } else {
+            const created = await addFollowOn({
+                ...payload,
+                companyId: c.id,
+                organizationId: ORGANIZATION_ID,
+            });
+
+            if (!created) {
+                setSavingRound(false);
+                setSaveRoundError('Could not save round. Check the browser console for the database error (e.g. the new columns may not be applied to the DB yet — run supabase/portfolio-extras.sql).');
+                return;
+            }
+
+            // Optimistically show the new round immediately.
+            setFollowOns(prev => [...prev, created]);
         }
 
-        // Optimistically show the new round immediately.
-        setFollowOns(prev => [...prev, created]);
-
-        // Auto-update company fields based on the new round
+        // Auto-update company fields based on the round
         const companyUpdates: Record<string, unknown> = {};
         if (postMoney != null && postMoney > 0) {
             companyUpdates.latestValuation = postMoney;
@@ -227,17 +253,42 @@ export default function PortfolioCompanyDetail() {
             await updateCompany(c.id, companyUpdates);
         }
 
-        setRoundForm({
-            round_name: 'Series A', round_date: '', total_raised: '', our_investment: '',
-            did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
-            share_price: '', num_shares: '', total_shares: '',
-            ownership_sought: '', ownership_after: '',
-            investor_names: '', notes: '',
-        });
+        resetRoundForm();
+        setEditingRoundId(null);
         setShowAddRound(false);
         setSavingRound(false);
         // Re-load from server to get the canonical row (including server-generated fields)
         loadFollowOns();
+    };
+
+    const handleStartEditRound = (fo: FollowOnRound) => {
+        setEditingRoundId(fo.id);
+        setSaveRoundError(null);
+        setRoundForm({
+            round_name: fo.roundName || 'Series A',
+            round_date: fo.roundDate ? fo.roundDate.slice(0, 10) : '',
+            total_raised: fo.totalRaised?.toString() || '',
+            our_investment: fo.ourInvestment?.toString() || '',
+            did_we_invest: fo.didWeInvest,
+            pre_money_valuation: fo.preMoneyValuation?.toString() || '',
+            post_money_valuation: (fo.postMoneyValuation ?? fo.roundValuation)?.toString() || '',
+            share_price: fo.sharePrice?.toString() || '',
+            num_shares: fo.numShares?.toString() || '',
+            total_shares: fo.totalShares?.toString() || '',
+            ownership_sought: fo.ownershipSought?.toString() || '',
+            ownership_after: fo.ownershipAfter?.toString() || '',
+            dilution_percent: fo.dilutionPercent?.toString() || '',
+            investor_names: fo.investorNames || '',
+            notes: fo.notes || '',
+        });
+        setShowAddRound(true);
+    };
+
+    const handleCancelRound = () => {
+        resetRoundForm();
+        setEditingRoundId(null);
+        setShowAddRound(false);
+        setSaveRoundError(null);
     };
 
     const handleDeleteRound = async (id: string) => {
@@ -373,7 +424,15 @@ export default function PortfolioCompanyDetail() {
                     <div style={{ marginBottom: 28 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                             <h3 style={sectionTitleStyle}>Follow-on Rounds</h3>
-                            <button className="btn btn-sm btn-primary" onClick={() => setShowAddRound(!showAddRound)}>
+                            <button className="btn btn-sm btn-primary" onClick={() => {
+                                if (showAddRound) {
+                                    handleCancelRound();
+                                } else {
+                                    setEditingRoundId(null);
+                                    resetRoundForm();
+                                    setShowAddRound(true);
+                                }
+                            }}>
                                 <Plus size={14} /> Add Round
                             </button>
                         </div>
@@ -463,10 +522,16 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.our_investment} onChange={e => setRoundForm(f => ({ ...f, our_investment: e.target.value }))} />
                                             </div>
                                             <div className="form-group">
-                                                <label className="form-label">Ownership Sought in Round (%)</label>
+                                                <label className="form-label">Equity Sought in this Round (%)</label>
                                                 <input className="form-input" type="number" step="0.01" placeholder="e.g. 2.5"
                                                     value={roundForm.ownership_sought}
                                                     onChange={e => setRoundForm(f => ({ ...f, ownership_sought: e.target.value }))} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Dilution in this Round (%)</label>
+                                                <input className="form-input" type="number" step="0.01" placeholder="e.g. 15.0"
+                                                    value={roundForm.dilution_percent}
+                                                    onChange={e => setRoundForm(f => ({ ...f, dilution_percent: e.target.value }))} />
                                             </div>
                                             <div className="form-group">
                                                 <label className="form-label">Total Ownership After Round (%)</label>
@@ -477,12 +542,20 @@ export default function PortfolioCompanyDetail() {
                                         </>
                                     )}
                                     {!roundForm.did_we_invest && (
-                                        <div className="form-group">
-                                            <label className="form-label">Ownership After Dilution (%)</label>
-                                            <input className="form-input" type="number" step="0.01" placeholder="e.g. 6.0"
-                                                value={roundForm.ownership_after}
-                                                onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
-                                        </div>
+                                        <>
+                                            <div className="form-group">
+                                                <label className="form-label">Dilution in this Round (%)</label>
+                                                <input className="form-input" type="number" step="0.01" placeholder="e.g. 15.0"
+                                                    value={roundForm.dilution_percent}
+                                                    onChange={e => setRoundForm(f => ({ ...f, dilution_percent: e.target.value }))} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Ownership After Dilution (%)</label>
+                                                <input className="form-input" type="number" step="0.01" placeholder="e.g. 6.0"
+                                                    value={roundForm.ownership_after}
+                                                    onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
+                                            </div>
+                                        </>
                                     )}
                                     <div className="form-group">
                                         <label className="form-label">Other Investors</label>
@@ -515,11 +588,16 @@ export default function PortfolioCompanyDetail() {
                                         {saveRoundError}
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                                    <button className="btn btn-ghost btn-sm" onClick={() => { setShowAddRound(false); setSaveRoundError(null); }}>Cancel</button>
-                                    <button className="btn btn-primary btn-sm" onClick={handleAddRound} disabled={savingRound}>
-                                        {savingRound ? <><Loader2 size={14} className="spin" /> Saving...</> : 'Save Round'}
-                                    </button>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                        {editingRoundId ? 'Editing existing round' : 'New round'}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button className="btn btn-ghost btn-sm" onClick={handleCancelRound}>Cancel</button>
+                                        <button className="btn btn-primary btn-sm" onClick={handleSaveRound} disabled={savingRound}>
+                                            {savingRound ? <><Loader2 size={14} className="spin" /> Saving...</> : (editingRoundId ? 'Update Round' : 'Save Round')}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             );
@@ -551,9 +629,14 @@ export default function PortfolioCompanyDetail() {
                                                     {new Date(fo.roundDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                 </span>
                                             </div>
-                                            <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteRound(fo.id)} title="Delete round">
-                                                <Trash2 size={13} style={{ color: 'var(--danger)' }} />
-                                            </button>
+                                            <div style={{ display: 'flex', gap: 4 }}>
+                                                <button className="btn btn-ghost btn-sm" onClick={() => handleStartEditRound(fo)} title="Edit round">
+                                                    <Pencil size={13} />
+                                                </button>
+                                                <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteRound(fo.id)} title="Delete round">
+                                                    <Trash2 size={13} style={{ color: 'var(--danger)' }} />
+                                                </button>
+                                            </div>
                                         </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                                             <div>
@@ -597,9 +680,14 @@ export default function PortfolioCompanyDetail() {
                                                 <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.totalShares != null ? fo.totalShares.toLocaleString('en-IN') : '--'}</div>
                                             </div>
                                         </div>
-                                        {fo.didWeInvest && fo.ownershipSought != null && (
-                                            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
-                                                Ownership sought this round: <strong style={{ color: 'var(--text-primary)' }}>{fo.ownershipSought}%</strong>
+                                        {(fo.dilutionPercent != null || (fo.didWeInvest && fo.ownershipSought != null)) && (
+                                            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                                                {fo.dilutionPercent != null && (
+                                                    <span>Dilution this round: <strong style={{ color: 'var(--text-primary)' }}>{fo.dilutionPercent}%</strong></span>
+                                                )}
+                                                {fo.didWeInvest && fo.ownershipSought != null && (
+                                                    <span>Equity sought this round: <strong style={{ color: 'var(--text-primary)' }}>{fo.ownershipSought}%</strong></span>
+                                                )}
                                             </div>
                                         )}
                                         <div style={{

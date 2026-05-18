@@ -131,6 +131,7 @@ function mapFollowOn(r: any): FollowOnRound {
         preMoneyValuation: r.pre_money_valuation ?? null,
         postMoneyValuation: postMoney,
         ownershipSought: r.ownership_sought != null ? Number(r.ownership_sought) : null,
+        dilutionPercent: r.dilution_percent != null ? Number(r.dilution_percent) : null,
         createdAt: r.created_at ?? '',
         updatedAt: r.updated_at ?? '',
     };
@@ -1118,6 +1119,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             num_shares: toBigint(data.numShares),
             total_shares: toBigint(data.totalShares),
             ownership_sought: data.ownershipSought ?? null,
+            dilution_percent: data.dilutionPercent ?? null,
         };
 
         let { data: row, error } = await apiDb({
@@ -1156,6 +1158,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.numShares !== undefined) dbData.num_shares = toBigint(data.numShares);
         if (data.totalShares !== undefined) dbData.total_shares = toBigint(data.totalShares);
         if (data.ownershipSought !== undefined) dbData.ownership_sought = data.ownershipSought;
+        if (data.dilutionPercent !== undefined) dbData.dilution_percent = data.dilutionPercent;
         if (data.ownershipAfter !== undefined) dbData.ownership_after = data.ownershipAfter;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;
