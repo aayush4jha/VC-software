@@ -95,41 +95,96 @@ function toIsoDate(d: Date): string {
 function parseSheet(ws: XLSX.WorkSheet, sheetName: string): ParseResult {
     const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
 
-    // 1. Detect header row & column indices
+    // 1. Detect header row & column indices. Bank statements typically have
+    //    10-30 rows of account metadata above the transaction table, so scan
+    //    the whole sheet rather than capping at 20.
     let headerRowIdx = -1;
     let dateCol = -1;
     let amountCol = -1;
     let debitCol = -1;
     let creditCol = -1;
+    let drCrIndicatorCol = -1;
     let balanceCol = -1;
     let descCol = -1;
 
-    for (let r = 0; r < Math.min(aoa.length, 20); r++) {
+    for (let r = 0; r < aoa.length; r++) {
         const row = aoa[r];
         if (!row) continue;
         const labels = row.map(c => String(c ?? '').trim().toLowerCase());
-        const has = (kw: string) => labels.findIndex(l => l.includes(kw));
-        const dCol = has('date');
-        const balCol = has('balance');
-        if (dCol >= 0 && balCol >= 0) {
-            headerRowIdx = r;
-            dateCol = dCol;
-            balanceCol = balCol;
-            debitCol = labels.findIndex(l => l === 'debit' || l.includes('withdrawal') || l.includes('dr'));
-            creditCol = labels.findIndex(l => l === 'credit' || l.includes('deposit') || l.includes('cr'));
-            amountCol = labels.findIndex(l => l === 'amount' || l.includes('amt'));
-            descCol = labels.findIndex(l => l.includes('description') || l.includes('narration') || l.includes('particular') || l.includes('details'));
-            if (descCol < 0) {
-                // Fallback: first text-heavy column that's not date/balance/amount
-                descCol = labels.findIndex((l, i) =>
-                    l.length > 0 &&
-                    i !== dateCol && i !== balanceCol && i !== debitCol &&
-                    i !== creditCol && i !== amountCol &&
-                    !l.includes('balance') && !l.includes('date')
-                );
-            }
-            break;
+
+        // Date column: "date" anywhere in the header. Prefer the FIRST date-like
+        // column so "Transaction Date" wins over "Value Date" when both exist.
+        const dCol = labels.findIndex(l => /\bdate\b/.test(l) || l.endsWith('date') || l.startsWith('date '));
+        const balCol = labels.findIndex(l => l.includes('balance') || l.includes('bal('));
+        const amtCol = labels.findIndex(l => l.includes('amount') || l === 'amt' || l.includes('amt.') || l.includes('amt('));
+
+        // Header must have a date and (balance OR amount). Without that it's
+        // probably a metadata row that happens to contain the word "date".
+        if (dCol < 0 || (balCol < 0 && amtCol < 0)) continue;
+
+        // DR/CR indicator column (Axis-style) — text-indicator, not numeric.
+        const indCol = labels.findIndex(l =>
+            l === 'dr/cr' || l === 'cr/dr' ||
+            l === 'dr / cr' || l === 'cr / dr' ||
+            l === 'debit/credit' || l === 'credit/debit' ||
+            l === 'debit/cred' || l === 'cred/debit' ||
+            l === 'd/c' || l === 'c/d'
+        );
+
+        // Separate debit / credit numeric columns (HDFC/ICICI-style). Use
+        // anchored matches so "transaction date" (contains 'dr') and
+        // "debit/cred" (an indicator, not a numeric column) don't trigger this.
+        const debCol = labels.findIndex((l, i) =>
+            i !== indCol && (
+                l === 'debit' || l === 'dr' ||
+                l.startsWith('debit ') || l.startsWith('debit(') ||
+                l.startsWith('withdrawal') || l.startsWith('withdrawl') ||
+                l.includes('debit amt') || l.includes('withdrawal amt') || l.includes('withdrawal amount')
+            )
+        );
+        const crdCol = labels.findIndex((l, i) =>
+            i !== indCol && (
+                l === 'credit' || l === 'cr' ||
+                l.startsWith('credit ') || l.startsWith('credit(') ||
+                l.startsWith('deposit') ||
+                l.includes('credit amt') || l.includes('deposit amt') || l.includes('deposit amount')
+            )
+        );
+
+        let descCandidate = labels.findIndex(l =>
+            l.includes('particular') ||
+            l.includes('description') ||
+            l.includes('narration') ||
+            l.includes('details') ||
+            l.includes('remarks')
+        );
+        if (descCandidate < 0) {
+            descCandidate = labels.findIndex((l, i) =>
+                l.length > 0 &&
+                i !== dCol && i !== balCol && i !== amtCol &&
+                i !== debCol && i !== crdCol && i !== indCol &&
+                !l.includes('balance') && !l.includes('date') &&
+                !/^s\.?\s*no\.?$/.test(l) && !l.includes('chq') && !l.includes('cheque') &&
+                !l.includes('branch')
+            );
         }
+
+        headerRowIdx = r;
+        dateCol = dCol;
+        balanceCol = balCol;
+        amountCol = amtCol;
+        drCrIndicatorCol = indCol;
+        debitCol = debCol;
+        creditCol = crdCol;
+        descCol = descCandidate;
+        break;
+    }
+
+    if (typeof console !== 'undefined') {
+        console.log('[BankStatementUpload] header detected at row', headerRowIdx, {
+            sheetName, dateCol, descCol, amountCol, drCrIndicatorCol,
+            debitCol, creditCol, balanceCol,
+        });
     }
 
     const transactions: ParsedTxn[] = [];
@@ -144,14 +199,23 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): ParseResult {
             const date = isLikelyDate(dateCell);
             if (!date) continue;
 
-            const desc = String(row[descCol] ?? '').trim();
+            const desc = descCol >= 0 ? String(row[descCol] ?? '').trim() : '';
+
             let amount: number | null = null;
-            if (debitCol >= 0 || creditCol >= 0) {
+            if (amountCol >= 0 && drCrIndicatorCol >= 0) {
+                // Axis-style: single Amount column + DR/CR indicator.
+                const amt = toNumber(row[amountCol]);
+                const ind = String(row[drCrIndicatorCol] ?? '').trim().toUpperCase();
+                if (amt != null && amt !== 0) {
+                    amount = ind.startsWith('D') ? -Math.abs(amt) : Math.abs(amt);
+                }
+            } else if (debitCol >= 0 || creditCol >= 0) {
                 const debit = debitCol >= 0 ? toNumber(row[debitCol]) : null;
                 const credit = creditCol >= 0 ? toNumber(row[creditCol]) : null;
                 if (debit && debit !== 0) amount = -Math.abs(debit);
                 else if (credit && credit !== 0) amount = Math.abs(credit);
             } else if (amountCol >= 0) {
+                // Single amount column; sign carried by the number itself.
                 amount = toNumber(row[amountCol]);
             }
 
@@ -161,6 +225,21 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): ParseResult {
 
             if (amount !== null && desc) {
                 transactions.push({ date: toIsoDate(date), description: desc, amount });
+            }
+        }
+
+        // Closing balance: scan bottom-up for the last non-null value in the
+        // balance column. Catches the labelled "CLOSING BALANCE" row that
+        // appears after the last dated transaction and has no date itself.
+        if (balanceCol >= 0) {
+            for (let r = aoa.length - 1; r > headerRowIdx; r--) {
+                const row = aoa[r];
+                if (!row) continue;
+                const bal = toNumber(row[balanceCol]);
+                if (bal != null) {
+                    lastBalance = bal;
+                    break;
+                }
             }
         }
     } else {
