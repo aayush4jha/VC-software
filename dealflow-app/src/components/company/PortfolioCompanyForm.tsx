@@ -485,15 +485,15 @@ export default function PortfolioCompanyForm() {
                             <input className="form-input" type="number" placeholder="e.g. 1250.00" value={form.share_price} onChange={upd('share_price')} />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">No. of Shares at Entry</label>
+                            <label className="form-label">DV Shareholding</label>
                             <input className="form-input" type="number" placeholder="e.g. 40000" value={form.num_shares} onChange={upd('num_shares')} />
                         </div>
                     </div>
 
-                    {/* Total No. of Shares (company-wide) */}
+                    {/* Shares Outstanding (company-wide) */}
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">Total No. of Shares (company)</label>
+                            <label className="form-label">Shares Outstanding</label>
                             <input className="form-input" type="number" placeholder="Company's total outstanding shares" value={form.total_shares} onChange={upd('total_shares')} />
                         </div>
                         <div className="form-group" />
@@ -657,7 +657,7 @@ export default function PortfolioCompanyForm() {
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label className="form-label" style={{ fontSize: 12 }}>No. of Shares at Entry (this round)</label>
+                                            <label className="form-label" style={{ fontSize: 12 }}>DV Shareholding (this round)</label>
                                             <input
                                                 className="form-input"
                                                 type="number"
@@ -670,7 +670,7 @@ export default function PortfolioCompanyForm() {
 
                                     <div className="form-row">
                                         <div className="form-group">
-                                            <label className="form-label" style={{ fontSize: 12 }}>Total No. of Shares (company)</label>
+                                            <label className="form-label" style={{ fontSize: 12 }}>Shares Outstanding</label>
                                             <input
                                                 className="form-input"
                                                 type="number"
