@@ -55,10 +55,6 @@ export function createDefaultFundRecord(): FundRecord {
             { id: 'dravya', name: 'DRAVYA',    currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
             { id: 'rak',    name: 'RAK',       currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
             { id: 'nbf',    name: 'NBF',       currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
-            { id: 'dmcc',   name: 'DMCC',      currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
-            { id: 'dvfl',   name: 'DVFL',      currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
-            { id: 'dvfz_aed', name: 'DV FZ LLC', currency: 'AED', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
-            { id: 'dvfz_usd', name: 'DV FZ LLC', currency: 'USD', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
         ],
         expenses: [],
         statements: [],
@@ -123,6 +119,8 @@ export function loadFundRecord(): FundRecord {
         if (!parsed.statements) parsed.statements = [];
         if (!parsed.expenses) parsed.expenses = [];
         if (!parsed.entities) parsed.entities = createDefaultFundRecord().entities;
+        const RETIRED_ENTITY_IDS = new Set(['dmcc', 'dvfl', 'dvfz_aed', 'dvfz_usd']);
+        parsed.entities = parsed.entities.filter(e => !RETIRED_ENTITY_IDS.has(e.id));
         return parsed;
     } catch {
         return createDefaultFundRecord();
