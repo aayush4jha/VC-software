@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
     ArrowLeft, Briefcase, AlertTriangle, Info, LayoutDashboard,
-    ShieldCheck, GitCompareArrows, ClipboardList, BadgeDollarSign, FileText, FolderOpen,
+    ShieldCheck, GitCompareArrows, ClipboardList, BadgeDollarSign, FolderOpen,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
@@ -23,10 +23,9 @@ import RightsMatrix from '@/components/legal/RightsMatrix';
 import RightsChanges from '@/components/legal/RightsChanges';
 import SOPTracker from '@/components/legal/SOPTracker';
 import PostInvestmentTracker from '@/components/legal/PostInvestmentTracker';
-import SHAGrid from '@/components/legal/SHAGrid';
 import DocumentManager from '@/components/legal/DocumentManager';
 
-type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'sop' | 'post' | 'sha' | 'documents';
+type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'sop' | 'post' | 'documents';
 
 const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -34,7 +33,6 @@ const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: 
     { id: 'changes', label: 'Changes', icon: GitCompareArrows },
     { id: 'sop', label: 'SOP', icon: ClipboardList },
     { id: 'post', label: 'Post-Investment', icon: BadgeDollarSign },
-    { id: 'sha', label: 'SHA Grid', icon: FileText },
     { id: 'documents', label: 'Documents', icon: FolderOpen },
 ];
 
@@ -216,9 +214,6 @@ function LegalDetailContent({ companyId }: { companyId: string }) {
                     )}
                     {activeTab === 'post' && (
                         <PostInvestmentTracker record={record} onUpdate={updateRecord} />
-                    )}
-                    {activeTab === 'sha' && (
-                        <SHAGrid record={record} onUpdate={updateRecord} />
                     )}
                     {activeTab === 'documents' && (
                         <DocumentManager record={record} onUpdate={updateRecord} />
