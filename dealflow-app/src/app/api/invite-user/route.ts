@@ -26,13 +26,25 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const normalizedEmail = String(email).trim().toLowerCase();
 
-    // 1️⃣ (Removed Supabase Invite to avoid rate limit)
+  // 1️⃣ Record the invite in the server-side allowlist. The auth callback
+  //    consults this table; without a row here, the user cannot register
+  //    even if they craft their own ?role=... URL.
+  const { error: inviteError } = await supabase
+    .from('pending_invites')
+    .upsert({
+      email: normalizedEmail,
+      role,
+      permissions: Array.isArray(permissions) ? permissions : [],
+    }, { onConflict: 'email' });
 
-  // 2️⃣ No profile upsert here. Profile will be created after user signs up.
-  // Store permissions info for when the user registers (via URL params)
+  if (inviteError) {
+    console.error('pending_invites upsert error:', inviteError);
+    return NextResponse.json({ error: 'Failed to record invite.', details: inviteError.message }, { status: 500 });
+  }
 
-  // 3️⃣ Send Custom Email via Gmail SMTP
+  // 2️⃣ Send Custom Email via Gmail SMTP
   try {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -42,9 +54,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Registration link (actual domain and path)
-    const permissionsParam = permissions && permissions.length > 0 ? `&permissions=${encodeURIComponent(permissions.join(','))}` : '';
-    const registrationUrl = `${SITE_URL}/login?email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}${permissionsParam}`;
+    // Registration link — role/permissions are NOT included; the callback
+    // reads them from the pending_invites row keyed by the user's verified
+    // Google email, so URL params can't be forged to escalate privileges.
+    const registrationUrl = `${SITE_URL}/login`;
 
     await transporter.sendMail({
       from: `"VC-SAAS" <${GMAIL_USER}>`,

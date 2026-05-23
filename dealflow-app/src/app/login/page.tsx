@@ -24,16 +24,15 @@ export default function LoginPage() {
         setError(null);
         const supabase = createClient();
 
-        // Preserve role from invite link so the callback can save it to the profile
-        const params = new URLSearchParams(window.location.search);
-        const inviteRole = params.get('role');
-        const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
-        if (inviteRole) callbackUrl.searchParams.set('role', inviteRole);
+        // The callback resolves the user's role/permissions from the
+        // server-side pending_invites allowlist keyed by their Google email,
+        // so no URL params are needed (or trusted) here.
+        const callbackUrl = `${window.location.origin}/auth/callback`;
 
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: callbackUrl.toString(),
+                redirectTo: callbackUrl,
                 queryParams: {
                     access_type: 'offline',
                     prompt: 'consent',
