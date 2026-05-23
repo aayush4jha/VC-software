@@ -2,16 +2,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Calendar, Layers, Coins, Wallet, PieChart, TrendingDown,
-    ShieldCheck, AlertTriangle, ArrowRight, ArrowDownRight, ArrowUpRight, MinusCircle,
+    Calendar, Layers, Coins, Wallet, PieChart,
+    ShieldCheck, ArrowDownRight, ArrowUpRight, MinusCircle,
     Building2, MapPin, User as UserIcon, Briefcase, BarChart3, Activity, Target,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
     type LegalRecord,
     RIGHT_DEFINITIONS,
-    detectRightsChanges,
-    getMissingMustHaveRights,
     presenceForVersion,
 } from '@/lib/legal-data';
 import {
@@ -109,39 +107,21 @@ export default function LegalDashboard({ company, record }: Props) {
     const sourcer = getDealSourceNameById(company.dealSourceNameId || '')?.name || '';
     const analyst = company.analystId ? getUserById(company.analystId)?.name || '' : '';
 
-    // ─── Rights summary ──────────────────────────────
-    const rightsSummary = useMemo(() => {
-        const present: string[] = [];
-        const absent: string[] = [];
-        const modified: string[] = [];
+    // ─── Rights we have (present / "Yes" in current SHA) ──
+    const rightsWeHave = useMemo(() => {
+        const items: { id: string; name: string; remark: string }[] = [];
         record.rights.forEach(row => {
             const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
             if (!def) return;
-            const s = presenceForVersion(row, record.currentSHAVersion);
-            if (s === 'present') present.push(def.name);
-            else if (s === 'modified') modified.push(def.name);
-            else if (s === 'absent') absent.push(def.name);
+            if (presenceForVersion(row, record.currentSHAVersion) === 'present') {
+                items.push({
+                    id: def.id,
+                    name: def.name,
+                    remark: (row.shaRemarks[record.currentSHAVersion] || '').trim(),
+                });
+            }
         });
-        return { present, absent, modified, total: record.rights.length };
-    }, [record]);
-    const missingMustHave = useMemo(() => getMissingMustHaveRights(record), [record]);
-    const presentPct = rightsSummary.total > 0 ? Math.round((rightsSummary.present.length / rightsSummary.total) * 100) : 0;
-
-    // ─── SHA-version diff (current vs previous) ───
-    const versionChange = useMemo(() => {
-        const versions = record.shaVersions;
-        if (versions.length < 2) return null;
-        const currentIdx = versions.findIndex(v => v.id === record.currentSHAVersion);
-        if (currentIdx <= 0) return null;
-        const prev = versions[currentIdx - 1];
-        const curr = versions[currentIdx];
-        const diff = detectRightsChanges(record, prev.id, curr.id);
-        return {
-            prev, curr,
-            added: diff.filter(d => d.change === 'ADDED'),
-            removed: diff.filter(d => d.change === 'REMOVED'),
-            modified: diff.filter(d => d.change === 'MODIFIED'),
-        };
+        return items;
     }, [record]);
 
     return (
@@ -282,90 +262,26 @@ export default function LegalDashboard({ company, record }: Props) {
 
             {/* ─── Rights summary + SHA changes side by side ─── */}
             <div className="legal-dash-grid">
-                <div className="legal-dash-card">
+                <div className="legal-dash-card legal-dash-card-wide">
                     <div className="legal-dash-card-header">
-                        <h3><ShieldCheck size={14} /> Rights Summary</h3>
-                        <span className="legal-dash-card-sub">{record.shaVersions.find(v => v.id === record.currentSHAVersion)?.label || 'Current SHA'}</span>
-                    </div>
-
-                    <div className="legal-dash-progress-row">
-                        <div className="legal-dash-progress-label">
-                            <span>Coverage</span>
-                            <strong>{rightsSummary.present.length} / {rightsSummary.total} rights present</strong>
-                        </div>
-                        <div className="legal-dash-progress-bar">
-                            <div className="legal-dash-progress-fill" style={{ width: `${presentPct}%` }} />
-                        </div>
-                    </div>
-
-                    <div className="legal-dash-rights-stats">
-                        <div className="legal-dash-stat green">
-                            <div className="legal-dash-stat-num">{rightsSummary.present.length}</div>
-                            <div className="legal-dash-stat-label">Present</div>
-                        </div>
-                        <div className="legal-dash-stat amber">
-                            <div className="legal-dash-stat-num">{rightsSummary.modified.length}</div>
-                            <div className="legal-dash-stat-label">Modified</div>
-                        </div>
-                        <div className="legal-dash-stat red">
-                            <div className="legal-dash-stat-num">{missingMustHave.length}</div>
-                            <div className="legal-dash-stat-label">Critical Missing</div>
-                        </div>
-                    </div>
-
-                    {missingMustHave.length > 0 && (
-                        <div className="legal-dash-callout danger">
-                            <AlertTriangle size={14} />
-                            <div>
-                                <strong>Must-have rights missing</strong>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                    {missingMustHave.map(r => r.rightName).join(', ')}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="legal-dash-rights-list">
-                        <div className="legal-dash-rights-list-label">Present in current SHA</div>
-                        <div className="legal-dash-chips">
-                            {rightsSummary.present.length > 0 ? (
-                                rightsSummary.present.map(name => (
-                                    <span key={name} className="legal-dash-chip green">{name}</span>
-                                ))
-                            ) : (
-                                <span className="legal-dash-empty-mini">None marked present yet</span>
-                            )}
-                        </div>
-                        {rightsSummary.modified.length > 0 && (
-                            <>
-                                <div className="legal-dash-rights-list-label" style={{ marginTop: 12 }}>Modified</div>
-                                <div className="legal-dash-chips">
-                                    {rightsSummary.modified.map(name => (
-                                        <span key={name} className="legal-dash-chip amber">{name}</span>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-
-                <div className="legal-dash-card">
-                    <div className="legal-dash-card-header">
-                        <h3><TrendingDown size={14} /> SHA Rights Changes</h3>
+                        <h3><ShieldCheck size={14} /> Rights We Have</h3>
                         <span className="legal-dash-card-sub">
-                            {versionChange ? `${versionChange.prev.label} → ${versionChange.curr.label}` : 'Need ≥ 2 SHA versions'}
+                            {rightsWeHave.length} of {record.rights.length} · {record.shaVersions.find(v => v.id === record.currentSHAVersion)?.label || 'Current SHA'}
                         </span>
                     </div>
-                    {!versionChange ? (
+                    {rightsWeHave.length === 0 ? (
                         <div className="legal-dash-empty">
-                            Add another SHA version on the <strong>Rights</strong> tab to see what changed between rounds.
+                            No rights marked &ldquo;Yes&rdquo; in the current SHA yet. Mark presence on the <strong>Rights</strong> tab to populate this list.
                         </div>
                     ) : (
-                        <div className="legal-dash-changes">
-                            <ChangeColumn title="Added" count={versionChange.added.length} items={versionChange.added} icon={<ArrowUpRight size={13} />} tone="green" />
-                            <ChangeColumn title="Removed" count={versionChange.removed.length} items={versionChange.removed} icon={<ArrowDownRight size={13} />} tone="red" />
-                            <ChangeColumn title="Modified" count={versionChange.modified.length} items={versionChange.modified} icon={<ArrowRight size={13} />} tone="amber" />
-                        </div>
+                        <ul className="legal-dash-rights-have">
+                            {rightsWeHave.map(r => (
+                                <li key={r.id}>
+                                    <span className="legal-dash-rights-have-name">{r.name}</span>
+                                    {r.remark && <span className="legal-dash-rights-have-remark">{r.remark}</span>}
+                                </li>
+                            ))}
+                        </ul>
                     )}
                 </div>
             </div>
@@ -410,24 +326,3 @@ function Metric({ icon, label, value, hint, accent, delta }: {
     );
 }
 
-function ChangeColumn({ title, count, items, icon, tone }: {
-    title: string;
-    count: number;
-    items: { rightId: string; rightName: string; remark: string }[];
-    icon: React.ReactNode;
-    tone: 'green' | 'red' | 'amber';
-}) {
-    return (
-        <div className="legal-dash-change-col">
-            <div className={`legal-dash-change-header ${tone}`}>{icon} {title} ({count})</div>
-            {items.length === 0 ? (
-                <div className="legal-dash-empty-mini">None</div>
-            ) : items.map(c => (
-                <div key={c.rightId} className="legal-dash-change-item">
-                    <span>{c.rightName}</span>
-                    {c.remark && <em>{c.remark}</em>}
-                </div>
-            ))}
-        </div>
-    );
-}
