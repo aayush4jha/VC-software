@@ -9,8 +9,11 @@ import {
 import { useAppContext } from '@/lib/context';
 import {
     type LegalRecord,
+    type InvestorTier,
     RIGHT_DEFINITIONS,
+    INVESTOR_TIERS,
     presenceForVersion,
+    inferPresenceFromText,
 } from '@/lib/legal-data';
 import {
     formatPortfolioCurrency, formatMOIC, formatXIRR,
@@ -107,18 +110,34 @@ export default function LegalDashboard({ company, record }: Props) {
     const sourcer = getDealSourceNameById(company.dealSourceNameId || '')?.name || '';
     const analyst = company.analystId ? getUserById(company.analystId)?.name || '' : '';
 
-    // ─── Rights we have (present / "Yes" in current SHA) ──
+    // ─── Rights we have ───────────────────────────────
+    // A right counts as "we have it" if the current-SHA remark resolves to
+    // "present" OR if any investor-tier cell is marked "Yes" (since users
+    // often fill the tier column to indicate the right was secured for
+    // their position rather than typing into the SHA column).
     const rightsWeHave = useMemo(() => {
         const items: { id: string; name: string; remark: string }[] = [];
         record.rights.forEach(row => {
             const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
             if (!def) return;
-            if (presenceForVersion(row, record.currentSHAVersion) === 'present') {
-                items.push({
-                    id: def.id,
-                    name: def.name,
-                    remark: (row.shaRemarks[record.currentSHAVersion] || '').trim(),
-                });
+
+            const shaRemark = (row.shaRemarks[record.currentSHAVersion] || '').trim();
+            const shaPresent = presenceForVersion(row, record.currentSHAVersion) === 'present';
+
+            const tierYes: { tier: InvestorTier; value: string } | null = (() => {
+                for (const t of INVESTOR_TIERS) {
+                    const v = (row.requiredByText?.[t.id] || '').trim();
+                    if (inferPresenceFromText(v) === 'present') return { tier: t.id, value: v };
+                }
+                return null;
+            })();
+
+            if (shaPresent || tierYes) {
+                // Prefer the SHA remark for the subtitle; otherwise note which
+                // tier was marked Yes so the user can trace the source.
+                const remark = shaRemark
+                    || (tierYes ? `${INVESTOR_TIERS.find(t => t.id === tierYes.tier)?.label}: ${tierYes.value}` : '');
+                items.push({ id: def.id, name: def.name, remark });
             }
         });
         return items;
