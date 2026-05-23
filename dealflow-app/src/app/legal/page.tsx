@@ -87,6 +87,7 @@ function LegalContent() {
     const cardsByStage = useMemo(() => {
         const byStage: Record<LegalStageId, CardData[]> = {
             term_sheet_reviewed: [], terms_negotiation: [], final_sha_review: [], approved: [], signed: [],
+            payment_received: [], share_certificate_done: [],
         };
         filteredCards.forEach(c => {
             byStage[c.record.stageId].push(c);

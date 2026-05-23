@@ -8,7 +8,9 @@ export type LegalStageId =
     | 'terms_negotiation'
     | 'final_sha_review'
     | 'approved'
-    | 'signed';
+    | 'signed'
+    | 'payment_received'
+    | 'share_certificate_done';
 
 export interface LegalStage {
     id: LegalStageId;
@@ -148,6 +150,18 @@ export const LEGAL_STAGES: LegalStage[] = [
         name: 'Signed',
         color: '#10b981',
         description: 'SHA executed by all parties',
+    },
+    {
+        id: 'payment_received',
+        name: 'Payment Received',
+        color: '#14b8a6',
+        description: 'Investment funds received from the investor',
+    },
+    {
+        id: 'share_certificate_done',
+        name: 'Share Certificate / Demat Done',
+        color: '#0ea5e9',
+        description: 'Share certificate issued and / or demat credited',
     },
 ];
 
