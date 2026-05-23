@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import { Upload, Check, AlertCircle, FileX, Eye } from 'lucide-react';
+import React, { useState } from 'react';
+import { Upload, Check, AlertCircle, FileX, ExternalLink, Plus, X, Link as LinkIcon } from 'lucide-react';
 import { type LegalRecord, type DocumentStatus } from '@/lib/legal-data';
 
 interface Props {
@@ -15,10 +15,27 @@ const STATUS_META: Record<DocumentStatus, { color: string; bg: string; label: st
     verified: { color: '#047857', bg: 'rgba(16, 185, 129, 0.12)', label: 'Verified', icon: <Check size={12} /> },
 };
 
+function isValidUrl(value: string): boolean {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+function shortLink(url: string): string {
+    try {
+        const u = new URL(url);
+        return u.hostname.replace(/^www\./, '') + u.pathname.replace(/\/$/, '');
+    } catch {
+        return url;
+    }
+}
+
 export default function DocumentManager({ record, onUpdate }: Props) {
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [uploadingFor, setUploadingFor] = useState<string | null>(null);
-    const [previewDoc, setPreviewDoc] = useState<string | null>(null);
+    const [drafts, setDrafts] = useState<Record<string, string>>({});
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     const pre = record.documents.filter(d => d.category === 'pre');
     const post = record.documents.filter(d => d.category === 'post');
@@ -43,29 +60,54 @@ export default function DocumentManager({ record, onUpdate }: Props) {
         }));
     };
 
-    const triggerUpload = (docId: string) => {
-        setUploadingFor(docId);
-        fileInputRef.current?.click();
-    };
-
-    const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !uploadingFor) return;
+    const addLink = (docId: string) => {
+        const raw = (drafts[docId] || '').trim();
+        if (!raw) return;
+        if (!isValidUrl(raw)) {
+            setErrors(e => ({ ...e, [docId]: 'Enter a valid http(s):// URL.' }));
+            return;
+        }
         onUpdate(r => ({
             ...r,
-            documents: r.documents.map(d => d.id === uploadingFor ? {
-                ...d,
-                status: 'uploaded',
-                notes: `${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
-                uploadedAt: new Date().toISOString(),
-            } : d),
+            documents: r.documents.map(d => {
+                if (d.id !== docId) return d;
+                if (d.links.includes(raw)) return d;
+                const nextLinks = [...d.links, raw];
+                return {
+                    ...d,
+                    links: nextLinks,
+                    // Promote out of "missing" the moment a link is attached;
+                    // keep "verified" if already there.
+                    status: d.status === 'missing' ? 'uploaded' : d.status,
+                    uploadedAt: d.uploadedAt || new Date().toISOString(),
+                };
+            }),
         }));
-        setUploadingFor(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        setDrafts(d => ({ ...d, [docId]: '' }));
+        setErrors(e => ({ ...e, [docId]: '' }));
+    };
+
+    const removeLink = (docId: string, link: string) => {
+        onUpdate(r => ({
+            ...r,
+            documents: r.documents.map(d => {
+                if (d.id !== docId) return d;
+                const nextLinks = d.links.filter(l => l !== link);
+                return {
+                    ...d,
+                    links: nextLinks,
+                    // No links left → reset back to "missing" unless the user
+                    // explicitly verified it (they may want to keep that state).
+                    status: nextLinks.length === 0 && d.status === 'uploaded' ? 'missing' : d.status,
+                };
+            }),
+        }));
     };
 
     const renderRow = (doc: typeof record.documents[number]) => {
         const meta = STATUS_META[doc.status];
+        const draft = drafts[doc.id] || '';
+        const err = errors[doc.id];
         return (
             <div key={doc.id} className="doc-row">
                 <div className="doc-row-main">
@@ -89,35 +131,75 @@ export default function DocumentManager({ record, onUpdate }: Props) {
                                 </button>
                             ))}
                         </div>
-                        <button className="btn btn-outline btn-sm" onClick={() => triggerUpload(doc.id)}>
-                            <Upload size={12} /> Upload
-                        </button>
-                        {doc.status !== 'missing' && doc.notes && (
-                            <button className="btn btn-outline btn-sm" onClick={() => setPreviewDoc(previewDoc === doc.id ? null : doc.id)}>
-                                <Eye size={12} /> {previewDoc === doc.id ? 'Hide' : 'Preview'}
-                            </button>
-                        )}
                     </div>
                 </div>
+
+                {/* Saved links */}
+                {doc.links.length > 0 && (
+                    <div className="doc-links">
+                        {doc.links.map(link => (
+                            <span key={link} className="doc-link-chip">
+                                <LinkIcon size={11} />
+                                <a href={link} target="_blank" rel="noopener noreferrer" title={link}>
+                                    {shortLink(link)}
+                                </a>
+                                <a
+                                    href={link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="doc-link-open"
+                                    title="Open in new tab"
+                                >
+                                    <ExternalLink size={11} />
+                                </a>
+                                <button
+                                    type="button"
+                                    className="doc-link-remove"
+                                    onClick={() => removeLink(doc.id, link)}
+                                    title="Remove link"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {/* Add-link input */}
+                <div className="doc-link-add">
+                    <input
+                        className="rights-inline-input"
+                        type="url"
+                        placeholder="Paste Drive link (https://...)"
+                        value={draft}
+                        onChange={e => {
+                            setDrafts(d => ({ ...d, [doc.id]: e.target.value }));
+                            if (err) setErrors(er => ({ ...er, [doc.id]: '' }));
+                        }}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addLink(doc.id);
+                            }
+                        }}
+                    />
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => addLink(doc.id)}
+                        disabled={!draft.trim()}
+                    >
+                        <Plus size={12} /> Add link
+                    </button>
+                </div>
+                {err && <div className="doc-link-error">{err}</div>}
+
                 <input
                     className="rights-inline-input"
                     placeholder="Notes / reference"
                     value={doc.notes}
                     onChange={e => setNotes(doc.id, e.target.value)}
                 />
-                {previewDoc === doc.id && (
-                    <div className="doc-preview">
-                        <strong>{doc.notes || doc.name}</strong>
-                        {doc.uploadedAt && (
-                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                                Uploaded {new Date(doc.uploadedAt).toLocaleString()}
-                            </div>
-                        )}
-                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                            File preview requires storage backend; metadata shown here.
-                        </div>
-                    </div>
-                )}
             </div>
         );
     };
@@ -130,7 +212,7 @@ export default function DocumentManager({ record, onUpdate }: Props) {
                 <div>
                     <h3>Document Management</h3>
                     <p className="legal-section-subtitle">
-                        Pre-investment diligence and post-investment artifacts.
+                        Pre-investment diligence and post-investment artifacts. Paste Drive links — multiple per document.
                     </p>
                 </div>
                 {missingRequired > 0 && (
@@ -139,8 +221,6 @@ export default function DocumentManager({ record, onUpdate }: Props) {
                     </span>
                 )}
             </div>
-
-            <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFile} />
 
             <div className="doc-section">
                 <h4>Pre-Investment</h4>

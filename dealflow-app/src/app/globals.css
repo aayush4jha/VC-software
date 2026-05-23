@@ -4849,6 +4849,62 @@ textarea.inline-input {
   font-size: 12px;
   color: var(--text-secondary);
 }
+.doc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.doc-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color, var(--border));
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 320px;
+}
+.doc-link-chip a {
+  color: var(--primary);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-link-chip a:hover {
+  text-decoration: underline;
+}
+.doc-link-open {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+}
+.doc-link-remove {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+}
+.doc-link-remove:hover {
+  color: var(--danger);
+}
+.doc-link-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.doc-link-add .rights-inline-input {
+  flex: 1;
+}
+.doc-link-error {
+  font-size: 12px;
+  color: var(--danger);
+}
 
 /* ─── Responsive ──────────────────────────────────── */
 @media (max-width: 1024px) {

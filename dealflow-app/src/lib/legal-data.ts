@@ -70,6 +70,7 @@ export interface LegalDocument {
     required: boolean;
     status: DocumentStatus;
     notes: string;
+    links: string[];          // Drive (or any) URLs; multiple supported per document.
     uploadedAt?: string;
 }
 
@@ -317,7 +318,7 @@ export const DEFAULT_SHA_SECTIONS: Omit<SHASection, 'comments' | 'linkedClauses'
     { id: 'expenses', name: 'Expenses', status: 'pending' },
 ];
 
-export const PRE_INVESTMENT_DOCS: Omit<LegalDocument, 'status' | 'notes'>[] = [
+export const PRE_INVESTMENT_DOCS: Omit<LegalDocument, 'status' | 'notes' | 'links'>[] = [
     { id: 'pitch_deck', name: 'Pitch Deck', category: 'pre', required: true },
     { id: 'mis', name: 'MIS', category: 'pre', required: true },
     { id: 'audited_financials', name: 'Audited Financials', category: 'pre', required: true },
@@ -331,7 +332,7 @@ export const PRE_INVESTMENT_DOCS: Omit<LegalDocument, 'status' | 'notes'>[] = [
     { id: 'current_agreement', name: 'Current Agreement', category: 'pre', required: true },
 ];
 
-export const POST_INVESTMENT_DOCS: Omit<LegalDocument, 'status' | 'notes'>[] = [
+export const POST_INVESTMENT_DOCS: Omit<LegalDocument, 'status' | 'notes' | 'links'>[] = [
     { id: 'payment_proof', name: 'Payment Proof', category: 'post', required: true },
     { id: 'share_certificate', name: 'Share Certificate / Demat Proof', category: 'post', required: true },
     { id: 'company_assets', name: 'Company Assets (logo, team, description)', category: 'post', required: false },
@@ -435,8 +436,8 @@ export function createDefaultLegalRecord(companyId: string): LegalRecord {
         },
         shaSections: DEFAULT_SHA_SECTIONS.map(s => ({ ...s, comments: '', linkedClauses: '' })),
         documents: [
-            ...PRE_INVESTMENT_DOCS.map(d => ({ ...d, status: 'missing' as DocumentStatus, notes: '' })),
-            ...POST_INVESTMENT_DOCS.map(d => ({ ...d, status: 'missing' as DocumentStatus, notes: '' })),
+            ...PRE_INVESTMENT_DOCS.map(d => ({ ...d, status: 'missing' as DocumentStatus, notes: '', links: [] })),
+            ...POST_INVESTMENT_DOCS.map(d => ({ ...d, status: 'missing' as DocumentStatus, notes: '', links: [] })),
         ],
         createdAt: now,
         updatedAt: now,
@@ -497,6 +498,10 @@ export function getLegalRecord(companyId: string): LegalRecord {
                 if (typeof r.requiredByText[t] !== 'string') r.requiredByText[t] = '';
             });
         }
+    });
+    // Migrate: backfill `links` on documents created before the field existed.
+    record.documents.forEach(d => {
+        if (!Array.isArray(d.links)) d.links = [];
     });
     // Migrate: ensure all known SHA versions have keys in each right row.
     record.shaVersions.forEach(v => {
