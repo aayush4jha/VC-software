@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Search, LayoutGrid, List, Plus } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
@@ -12,6 +12,7 @@ import PortfolioCompanyForm from '@/components/company/PortfolioCompanyForm';
 import { useAppContext } from '@/lib/context';
 import {
     getPortfolioStage,
+    getCurrentStage,
     getTotalInvested,
     getCompanyMOIC,
     getLatestValuation,
@@ -21,7 +22,7 @@ import {
     PORTFOLIO_STAGE_COLORS,
 } from '@/lib/portfolio-utils';
 
-import type { Company } from '@/types/database';
+import type { Company, FollowOnRound } from '@/types/database';
 
 // ─── Avatar color helper ──────────────────────────
 const AVATAR_COLORS = [
@@ -58,14 +59,31 @@ function PortfolioContent() {
         setSelectedCompany,
         searchQuery, setSearchQuery,
         setShowCompanyForm, setCompanyFormPortfolioMode,
+        fetchAllFollowOns,
     } = useAppContext();
 
     const [companyView, setCompanyView] = useState<CompanyView>('board');
     const [groupBy, setGroupBy] = useState<GroupByMode>('current');
     const [filterIndustry, setFilterIndustry] = useState<string>('all');
     const [filterStage, setFilterStage] = useState<string>('all');
+    const [filterCurrentStage, setFilterCurrentStage] = useState<string>('all');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [filterSourcer, setFilterSourcer] = useState<string>('all');
+    const [followOnsByCompany, setFollowOnsByCompany] = useState<Record<string, FollowOnRound[]>>({});
+
+    useEffect(() => {
+        let cancelled = false;
+        fetchAllFollowOns().then(rows => {
+            if (cancelled) return;
+            const grouped: Record<string, FollowOnRound[]> = {};
+            rows.forEach(r => {
+                if (!grouped[r.companyId]) grouped[r.companyId] = [];
+                grouped[r.companyId].push(r);
+            });
+            setFollowOnsByCompany(grouped);
+        }).catch(() => { if (!cancelled) setFollowOnsByCompany({}); });
+        return () => { cancelled = true; };
+    }, [fetchAllFollowOns]);
 
     // Portfolio companies = terminalStatus === 'Portfolio'
     const portfolioCompanies = useMemo(
@@ -87,6 +105,15 @@ function PortfolioContent() {
         return Array.from(stages);
     }, [portfolioCompanies]);
 
+    const uniqueCurrentStages = useMemo(() => {
+        const stages = new Set<string>();
+        portfolioCompanies.forEach(c => {
+            const s = getCurrentStage(c, followOnsByCompany[c.id] || []);
+            if (s) stages.add(s);
+        });
+        return Array.from(stages);
+    }, [portfolioCompanies, followOnsByCompany]);
+
     const uniqueSourcers = useMemo(() => {
         const ids = new Set(portfolioCompanies.map(c => c.dealSourceNameId).filter(Boolean));
         return Array.from(ids).map(id => {
@@ -100,6 +127,8 @@ function PortfolioContent() {
         return portfolioCompanies.filter(c => {
             if (filterIndustry !== 'all' && c.industryId !== filterIndustry) return false;
             if (filterStage !== 'all' && c.companyRound !== filterStage) return false;
+            if (filterCurrentStage !== 'all'
+                && getCurrentStage(c, followOnsByCompany[c.id] || []) !== filterCurrentStage) return false;
             if (filterStatus !== 'all' && (c.portfolioStatus || 'Active') !== filterStatus) return false;
             if (filterSourcer !== 'all' && c.dealSourceNameId !== filterSourcer) return false;
             if (searchQuery) {
@@ -111,7 +140,7 @@ function PortfolioContent() {
             }
             return true;
         });
-    }, [portfolioCompanies, filterIndustry, filterStage, filterStatus, filterSourcer, searchQuery, getIndustryById]);
+    }, [portfolioCompanies, filterIndustry, filterStage, filterCurrentStage, filterStatus, filterSourcer, searchQuery, getIndustryById, followOnsByCompany]);
 
     // Group companies for board view
     const groupedCompanies = useMemo(() => {
@@ -344,8 +373,19 @@ function PortfolioContent() {
                             value={filterStage}
                             onChange={e => setFilterStage(e.target.value)}
                         >
-                            <option value="all">Stage</option>
+                            <option value="all">Entry Stage</option>
                             {uniqueStages.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            className="portfolio-select"
+                            value={filterCurrentStage}
+                            onChange={e => setFilterCurrentStage(e.target.value)}
+                        >
+                            <option value="all">Current Stage</option>
+                            {uniqueCurrentStages.map(s => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>

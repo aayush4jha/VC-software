@@ -512,3 +512,15 @@ export function getPortfolioStage(company: Company): string {
     if (company.portfolioStatus === 'Written Off') return 'Written Off';
     return company.companyRound;
 }
+
+// Current stage = roundName of the latest follow-on round (by date), else
+// the entry stage. Exit / write-off statuses take precedence.
+export function getCurrentStage(company: Company, followOns: FollowOnRound[]): string {
+    if (company.portfolioStatus === 'Exited') return 'Exited';
+    if (company.portfolioStatus === 'Written Off') return 'Written Off';
+    const sorted = [...followOns].sort(
+        (a, b) => new Date(a.roundDate).getTime() - new Date(b.roundDate).getTime(),
+    );
+    const latest = sorted[sorted.length - 1];
+    return latest?.roundName || company.companyRound;
+}

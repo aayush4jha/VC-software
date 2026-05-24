@@ -302,6 +302,7 @@ interface AppContextType {
 
     // Follow-on rounds
     fetchFollowOns: (companyId: string) => Promise<FollowOnRound[]>;
+    fetchAllFollowOns: () => Promise<FollowOnRound[]>;
     addFollowOn: (data: Record<string, unknown>) => Promise<FollowOnRound | null>;
     updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<void>;
     deleteFollowOn: (id: string) => Promise<void>;
@@ -1094,6 +1095,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return (Array.isArray(rows) ? rows : [rows]).map(mapFollowOn);
     }, [apiDb]);
 
+    // Bulk-load every follow-on round, used by views that need to derive
+    // per-company state (e.g. current stage) without N round-trips.
+    const fetchAllFollowOns = useCallback(async (): Promise<FollowOnRound[]> => {
+        const { data: rows, error } = await apiDb({
+            table: 'portfolio_follow_ons', operation: 'select',
+            order: 'round_date',
+        });
+        if (error || !rows) return [];
+        return (Array.isArray(rows) ? rows : [rows]).map(mapFollowOn);
+    }, [apiDb]);
+
     const addFollowOn = useCallback(async (data: Record<string, unknown>): Promise<FollowOnRound | null> => {
         // Prefer post_money_valuation; fall back to roundValuation alias so older code paths keep working.
         const postMoneyRaw = data.postMoneyValuation ?? data.roundValuation ?? null;
@@ -1628,7 +1640,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
-        fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
+        fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
         syncEmails, approveCompany,
         deckEmailLinks,
         selectedCompany, setSelectedCompany,
@@ -1659,7 +1671,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
-        fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
+        fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
         syncEmails, approveCompany, deckEmailLinks,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,
