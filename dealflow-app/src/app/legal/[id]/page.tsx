@@ -201,7 +201,7 @@ function LegalDetailContent({ companyId }: { companyId: string }) {
 
                 <div className="legal-tab-content">
                     {activeTab === 'dashboard' && (
-                        <LegalDashboard company={company} record={record} />
+                        <LegalDashboard company={company} record={record} onUpdate={updateRecord} />
                     )}
                     {activeTab === 'rights' && (
                         <RightsMatrix record={record} onUpdate={updateRecord} />

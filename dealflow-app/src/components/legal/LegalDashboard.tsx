@@ -15,6 +15,7 @@ import {
     presenceForVersion,
     inferPresenceFromText,
 } from '@/lib/legal-data';
+import { loadFundRecord } from '@/lib/fund-data';
 import {
     formatPortfolioCurrency, formatMOIC, formatXIRR,
     getTotalInvested, getInitialOwnership, getCurrentOwnership,
@@ -26,6 +27,7 @@ import type { Company, FollowOnRound } from '@/types/database';
 interface Props {
     company: Company;
     record: LegalRecord;
+    onUpdate: (mutator: (r: LegalRecord) => LegalRecord) => void;
 }
 
 const AVATAR_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
@@ -54,10 +56,26 @@ function fmtDate(iso: string | null | undefined): string {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function LegalDashboard({ company, record }: Props) {
+export default function LegalDashboard({ company, record, onUpdate }: Props) {
     const { fetchFollowOns, getIndustryById, getDealSourceNameById, getUserById } = useAppContext();
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
     const [loading, setLoading] = useState(true);
+    const [entityOptions, setEntityOptions] = useState<string[]>([]);
+
+    useEffect(() => {
+        const refresh = () => {
+            const r = loadFundRecord();
+            setEntityOptions(Array.from(new Set(r.entities.map(e => e.name))));
+        };
+        refresh();
+        const handler = () => refresh();
+        window.addEventListener('fund-record-updated', handler);
+        return () => window.removeEventListener('fund-record-updated', handler);
+    }, []);
+
+    const setInvestmentEntity = (value: string) => {
+        onUpdate(r => ({ ...r, sopData: { ...r.sopData, investmentEntity: value } }));
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -194,11 +212,10 @@ export default function LegalDashboard({ company, record }: Props) {
                     <span>Investment Snapshot</span>
                 </div>
                 <div className="legal-dash-metrics">
-                    <Metric
-                        icon={<Building2 size={12} />}
-                        label="Investment Entity"
-                        value={record.sopData.investmentEntity || '—'}
-                        hint={!record.sopData.investmentEntity ? 'Set in SOP tab' : undefined}
+                    <EntityPicker
+                        value={record.sopData.investmentEntity}
+                        options={entityOptions}
+                        onChange={setInvestmentEntity}
                     />
                     <Metric icon={<Calendar size={12} />} label="Investment Date" value={fmtDate(investmentDate)} />
                     <Metric icon={<Wallet size={12} />} label="Amount Invested" value={initialInvestment ? formatPortfolioCurrency(initialInvestment) : '—'} accent="success" />
@@ -322,6 +339,63 @@ function HeroStat({ label, value, sub, subColor, accent }: { label: string; valu
             <div className="legal-dash-hero-stat-label">{label}</div>
             <div className="legal-dash-hero-stat-value" style={accent === 'success' ? { color: 'var(--success)' } : undefined}>{value}</div>
             {sub && <div className="legal-dash-hero-stat-sub" style={subColor ? { color: subColor } : undefined}>{sub}</div>}
+        </div>
+    );
+}
+
+function EntityPicker({ value, options, onChange }: {
+    value: string;
+    options: string[];
+    onChange: (value: string) => void;
+}) {
+    const knownValue = value && options.includes(value);
+    const [mode, setMode] = useState<'select' | 'custom'>(
+        value && !knownValue ? 'custom' : 'select',
+    );
+
+    return (
+        <div className="legal-dash-metric">
+            <div className="legal-dash-metric-label"><Building2 size={12} /> Investment Entity</div>
+            {mode === 'select' ? (
+                <select
+                    className="inline-input"
+                    value={knownValue ? value : ''}
+                    onChange={e => {
+                        const v = e.target.value;
+                        if (v === '__other__') {
+                            setMode('custom');
+                            return;
+                        }
+                        onChange(v);
+                    }}
+                    style={{ marginTop: 4 }}
+                >
+                    <option value="">— Select entity —</option>
+                    {options.map(name => (
+                        <option key={name} value={name}>{name}</option>
+                    ))}
+                    <option value="__other__">Other…</option>
+                </select>
+            ) : (
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <input
+                        className="inline-input"
+                        autoFocus
+                        placeholder="Entity name"
+                        value={value}
+                        onChange={e => onChange(e.target.value)}
+                        style={{ flex: 1 }}
+                    />
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => { onChange(''); setMode('select'); }}
+                        title="Back to list"
+                    >
+                        ↶
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
