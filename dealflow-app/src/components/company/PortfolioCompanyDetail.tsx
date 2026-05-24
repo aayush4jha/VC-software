@@ -94,6 +94,12 @@ export default function PortfolioCompanyDetail() {
     }, [c?.id, fetchFollowOns]);
 
     useEffect(() => {
+        // Switching companies (or closing the panel) must reset transient UI
+        // state — otherwise a left-over showDeleteConfirm from the previous
+        // company surfaces as "Delete <new company>?" on the next open.
+        setShowDeleteConfirm(false);
+        setEditField(null);
+        setEditValue('');
         if (c && isPortfolio) {
             loadFollowOns();
             setNotesValue(c.notes || '');
@@ -155,6 +161,7 @@ export default function PortfolioCompanyDetail() {
 
     const handleDelete = async () => {
         await deleteCompany(c.id);
+        setShowDeleteConfirm(false);
         setSelectedCompany(null);
     };
 
