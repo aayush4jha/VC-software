@@ -194,6 +194,12 @@ export default function LegalDashboard({ company, record }: Props) {
                     <span>Investment Snapshot</span>
                 </div>
                 <div className="legal-dash-metrics">
+                    <Metric
+                        icon={<Building2 size={12} />}
+                        label="Investment Entity"
+                        value={record.sopData.investmentEntity || '—'}
+                        hint={!record.sopData.investmentEntity ? 'Set in SOP tab' : undefined}
+                    />
                     <Metric icon={<Calendar size={12} />} label="Investment Date" value={fmtDate(investmentDate)} />
                     <Metric icon={<Wallet size={12} />} label="Amount Invested" value={initialInvestment ? formatPortfolioCurrency(initialInvestment) : '—'} accent="success" />
                     <Metric icon={<Layers size={12} />} label="Shares Bought" value={sharesBought != null ? fmtNumber(sharesBought) : '—'} hint={sharesBought == null ? 'Add in Post-Investment tab' : undefined} />
