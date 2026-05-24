@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
     ArrowLeft, Briefcase, AlertTriangle, Info, LayoutDashboard,
-    ShieldCheck, GitCompareArrows, ClipboardList, BadgeDollarSign, FolderOpen,
+    ShieldCheck, GitCompareArrows, FolderOpen,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
@@ -21,18 +21,14 @@ import {
 import LegalDashboard from '@/components/legal/LegalDashboard';
 import RightsMatrix from '@/components/legal/RightsMatrix';
 import RightsChanges from '@/components/legal/RightsChanges';
-import SOPTracker from '@/components/legal/SOPTracker';
-import PostInvestmentTracker from '@/components/legal/PostInvestmentTracker';
 import DocumentManager from '@/components/legal/DocumentManager';
 
-type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'sop' | 'post' | 'documents';
+type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'documents';
 
 const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'rights', label: 'Rights', icon: ShieldCheck },
     { id: 'changes', label: 'Changes', icon: GitCompareArrows },
-    { id: 'sop', label: 'SOP', icon: ClipboardList },
-    { id: 'post', label: 'Post-Investment', icon: BadgeDollarSign },
     { id: 'documents', label: 'Documents', icon: FolderOpen },
 ];
 
@@ -208,12 +204,6 @@ function LegalDetailContent({ companyId }: { companyId: string }) {
                     )}
                     {activeTab === 'changes' && (
                         <RightsChanges record={record} onUpdate={updateRecord} />
-                    )}
-                    {activeTab === 'sop' && (
-                        <SOPTracker record={record} onUpdate={updateRecord} />
-                    )}
-                    {activeTab === 'post' && (
-                        <PostInvestmentTracker record={record} onUpdate={updateRecord} />
                     )}
                     {activeTab === 'documents' && (
                         <DocumentManager record={record} onUpdate={updateRecord} />
