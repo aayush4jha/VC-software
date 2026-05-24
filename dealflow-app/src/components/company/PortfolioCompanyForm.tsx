@@ -103,6 +103,7 @@ export default function PortfolioCompanyForm() {
         total_shares: '',
         entry_pre_money_valuation: '',
         entry_post_money_valuation: '',
+        entry_total_raised: '',
         entry_ownership: '',
         portfolio_status: 'Active' as PortfolioStatus,
         founder_names: '',
@@ -168,6 +169,7 @@ export default function PortfolioCompanyForm() {
                     editingCompany.entryPostMoneyValuation?.toString()
                     || editingCompany.entryValuation?.toString()
                     || '',
+                entry_total_raised: editingCompany.entryTotalRaised?.toString() || '',
                 entry_ownership: editingCompany.entryOwnership?.toString() || '',
                 portfolio_status: editingCompany.portfolioStatus || 'Active',
                 founder_names: editingCompany.founderName || '',
@@ -273,6 +275,7 @@ export default function PortfolioCompanyForm() {
             entryPostMoneyValuation: postMoney,
             // Keep entryValuation in sync with post-money for legacy code paths.
             entryValuation: postMoney ?? toNum(form.entry_post_money_valuation),
+            entryTotalRaised: toNum(form.entry_total_raised) ?? totalRaisedFromValuations,
             entryOwnership,
             portfolioStatus: form.portfolio_status,
             notes: form.notes,
@@ -512,12 +515,31 @@ export default function PortfolioCompanyForm() {
                         <div className="form-group">
                             <label className="form-label">Entry Post-money Valuation (&#8377;)</label>
                             <input className="form-input" type="number" placeholder="Post-money valuation" value={form.entry_post_money_valuation} onChange={upd('entry_post_money_valuation')} />
-                            {totalRaisedFromValuations != null && totalRaisedFromValuations > 0 && (
+                        </div>
+                    </div>
+
+                    {/* Total money raised in this round */}
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Total Money Raised in this Round (&#8377;)</label>
+                            <input
+                                className="form-input"
+                                type="number"
+                                placeholder={
+                                    totalRaisedFromValuations != null && totalRaisedFromValuations > 0
+                                        ? `Implied: ${formatPortfolioCurrency(totalRaisedFromValuations)}`
+                                        : 'Total round size'
+                                }
+                                value={form.entry_total_raised}
+                                onChange={upd('entry_total_raised')}
+                            />
+                            {totalRaisedFromValuations != null && totalRaisedFromValuations > 0 && !form.entry_total_raised && (
                                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                    Implied total raised: {formatPortfolioCurrency(totalRaisedFromValuations)} (post &minus; pre)
+                                    Auto from post &minus; pre: {formatPortfolioCurrency(totalRaisedFromValuations)} (override above if different)
                                 </div>
                             )}
                         </div>
+                        <div className="form-group" />
                     </div>
 
                     {/* Entry Ownership */}

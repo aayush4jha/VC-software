@@ -178,6 +178,7 @@ export interface Company {
   totalShares: number | null;     // company's total outstanding shares at entry
   entryPreMoneyValuation: number | null;
   entryPostMoneyValuation: number | null;
+  entryTotalRaised: number | null;
 }
 
 export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';

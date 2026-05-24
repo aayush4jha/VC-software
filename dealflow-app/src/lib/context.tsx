@@ -96,6 +96,7 @@ function mapCompany(r: any): Company {
         totalShares: r.total_shares != null ? Number(r.total_shares) : null,
         entryPreMoneyValuation: r.entry_pre_money_valuation ?? null,
         entryPostMoneyValuation: r.entry_post_money_valuation ?? null,
+        entryTotalRaised: r.entry_total_raised ?? null,
     };
 }
 
@@ -742,6 +743,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ...(data.totalShares != null ? { total_shares: toBigint(data.totalShares) } : {}),
                 ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: toBigint(data.entryPreMoneyValuation) } : {}),
                 ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
+                ...(data.entryTotalRaised != null ? { entry_total_raised: toBigint(data.entryTotalRaised) } : {}),
             },
         });
 
@@ -815,12 +817,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             sharePrice: 'share_price', numShares: 'num_shares', totalShares: 'total_shares',
             entryPreMoneyValuation: 'entry_pre_money_valuation',
             entryPostMoneyValuation: 'entry_post_money_valuation',
+            entryTotalRaised: 'entry_total_raised',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         const BIGINT_KEYS = new Set([
             'initialInvestment', 'entryValuation', 'latestValuation', 'exitValue',
             'numShares', 'totalShares',
-            'entryPreMoneyValuation', 'entryPostMoneyValuation',
+            'entryPreMoneyValuation', 'entryPostMoneyValuation', 'entryTotalRaised',
             'totalFundRaise', 'valuation',
         ]);
         for (const [key, val] of Object.entries(data)) {
