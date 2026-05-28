@@ -313,12 +313,15 @@ export function calculateXIRR(cashFlows: CashFlow[]): number | null {
         const newRate = rate - npv / deriv;
         if (Math.abs(newRate - rate) < 1e-7) return newRate;
         rate = newRate;
-        if (rate < -0.99 || rate > 10) break; // out of reasonable range
+        if (rate < -0.99 || rate > 1000) break; // out of reasonable range — same bracket as bisection below
     }
 
-    // Bisection fallback
+    // Bisection fallback. Upper bound is 1000x (100,000%) — early-stage VC
+    // markups can blow well past the previous 10x ceiling in the first months
+    // after entry. Bisection is cheap; a wider bracket costs ~log2(100x) extra
+    // iterations and prevents the solver from clipping silently on outliers.
     let low = -0.99;
-    let high = 10.0;
+    let high = 1000.0;
     for (let i = 0; i < 100; i++) {
         const mid = (low + high) / 2;
         const npv = xnpv(mid, sorted);
