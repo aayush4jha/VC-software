@@ -181,9 +181,15 @@ export interface Company {
   entryTotalRaised: number | null;
   noOfShares: number | null;        // Current DV Shareholding — drives latest valuation
   portfolioHealth: PortfolioHealth | null;
+  founders: Founder[];              // Multiple founders supported; first entry mirrors founder_name / founder_email
 }
 
 export type PortfolioHealth = 'Bullish' | 'Base' | 'Bearish';
+
+export interface Founder {
+  name: string;
+  email: string;
+}
 
 export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
 

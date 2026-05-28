@@ -99,6 +99,10 @@ function mapCompany(r: any): Company {
         entryTotalRaised: r.entry_total_raised ?? null,
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
         portfolioHealth: r.portfolio_health ?? null,
+        founders: Array.isArray(r.founders)
+            ? r.founders.filter((f: unknown): f is { name?: unknown; email?: unknown } => !!f && typeof f === 'object')
+                .map((f: { name?: unknown; email?: unknown }) => ({ name: String(f.name ?? ''), email: String(f.email ?? '') }))
+            : [],
     };
 }
 
@@ -766,6 +770,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.entryTotalRaised != null ? { entry_total_raised: toBigint(data.entryTotalRaised) } : {}),
             ...(data.noOfShares != null ? { no_of_shares: toBigint(data.noOfShares) } : {}),
             ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
+            ...(Array.isArray(data.founders) ? { founders: data.founders } : {}),
         };
 
         let { data: row, error } = await apiDb({
@@ -856,6 +861,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             entryTotalRaised: 'entry_total_raised',
             noOfShares: 'no_of_shares',
             portfolioHealth: 'portfolio_health',
+            founders: 'founders',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         const BIGINT_KEYS = new Set([

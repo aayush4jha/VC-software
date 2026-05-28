@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth } from '@/types/database';
+import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
 import { formatPortfolioCurrency } from '@/lib/portfolio-utils';
 
 type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
@@ -122,12 +122,12 @@ export default function PortfolioCompanyForm() {
         entry_ownership: '',
         portfolio_status: 'Active' as PortfolioStatus,
         portfolio_health: '' as PortfolioHealth | '',
-        founder_names: '',
         notes: '',
     });
 
     const [followOns, setFollowOns] = useState<LocalFollowOn[]>([]);
     const [deletedFollowOnIds, setDeletedFollowOnIds] = useState<string[]>([]);
+    const [founders, setFounders] = useState<Founder[]>([{ name: '', email: '' }]);
     const [saving, setSaving] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [showNewIndustryInput, setShowNewIndustryInput] = useState(false);
@@ -190,9 +190,15 @@ export default function PortfolioCompanyForm() {
                 entry_ownership: editingCompany.entryOwnership?.toString() || '',
                 portfolio_status: editingCompany.portfolioStatus || 'Active',
                 portfolio_health: editingCompany.portfolioHealth || '',
-                founder_names: editingCompany.founderName || '',
                 notes: editingCompany.notes || '',
             });
+
+            const existingFounders = editingCompany.founders && editingCompany.founders.length > 0
+                ? editingCompany.founders
+                : (editingCompany.founderName || editingCompany.founderEmail)
+                    ? [{ name: editingCompany.founderName || '', email: editingCompany.founderEmail || '' }]
+                    : [{ name: '', email: '' }];
+            setFounders(existingFounders);
 
             fetchFollowOns(editingCompany.id).then((rounds: FollowOnRound[]) => {
                 setFollowOns(
@@ -224,6 +230,7 @@ export default function PortfolioCompanyForm() {
             }));
             setFollowOns([]);
             setDeletedFollowOnIds([]);
+            setFounders([{ name: '', email: '' }]);
         }
     }, [editingCompany, isEditing, industries, dealSourceNames, fetchFollowOns]);
 
@@ -276,10 +283,17 @@ export default function PortfolioCompanyForm() {
             ? toNum(form.entry_ownership)
             : computedEntryOwnership;
 
+        const cleanedFounders = founders
+            .map(f => ({ name: f.name.trim(), email: f.email.trim() }))
+            .filter(f => f.name || f.email);
+
         const data: Record<string, unknown> = {
             companyName: form.company_name,
-            founderName: form.founder_names,
-            founderEmail: '',
+            // Mirror the first founder into the legacy single-name / single-email
+            // columns so any older readers stay correct.
+            founderName: cleanedFounders[0]?.name || '',
+            founderEmail: cleanedFounders[0]?.email || '',
+            founders: cleanedFounders,
             industryId: form.industry_id,
             hqLocation: form.hq_location,
             dealSourceNameId: form.deal_source_name_id,
@@ -907,15 +921,52 @@ export default function PortfolioCompanyForm() {
                         })}
                     </div>
 
-                    {/* Founders */}
+                    {/* Founders — name + email per row */}
                     <div className="form-group" style={{ marginTop: 16 }}>
-                        <label className="form-label">Founders</label>
-                        <input
-                            className="form-input"
-                            placeholder="Enter founder names (comma-separated)"
-                            value={form.founder_names}
-                            onChange={upd('founder_names')}
-                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <label className="form-label" style={{ margin: 0 }}>Founders</label>
+                            <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => setFounders(prev => [...prev, { name: '', email: '' }])}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                            >
+                                <Plus size={14} /> Add Founder
+                            </button>
+                        </div>
+                        {founders.map((f, idx) => (
+                            <div key={idx} className="form-row" style={{ alignItems: 'center' }}>
+                                <div className="form-group">
+                                    <input
+                                        className="form-input"
+                                        placeholder="Founder name"
+                                        value={f.name}
+                                        onChange={e => setFounders(prev => prev.map((row, i) => i === idx ? { ...row, name: e.target.value } : row))}
+                                    />
+                                </div>
+                                <div className="form-group" style={{ display: 'flex', gap: 6 }}>
+                                    <input
+                                        className="form-input"
+                                        type="email"
+                                        placeholder="founder@company.com"
+                                        value={f.email}
+                                        onChange={e => setFounders(prev => prev.map((row, i) => i === idx ? { ...row, email: e.target.value } : row))}
+                                        style={{ flex: 1 }}
+                                    />
+                                    {founders.length > 1 && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => setFounders(prev => prev.filter((_, i) => i !== idx))}
+                                            style={{ color: '#ef4444' }}
+                                            title="Remove founder"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
                     </div>
 
                     {/* Notes */}

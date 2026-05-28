@@ -401,8 +401,27 @@ export default function PortfolioCompanyDetail() {
                         <div>
                             <h3 style={sectionTitleStyle}>Team & Info</h3>
                             <div style={detailCardStyle}>
-                                <EditableRow label="Founder" value={c.founderName || '--'} field="founderName" rawValue={c.founderName || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="Email" value={c.founderEmail || '--'} field="founderEmail" rawValue={c.founderEmail || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                {(() => {
+                                    const list = c.founders && c.founders.length > 0
+                                        ? c.founders
+                                        : (c.founderName || c.founderEmail)
+                                            ? [{ name: c.founderName, email: c.founderEmail }]
+                                            : [];
+                                    if (list.length === 0) {
+                                        return (
+                                            <>
+                                                <DetailRow label="Founder" value="--" />
+                                                <DetailRow label="Email" value="--" />
+                                            </>
+                                        );
+                                    }
+                                    return list.map((f, i) => (
+                                        <React.Fragment key={`${f.name}-${f.email}-${i}`}>
+                                            <DetailRow label={list.length > 1 ? `Founder ${i + 1}` : 'Founder'} value={f.name || '--'} />
+                                            <DetailRow label="Email" value={f.email || '--'} />
+                                        </React.Fragment>
+                                    ));
+                                })()}
                                 <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} />
                                 <EditableRow label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'} field="latestValuation" type="number" rawValue={c.latestValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Status" value={status} field="portfolioStatus" rawValue={status} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Active', 'Exited', 'Written Off']} />
