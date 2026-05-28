@@ -5,20 +5,17 @@ import type { Company, FollowOnRound } from '@/types/database';
 
 // ─── Currency Formatting ──────────────────────────
 
+// Indian-grouped rupee formatting — `₹1,00,000` style. Uses
+// toLocaleString('en-IN') so groups are 3 digits then 2s as per Indian
+// numbering. No Cr/L/K compression so the displayed value always equals
+// the saved value, end-to-end.
 export function formatPortfolioCurrency(amount: number): string {
-    if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
-    if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
-    if (amount >= 1000) return `₹${(amount / 1000).toFixed(2)}K`;
-    return `₹${amount.toFixed(2)}`;
-}
-
-// Exact rupee formatting with Indian thousands grouping. Use this whenever
-// the displayed number must equal the saved number to the last digit — for
-// example on the AutoFillChip, where the user expects "click to use" to fill
-// the input with the exact same value the chip displays.
-export function formatPortfolioCurrencyExact(amount: number): string {
     return `₹${Math.round(amount).toLocaleString('en-IN')}`;
 }
+
+// Retained alias used by callers that explicitly want the same precise
+// formatting. Both functions now produce identical output.
+export const formatPortfolioCurrencyExact = formatPortfolioCurrency;
 
 export function formatUSD(inrAmount: number): string {
     const usd = inrAmount / 83;
