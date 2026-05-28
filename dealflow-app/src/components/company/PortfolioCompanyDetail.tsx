@@ -1253,8 +1253,8 @@ function FounderFieldRow({
     inputType?: string;
 }) {
     return (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0, flexWrap: 'wrap', rowGap: 4 }}>
-            <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flexShrink: 0 }}>{label}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0, flexWrap: 'wrap', rowGap: 4 }}>
+            <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flex: 1, minWidth: 0, wordBreak: 'break-word' }}>{label}</span>
             {isEditing ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 120, justifyContent: 'flex-end' }}>
                     <input
@@ -1275,7 +1275,7 @@ function FounderFieldRow({
                     </button>
                 </div>
             ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     <span style={{ fontWeight: 500, fontSize: 13 }}>{value || '--'}</span>
                     <button
                         onClick={onStart}
@@ -1322,9 +1322,9 @@ function FollowOnStat({ label, value, accent }: { label: string; value: string; 
 
 function DetailRow({ label, value }: { label: string; value: string }) {
     return (
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-light)' }}>
-            <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{label}</span>
-            <span style={{ fontWeight: 500, fontSize: 13 }}>{value}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border-light)', minWidth: 0 }}>
+            <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flex: 1, minWidth: 0, wordBreak: 'break-word' }}>{label}</span>
+            <span style={{ fontWeight: 500, fontSize: 13, flexShrink: 0, textAlign: 'right' }}>{value}</span>
         </div>
     );
 }
@@ -1351,8 +1351,8 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
     const isEditing = editField === field;
     const datalistId = datalistOptions ? `editable-row-list-${field}` : undefined;
     return (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0, flexWrap: 'wrap', rowGap: 4 }}>
-            <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flexShrink: 0 }}>{label}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0, flexWrap: 'wrap', rowGap: 4 }}>
+            <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flex: 1, minWidth: 0, wordBreak: 'break-word' }}>{label}</span>
             {isEditing ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 120, justifyContent: 'flex-end' }}>
                     {selectOptions ? (
@@ -1404,7 +1404,7 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
                     </button>
                 </div>
             ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     <span style={{ fontWeight: 500, fontSize: 13 }}>{value}</span>
                     <button
                         onClick={() => onStart(field, rawValue)}
