@@ -179,8 +179,11 @@ export interface Company {
   entryPreMoneyValuation: number | null;
   entryPostMoneyValuation: number | null;
   entryTotalRaised: number | null;
-  noOfShares: number | null;        // Drives latest valuation: no_of_shares × share_price
+  noOfShares: number | null;        // Current DV Shareholding — drives latest valuation
+  portfolioHealth: PortfolioHealth | null;
 }
+
+export type PortfolioHealth = 'Bullish' | 'Base' | 'Bearish';
 
 export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
 

@@ -98,6 +98,7 @@ function mapCompany(r: any): Company {
         entryPostMoneyValuation: r.entry_post_money_valuation ?? null,
         entryTotalRaised: r.entry_total_raised ?? null,
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
+        portfolioHealth: r.portfolio_health ?? null,
     };
 }
 
@@ -764,6 +765,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
             ...(data.entryTotalRaised != null ? { entry_total_raised: toBigint(data.entryTotalRaised) } : {}),
             ...(data.noOfShares != null ? { no_of_shares: toBigint(data.noOfShares) } : {}),
+            ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
         };
 
         let { data: row, error } = await apiDb({
@@ -853,6 +855,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             entryPostMoneyValuation: 'entry_post_money_valuation',
             entryTotalRaised: 'entry_total_raised',
             noOfShares: 'no_of_shares',
+            portfolioHealth: 'portfolio_health',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         const BIGINT_KEYS = new Set([

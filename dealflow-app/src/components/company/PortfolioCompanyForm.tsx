@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import type { CompanyRound, ShareType, FollowOnRound } from '@/types/database';
+import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth } from '@/types/database';
 import { formatPortfolioCurrency } from '@/lib/portfolio-utils';
 
 type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
@@ -25,6 +25,7 @@ function roundOptions(current: string): string[] {
 }
 const shareTypes: ShareType[] = ['Primary', 'Secondary'];
 const portfolioStatuses: PortfolioStatus[] = ['Active', 'Exited', 'Written Off'];
+const portfolioHealthOptions: PortfolioHealth[] = ['Bullish', 'Base', 'Bearish'];
 
 // Indian states + Union Territories. Datalist suggestions — users can still type any custom location.
 const HQ_LOCATION_SUGGESTIONS: string[] = [
@@ -120,6 +121,7 @@ export default function PortfolioCompanyForm() {
         no_of_shares: '',
         entry_ownership: '',
         portfolio_status: 'Active' as PortfolioStatus,
+        portfolio_health: '' as PortfolioHealth | '',
         founder_names: '',
         notes: '',
     });
@@ -187,6 +189,7 @@ export default function PortfolioCompanyForm() {
                 no_of_shares: editingCompany.noOfShares?.toString() || '',
                 entry_ownership: editingCompany.entryOwnership?.toString() || '',
                 portfolio_status: editingCompany.portfolioStatus || 'Active',
+                portfolio_health: editingCompany.portfolioHealth || '',
                 founder_names: editingCompany.founderName || '',
                 notes: editingCompany.notes || '',
             });
@@ -295,6 +298,7 @@ export default function PortfolioCompanyForm() {
             noOfShares: toNum(form.no_of_shares),
             entryOwnership,
             portfolioStatus: form.portfolio_status,
+            portfolioHealth: form.portfolio_health || null,
             notes: form.notes,
             pipelineStageId: pipelineStages[0]?.id || '',
             priorityLevel: 'Medium',
@@ -456,7 +460,7 @@ export default function PortfolioCompanyForm() {
                         </div>
                     </div>
 
-                    {/* Analyst + Entry Date */}
+                    {/* Analyst + Entry Stage */}
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Analyst *</label>
@@ -468,97 +472,33 @@ export default function PortfolioCompanyForm() {
                             </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Entry Date *</label>
-                            <input className="form-input" type="date" value={form.entry_date} onChange={upd('entry_date')} />
-                        </div>
-                    </div>
-
-                    {/* Entry Stage + Current Stage */}
-                    <div className="form-row">
-                        <div className="form-group">
                             <label className="form-label">Entry Stage *</label>
                             <select className="form-select" value={form.entry_stage} onChange={upd('entry_stage')}>
                                 {roundOptions(form.entry_stage).map(r => <option key={r} value={r}>{r}</option>)}
                             </select>
                         </div>
+                    </div>
+
+                    {/* Current Stage + Entry Date */}
+                    <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Current Stage *</label>
                             <select className="form-select" value={form.current_stage} onChange={upd('current_stage')}>
                                 {roundOptions(form.current_stage).map(r => <option key={r} value={r}>{r}</option>)}
                             </select>
                         </div>
+                        <div className="form-group">
+                            <label className="form-label">Entry Date *</label>
+                            <input className="form-input" type="date" value={form.entry_date} onChange={upd('entry_date')} />
+                        </div>
                     </div>
 
-                    {/* Initial Investment + Share Type */}
+                    {/* Initial Investment (Our Investment) + Total Money Raised */}
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">Initial Investment (&#8377;) *</label>
+                            <label className="form-label">Initial Investment (Our Investment) (&#8377;) *</label>
                             <input className="form-input" type="number" placeholder="e.g. 50000000" value={form.initial_investment} onChange={upd('initial_investment')} />
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">Share Type</label>
-                            <select className="form-select" value={form.share_type} onChange={upd('share_type')}>
-                                {shareTypes.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Share Price + Total Shares */}
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">Share Price (&#8377;)</label>
-                            <input className="form-input" type="number" placeholder="e.g. 1250.00" value={form.share_price} onChange={upd('share_price')} />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">DV Shareholding</label>
-                            <input className="form-input" type="number" placeholder="e.g. 40000" value={form.num_shares} onChange={upd('num_shares')} />
-                        </div>
-                    </div>
-
-                    {/* Shares Outstanding + No. of Shares (drives valuation) */}
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">Shares Outstanding</label>
-                            <input className="form-input" type="number" placeholder="Company's total outstanding shares" value={form.total_shares} onChange={upd('total_shares')} />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">No. of Shares</label>
-                            <input
-                                className="form-input"
-                                type="number"
-                                placeholder="Used to compute valuation"
-                                value={form.no_of_shares}
-                                onChange={upd('no_of_shares')}
-                            />
-                            {(() => {
-                                const n = toNum(form.no_of_shares);
-                                const p = toNum(form.share_price);
-                                if (n != null && p != null && n > 0 && p > 0) {
-                                    return (
-                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                            Implied valuation: {formatPortfolioCurrency(n * p)} (no. of shares × share price)
-                                        </div>
-                                    );
-                                }
-                                return null;
-                            })()}
-                        </div>
-                    </div>
-
-                    {/* Entry Pre-money + Post-money */}
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">Entry Pre-money Valuation (&#8377;)</label>
-                            <input className="form-input" type="number" placeholder="Pre-money valuation" value={form.entry_pre_money_valuation} onChange={upd('entry_pre_money_valuation')} />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Entry Post-money Valuation (&#8377;)</label>
-                            <input className="form-input" type="number" placeholder="Post-money valuation" value={form.entry_post_money_valuation} onChange={upd('entry_post_money_valuation')} />
-                        </div>
-                    </div>
-
-                    {/* Total money raised in this round */}
-                    <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Total Money Raised in this Round (&#8377;)</label>
                             <input
@@ -578,11 +518,38 @@ export default function PortfolioCompanyForm() {
                                 </div>
                             )}
                         </div>
-                        <div className="form-group" />
                     </div>
 
-                    {/* Entry Ownership */}
+                    {/* Number of Shares (Owned by DV) + Outstanding Shares */}
                     <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Number of Shares (Owned by DV)</label>
+                            <input className="form-input" type="number" placeholder="e.g. 40000" value={form.num_shares} onChange={upd('num_shares')} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Outstanding Shares</label>
+                            <input className="form-input" type="number" placeholder="Company's total outstanding shares" value={form.total_shares} onChange={upd('total_shares')} />
+                        </div>
+                    </div>
+
+                    {/* Share Price + Entry Pre-Money */}
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Share Price (&#8377;)</label>
+                            <input className="form-input" type="number" placeholder="e.g. 1250.00" value={form.share_price} onChange={upd('share_price')} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Entry Pre-money Valuation (&#8377;)</label>
+                            <input className="form-input" type="number" placeholder="Pre-money valuation" value={form.entry_pre_money_valuation} onChange={upd('entry_pre_money_valuation')} />
+                        </div>
+                    </div>
+
+                    {/* Entry Post-Money + Entry Ownership */}
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Entry Post-money Valuation (&#8377;)</label>
+                            <input className="form-input" type="number" placeholder="Post-money valuation" value={form.entry_post_money_valuation} onChange={upd('entry_post_money_valuation')} />
+                        </div>
                         <div className="form-group">
                             <label className="form-label">Entry Ownership (%)</label>
                             <input
@@ -598,10 +565,53 @@ export default function PortfolioCompanyForm() {
                                 </div>
                             )}
                         </div>
+                    </div>
+
+                    {/* Current DV Shareholding + Share Type */}
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Current DV Shareholding</label>
+                            <input
+                                className="form-input"
+                                type="number"
+                                placeholder="Used to compute valuation"
+                                value={form.no_of_shares}
+                                onChange={upd('no_of_shares')}
+                            />
+                            {(() => {
+                                const n = toNum(form.no_of_shares);
+                                const p = toNum(form.share_price);
+                                if (n != null && p != null && n > 0 && p > 0) {
+                                    return (
+                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                            Implied valuation: {formatPortfolioCurrency(n * p)} (shares × share price)
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Share Type</label>
+                            <select className="form-select" value={form.share_type} onChange={upd('share_type')}>
+                                {shareTypes.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Status + Portfolio Health */}
+                    <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Status *</label>
                             <select className="form-select" value={form.portfolio_status} onChange={upd('portfolio_status')}>
                                 {portfolioStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Portfolio Health</label>
+                            <select className="form-select" value={form.portfolio_health} onChange={upd('portfolio_health')}>
+                                <option value="">Select health</option>
+                                {portfolioHealthOptions.map(h => <option key={h} value={h}>{h}</option>)}
                             </select>
                         </div>
                     </div>
