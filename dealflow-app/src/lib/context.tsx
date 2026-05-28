@@ -110,6 +110,24 @@ function toBigint(v: unknown): number | null {
     return Math.round(n);
 }
 
+// Detect Postgrest's "missing column" error so the client can transparently
+// drop newly-added fields when the DB migration hasn't run yet — instead of
+// failing the whole insert/update.
+function isMissingColumnError(error: unknown): boolean {
+    if (!error) return false;
+    const e = error as { message?: string; code?: string };
+    if (e.code === 'PGRST204' || e.code === '42703') return true;
+    return /Could not find the .* column|column .* does not exist/i.test(e.message || '');
+}
+function extractMissingColumns(error: unknown): string[] {
+    const msg = (error as { message?: string })?.message || '';
+    const cols = new Set<string>();
+    const re = /(?:Could not find the |column )['"]?([a-z_][a-z0-9_]*)['"]?(?: column| does not exist)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(msg))) cols.add(m[1]);
+    return [...cols];
+}
+
 function mapFollowOn(r: any): FollowOnRound {
     // Prefer the new post_money_valuation column, fall back to legacy round_valuation.
     const postMoney = r.post_money_valuation ?? r.round_valuation ?? null;
@@ -706,47 +724,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // ──────────────────────────────────────────────────
 
     const createCompany = useCallback(async (data: Record<string, unknown>): Promise<Company | null> => {
-        const { data: row, error } = await apiDb({
-            table: 'companies', operation: 'insert',
-            data: {
-                organization_id: ORGANIZATION_ID,
-                company_name: data.companyName,
-                founder_name: data.founderName,
-                founder_email: data.founderEmail || '',
-                analyst_id: data.analystId || null,
-                company_round: data.companyRound || 'Seed',
-                pipeline_stage_id: data.pipelineStageId,
-                priority_level: data.priorityLevel || 'Medium',
-                deal_source_type: data.dealSourceType || 'Founder Network',
-                deal_source_name_id: data.dealSourceNameId || null,
-                industry_id: data.industryId || null,
-                sub_industry: data.subIndustry || '',
-                share_type: data.shareType || 'Primary',
-                total_fund_raise: data.totalFundRaise || null,
-                valuation: data.valuation || null,
-                google_drive_link: data.googleDriveLink || '',
-                custom_tags: data.customTags || [],
-                sla_deadline: data.slaDeadline || null,
-                linked_previous_entry_id: data.linkedPreviousEntryId || null,
-                ...(data.terminalStatus ? { terminal_status: data.terminalStatus } : {}),
-                ...(data.initialInvestment != null ? { initial_investment: toBigint(data.initialInvestment) } : {}),
-                ...(data.entryValuation != null ? { entry_valuation: toBigint(data.entryValuation) } : {}),
-                ...(data.entryOwnership != null ? { entry_ownership: data.entryOwnership } : {}),
-                ...(data.currentOwnership != null ? { current_ownership: data.currentOwnership } : {}),
-                ...(data.latestValuation != null ? { latest_valuation: toBigint(data.latestValuation) } : {}),
-                ...(data.portfolioStatus ? { portfolio_status: data.portfolioStatus } : {}),
-                ...(data.exitValue != null ? { exit_value: toBigint(data.exitValue) } : {}),
-                ...(data.exitDate ? { exit_date: data.exitDate } : {}),
-                ...(data.hqLocation ? { hq_location: data.hqLocation } : {}),
-                ...(data.notes ? { notes: data.notes } : {}),
-                ...(data.sharePrice != null ? { share_price: data.sharePrice } : {}),
-                ...(data.numShares != null ? { num_shares: toBigint(data.numShares) } : {}),
-                ...(data.totalShares != null ? { total_shares: toBigint(data.totalShares) } : {}),
-                ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: toBigint(data.entryPreMoneyValuation) } : {}),
-                ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
-                ...(data.entryTotalRaised != null ? { entry_total_raised: toBigint(data.entryTotalRaised) } : {}),
-            },
+        const insertPayload: Record<string, unknown> = {
+            organization_id: ORGANIZATION_ID,
+            company_name: data.companyName,
+            founder_name: data.founderName,
+            founder_email: data.founderEmail || '',
+            analyst_id: data.analystId || null,
+            company_round: data.companyRound || 'Seed',
+            pipeline_stage_id: data.pipelineStageId,
+            priority_level: data.priorityLevel || 'Medium',
+            deal_source_type: data.dealSourceType || 'Founder Network',
+            deal_source_name_id: data.dealSourceNameId || null,
+            industry_id: data.industryId || null,
+            sub_industry: data.subIndustry || '',
+            share_type: data.shareType || 'Primary',
+            total_fund_raise: data.totalFundRaise || null,
+            valuation: data.valuation || null,
+            google_drive_link: data.googleDriveLink || '',
+            custom_tags: data.customTags || [],
+            sla_deadline: data.slaDeadline || null,
+            linked_previous_entry_id: data.linkedPreviousEntryId || null,
+            ...(data.terminalStatus ? { terminal_status: data.terminalStatus } : {}),
+            ...(data.initialInvestment != null ? { initial_investment: toBigint(data.initialInvestment) } : {}),
+            ...(data.entryValuation != null ? { entry_valuation: toBigint(data.entryValuation) } : {}),
+            ...(data.entryOwnership != null ? { entry_ownership: data.entryOwnership } : {}),
+            ...(data.currentOwnership != null ? { current_ownership: data.currentOwnership } : {}),
+            ...(data.latestValuation != null ? { latest_valuation: toBigint(data.latestValuation) } : {}),
+            ...(data.portfolioStatus ? { portfolio_status: data.portfolioStatus } : {}),
+            ...(data.exitValue != null ? { exit_value: toBigint(data.exitValue) } : {}),
+            ...(data.exitDate ? { exit_date: data.exitDate } : {}),
+            ...(data.hqLocation ? { hq_location: data.hqLocation } : {}),
+            ...(data.notes ? { notes: data.notes } : {}),
+            ...(data.sharePrice != null ? { share_price: data.sharePrice } : {}),
+            ...(data.numShares != null ? { num_shares: toBigint(data.numShares) } : {}),
+            ...(data.totalShares != null ? { total_shares: toBigint(data.totalShares) } : {}),
+            ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: toBigint(data.entryPreMoneyValuation) } : {}),
+            ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
+            ...(data.entryTotalRaised != null ? { entry_total_raised: toBigint(data.entryTotalRaised) } : {}),
+        };
+
+        let { data: row, error } = await apiDb({
+            table: 'companies', operation: 'insert', data: insertPayload,
         });
+
+        // Forward-compat: if the DB hasn't been migrated yet, retry without any
+        // columns Postgres says are missing instead of failing the whole insert.
+        if (error && isMissingColumnError(error)) {
+            const missing = extractMissingColumns(error);
+            for (const col of missing) delete insertPayload[col];
+            console.warn(`Retrying create company without missing column(s): ${missing.join(', ')}`);
+            ({ data: row, error } = await apiDb({
+                table: 'companies', operation: 'insert', data: insertPayload,
+            }));
+        }
 
         if (error) { console.error('Create company error:', error); return null; }
         const company = mapCompany(row);
@@ -831,7 +861,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const dbKey = fieldMap[key] || key;
             dbData[dbKey] = BIGINT_KEYS.has(key) && val != null ? toBigint(val) : val;
         }
-        const { data: rows, error } = await apiDb({ table: 'companies', operation: 'update', data: dbData, match: { id } });
+        let { data: rows, error } = await apiDb({ table: 'companies', operation: 'update', data: dbData, match: { id } });
+
+        // Same forward-compat retry as createCompany — drop any columns Postgres
+        // doesn't know about yet rather than discarding the entire update.
+        if (error && isMissingColumnError(error)) {
+            const missing = extractMissingColumns(error);
+            for (const col of missing) delete dbData[col];
+            console.warn(`Retrying update company without missing column(s): ${missing.join(', ')}`);
+            ({ data: rows, error } = await apiDb({ table: 'companies', operation: 'update', data: dbData, match: { id } }));
+        }
         if (error) { console.error('Update company error:', error); return; }
         const row = Array.isArray(rows) ? rows[0] : rows;
         if (row) {
