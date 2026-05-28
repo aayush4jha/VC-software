@@ -55,6 +55,7 @@ interface LocalFollowOn {
     sharePrice: string;
     numShares: string;
     totalShares: string;
+    dvTotalShares: string;
     noOfShares: string;          // For valuation = noOfShares × sharePrice
     ownershipSought: string;
     ownershipAfter: string;
@@ -76,6 +77,7 @@ function emptyFollowOn(): LocalFollowOn {
         sharePrice: '',
         numShares: '',
         totalShares: '',
+        dvTotalShares: '',
         noOfShares: '',
         ownershipSought: '',
         ownershipAfter: '',
@@ -309,6 +311,7 @@ export default function PortfolioCompanyForm() {
                         sharePrice: r.sharePrice?.toString() || '',
                         numShares: r.numShares?.toString() || '',
                         totalShares: r.totalShares?.toString() || '',
+                        dvTotalShares: r.dvTotalShares?.toString() || '',
                         noOfShares: r.noOfShares?.toString() || '',
                         ownershipSought: r.ownershipSought?.toString() || '',
                         ownershipAfter: r.ownershipAfter?.toString() || '',
@@ -455,6 +458,7 @@ export default function PortfolioCompanyForm() {
                 sharePrice: toNum(fo.sharePrice),
                 numShares: toNum(fo.numShares),
                 totalShares: toNum(fo.totalShares),
+                dvTotalShares: toNum(fo.dvTotalShares),
                 noOfShares: toNum(fo.noOfShares),
                 ownershipSought: fo.didWeInvest ? (toNum(fo.ownershipSought) ?? auto.ownershipSought) : null,
                 ownershipAfter: toNum(fo.ownershipAfter) ?? auto.ownershipAfter,
@@ -900,10 +904,10 @@ export default function PortfolioCompanyForm() {
                                                 </div>
                                             </div>
 
-                                            {/* No. of Shares + Outstanding Shares */}
+                                            {/* No. of Shares bought + Total shares owned by DV */}
                                             <div className="form-row">
                                                 <div className="form-group">
-                                                    <label className="form-label" style={{ fontSize: 12 }}>No. of Shares in round {n}</label>
+                                                    <label className="form-label" style={{ fontSize: 12 }}>No. of Shares bought in round {n}</label>
                                                     <input
                                                         className="form-input"
                                                         type="number"
@@ -913,6 +917,21 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'numShares', e.target.value)}
                                                     />
                                                 </div>
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Total shares owned by DV</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="DV's cumulative shares after this round"
+                                                        value={fo.dvTotalShares}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'dvTotalShares', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Outstanding Shares */}
+                                            <div className="form-row">
                                                 <div className="form-group">
                                                     <label className="form-label" style={{ fontSize: 12 }}>Outstanding Shares in round {n}</label>
                                                     <input
@@ -924,6 +943,7 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'totalShares', e.target.value)}
                                                     />
                                                 </div>
+                                                <div className="form-group" />
                                             </div>
 
                                             {/* Share Price + Pre-Money */}

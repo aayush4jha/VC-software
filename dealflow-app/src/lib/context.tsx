@@ -153,6 +153,7 @@ function mapFollowOn(r: any): FollowOnRound {
         sharePrice: r.share_price != null ? Number(r.share_price) : null,
         numShares: r.num_shares != null ? Number(r.num_shares) : null,
         totalShares: r.total_shares != null ? Number(r.total_shares) : null,
+        dvTotalShares: r.dv_total_shares != null ? Number(r.dv_total_shares) : null,
         preMoneyValuation: r.pre_money_valuation ?? null,
         postMoneyValuation: postMoney,
         ownershipSought: r.ownership_sought != null ? Number(r.ownership_sought) : null,
@@ -1202,6 +1203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             share_price: data.sharePrice ?? null,
             num_shares: toBigint(data.numShares),
             total_shares: toBigint(data.totalShares),
+            dv_total_shares: toBigint(data.dvTotalShares),
             ownership_sought: data.ownershipSought ?? null,
             dilution_percent: data.dilutionPercent ?? null,
             our_value_today_override: data.ourValueTodayOverride ?? null,
@@ -1243,6 +1245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.sharePrice !== undefined) dbData.share_price = data.sharePrice;
         if (data.numShares !== undefined) dbData.num_shares = toBigint(data.numShares);
         if (data.totalShares !== undefined) dbData.total_shares = toBigint(data.totalShares);
+        if (data.dvTotalShares !== undefined) dbData.dv_total_shares = toBigint(data.dvTotalShares);
         if (data.ownershipSought !== undefined) dbData.ownership_sought = data.ownershipSought;
         if (data.dilutionPercent !== undefined) dbData.dilution_percent = data.dilutionPercent;
         if (data.ourValueTodayOverride !== undefined) dbData.our_value_today_override = data.ourValueTodayOverride;

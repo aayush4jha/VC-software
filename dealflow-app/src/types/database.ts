@@ -209,8 +209,9 @@ export interface FollowOnRound {
   notes: string;
   // Follow-on round breakdown
   sharePrice: number | null;
-  numShares: number | null;       // shares acquired in this round
+  numShares: number | null;       // shares acquired (bought) in this round
   totalShares: number | null;     // company's total outstanding shares after this round
+  dvTotalShares: number | null;   // running total of shares DV owns after this round
   noOfShares: number | null;      // share count for valuation: no_of_shares × share_price
   preMoneyValuation: number | null;
   postMoneyValuation: number | null;

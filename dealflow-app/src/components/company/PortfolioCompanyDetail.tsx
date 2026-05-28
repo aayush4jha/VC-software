@@ -60,7 +60,7 @@ export default function PortfolioCompanyDetail() {
     const [roundForm, setRoundForm] = useState({
         round_name: 'Series A', round_date: '', total_raised: '', our_investment: '',
         did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
-        share_price: '', num_shares: '', total_shares: '',
+        share_price: '', num_shares: '', total_shares: '', dv_total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
         investor_names: '', notes: '', our_value_today_override: '',
     });
@@ -68,7 +68,7 @@ export default function PortfolioCompanyDetail() {
     const resetRoundForm = () => setRoundForm({
         round_name: 'Series A', round_date: '', total_raised: '', our_investment: '',
         did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
-        share_price: '', num_shares: '', total_shares: '',
+        share_price: '', num_shares: '', total_shares: '', dv_total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
         investor_names: '', notes: '', our_value_today_override: '',
     });
@@ -193,6 +193,7 @@ export default function PortfolioCompanyDetail() {
         const sharePrice = toNum(roundForm.share_price);
         const numShares = toNum(roundForm.num_shares);
         const totalShares = toNum(roundForm.total_shares);
+        const dvTotalShares = toNum(roundForm.dv_total_shares);
         const explicitRaised = toNum(roundForm.total_raised);
         const explicitPostMoney = toNum(roundForm.post_money_valuation);
 
@@ -250,6 +251,7 @@ export default function PortfolioCompanyDetail() {
             sharePrice,
             numShares,
             totalShares,
+            dvTotalShares,
             ownershipSought: roundForm.did_we_invest ? ownerSought : null,
             ownershipAfter: ownerAfter,
             dilutionPercent: dilution,
@@ -322,6 +324,7 @@ export default function PortfolioCompanyDetail() {
             share_price: fo.sharePrice?.toString() || '',
             num_shares: fo.numShares?.toString() || '',
             total_shares: fo.totalShares?.toString() || '',
+            dv_total_shares: fo.dvTotalShares?.toString() || '',
             ownership_sought: fo.ownershipSought?.toString() || '',
             ownership_after: fo.ownershipAfter?.toString() || '',
             dilution_percent: fo.dilutionPercent?.toString() || '',
@@ -611,17 +614,23 @@ export default function PortfolioCompanyDetail() {
                                                     onChange={e => setRoundForm(f => ({ ...f, total_raised: e.target.value }))} />
                                             </div>
 
-                                            {/* No. of Shares + Outstanding Shares */}
+                                            {/* No. of Shares bought + Total shares owned by DV + Outstanding Shares */}
                                             <div className="form-group">
-                                                <label className="form-label">No. of Shares in round {roundNumber}</label>
+                                                <label className="form-label">No. of Shares bought in round {roundNumber}</label>
                                                 <input className="form-input" type="number" min="0" placeholder="e.g. 5000"
                                                     value={roundForm.num_shares} onChange={e => setRoundForm(f => ({ ...f, num_shares: e.target.value }))} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Total shares owned by DV</label>
+                                                <input className="form-input" type="number" min="0" placeholder="DV's cumulative shares after this round"
+                                                    value={roundForm.dv_total_shares} onChange={e => setRoundForm(f => ({ ...f, dv_total_shares: e.target.value }))} />
                                             </div>
                                             <div className="form-group">
                                                 <label className="form-label">Outstanding Shares in round {roundNumber}</label>
                                                 <input className="form-input" type="number" min="0" placeholder="Company's total outstanding shares"
                                                     value={roundForm.total_shares} onChange={e => setRoundForm(f => ({ ...f, total_shares: e.target.value }))} />
                                             </div>
+                                            <div className="form-group" />
 
                                             {/* Share Price + Pre-Money */}
                                             <div className="form-group">
@@ -900,23 +909,33 @@ export default function PortfolioCompanyDetail() {
                                             </div>
                                         </div>
 
-                                        {/* Yes-only row: Our investment + No. of Shares + Equity sought */}
+                                        {/* Yes-only rows: Our investment + Shares bought + Total DV shares + Equity sought */}
                                         {fo.didWeInvest && (
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
-                                                <FollowOnStat
-                                                    label={`Our investment in round ${n}`}
-                                                    value={fo.ourInvestment != null ? formatPortfolioCurrency(fo.ourInvestment) : '--'}
-                                                    accent={fo.ourInvestment != null ? '#10b981' : undefined}
-                                                />
-                                                <FollowOnStat
-                                                    label={`No. of Shares in round ${n}`}
-                                                    value={fo.numShares != null ? fo.numShares.toLocaleString('en-IN') : '--'}
-                                                />
-                                                <FollowOnStat
-                                                    label={`Equity sought in round ${n}`}
-                                                    value={fo.ownershipSought != null ? `${fo.ownershipSought}%` : '--'}
-                                                />
-                                            </div>
+                                            <>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                                                    <FollowOnStat
+                                                        label={`Our investment in round ${n}`}
+                                                        value={fo.ourInvestment != null ? formatPortfolioCurrency(fo.ourInvestment) : '--'}
+                                                        accent={fo.ourInvestment != null ? '#10b981' : undefined}
+                                                    />
+                                                    <FollowOnStat
+                                                        label={`No. of Shares bought in round ${n}`}
+                                                        value={fo.numShares != null ? fo.numShares.toLocaleString('en-IN') : '--'}
+                                                    />
+                                                    <FollowOnStat
+                                                        label="Total shares owned by DV"
+                                                        value={fo.dvTotalShares != null ? fo.dvTotalShares.toLocaleString('en-IN') : '--'}
+                                                    />
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                                                    <FollowOnStat
+                                                        label={`Equity sought in round ${n}`}
+                                                        value={fo.ownershipSought != null ? `${fo.ownershipSought}%` : '--'}
+                                                    />
+                                                    <div />
+                                                    <div />
+                                                </div>
+                                            </>
                                         )}
 
                                         {/* Round-size row */}
