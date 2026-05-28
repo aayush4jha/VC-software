@@ -60,6 +60,7 @@ interface LocalFollowOn {
     ownershipAfter: string;
     dilutionPercent: string;
     investorNames: string;
+    ourValueTodayOverride: string;
 }
 
 function emptyFollowOn(): LocalFollowOn {
@@ -80,6 +81,7 @@ function emptyFollowOn(): LocalFollowOn {
         ownershipAfter: '',
         dilutionPercent: '',
         investorNames: '',
+        ourValueTodayOverride: '',
     };
 }
 
@@ -286,6 +288,7 @@ export default function PortfolioCompanyForm() {
                         ownershipAfter: r.ownershipAfter?.toString() || '',
                         dilutionPercent: r.dilutionPercent?.toString() || '',
                         investorNames: r.investorNames || '',
+                        ourValueTodayOverride: r.ourValueTodayOverride?.toString() || '',
                     }))
                 );
             });
@@ -418,6 +421,7 @@ export default function PortfolioCompanyForm() {
                 ownershipAfter: toNum(fo.ownershipAfter) ?? auto.ownershipAfter,
                 dilutionPercent: toNum(fo.dilutionPercent) ?? auto.dilution,
                 investorNames: fo.investorNames,
+                ourValueTodayOverride: toNum(fo.ourValueTodayOverride),
             };
         };
 
@@ -988,22 +992,165 @@ export default function PortfolioCompanyForm() {
                                                     />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label className="form-label" style={{ fontSize: 12 }}>Our Value Today</label>
-                                                    <div
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Our Value Today (&#8377;)</label>
+                                                    <input
                                                         className="form-input"
-                                                        style={{
-                                                            display: 'flex', alignItems: 'center',
-                                                            background: 'var(--bg-tertiary, #f1f5f9)',
-                                                            color: valueToday != null ? '#10b981' : 'var(--text-tertiary)',
-                                                            fontWeight: 600,
-                                                        }}
-                                                    >
-                                                        {valueToday != null ? formatPortfolioCurrency(valueToday) : '—'}
-                                                        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 8, fontWeight: 400 }}>
-                                                            {valueByShares != null ? '(shares × price)' : valueByEquity != null ? '(equity% × post)' : ''}
-                                                        </span>
-                                                    </div>
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder={valueToday != null ? `Auto: ${formatPortfolioCurrency(valueToday)}` : 'Override our value today'}
+                                                        value={fo.ourValueTodayOverride}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', e.target.value)}
+                                                    />
+                                                    {valueToday != null && !fo.ourValueTodayOverride && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                            Auto: {formatPortfolioCurrency(valueToday)} {valueByShares != null ? '(shares × price)' : '(equity% × post)'}
+                                                        </div>
+                                                    )}
                                                 </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {!fo.didWeInvest && (
+                                        <>
+                                            {/* Total Money Raised + Outstanding Shares */}
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Total Money Raised in round {n} (&#8377;)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="Total round size"
+                                                        value={fo.totalRaised}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'totalRaised', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Outstanding Shares in round {n}</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="Company's total outstanding shares"
+                                                        value={fo.totalShares}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'totalShares', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Share Price + Pre-Money */}
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Share Price in round {n} (&#8377;)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="e.g. 1500"
+                                                        value={fo.sharePrice}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'sharePrice', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Pre-money Valuation in round {n} (&#8377;)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="Pre-money"
+                                                        value={fo.preMoneyValuation}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'preMoneyValuation', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Post-money (AUTO) + Dilution (AUTO) */}
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Post-money Valuation in round {n} (&#8377;)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder={fmtMoneyPh(auto.postMoney) || 'Post-money'}
+                                                        value={fo.postMoneyValuation}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'postMoneyValuation', e.target.value)}
+                                                    />
+                                                    {auto.postMoney != null && auto.postMoney > 0 && !fo.postMoneyValuation && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                            Auto from pre + total raised: {formatPortfolioCurrency(auto.postMoney)}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Dilution in round {n} (%)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        placeholder={fmtPercentPh(auto.dilution) || 'e.g. 15.0'}
+                                                        value={fo.dilutionPercent}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'dilutionPercent', e.target.value)}
+                                                    />
+                                                    {auto.dilution != null && !fo.dilutionPercent && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                            Auto: prev ownership × (raised ÷ post-money) = {auto.dilution.toFixed(2)}%
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Total ownership after round + Other investors */}
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Total ownership after round {n} (%)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        placeholder={fmtPercentPh(auto.ownershipAfter) || 'e.g. 8.5'}
+                                                        value={fo.ownershipAfter}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'ownershipAfter', e.target.value)}
+                                                    />
+                                                    {auto.ownershipAfter != null && !fo.ownershipAfter && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                            Auto: prev − dilution = {auto.ownershipAfter.toFixed(2)}%
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Other investors</label>
+                                                    <input
+                                                        className="form-input"
+                                                        placeholder="e.g. Sequoia, Accel"
+                                                        value={fo.investorNames}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'investorNames', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Our Value Today */}
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Our Value Today (&#8377;)</label>
+                                                    <input
+                                                        className="form-input"
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder={valueToday != null ? `Auto: ${formatPortfolioCurrency(valueToday)}` : 'Override our value today'}
+                                                        value={fo.ourValueTodayOverride}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', e.target.value)}
+                                                    />
+                                                    {valueToday != null && !fo.ourValueTodayOverride && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                            Auto: {formatPortfolioCurrency(valueToday)} {valueByShares != null ? '(shares × price)' : '(equity% × post)'}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="form-group" />
                                             </div>
                                         </>
                                     )}

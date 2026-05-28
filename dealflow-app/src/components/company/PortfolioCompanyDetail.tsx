@@ -62,7 +62,7 @@ export default function PortfolioCompanyDetail() {
         did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
         share_price: '', num_shares: '', total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
-        investor_names: '', notes: '',
+        investor_names: '', notes: '', our_value_today_override: '',
     });
 
     const resetRoundForm = () => setRoundForm({
@@ -70,7 +70,7 @@ export default function PortfolioCompanyDetail() {
         did_we_invest: true, pre_money_valuation: '', post_money_valuation: '',
         share_price: '', num_shares: '', total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
-        investor_names: '', notes: '',
+        investor_names: '', notes: '', our_value_today_override: '',
     });
 
     const FOLLOWON_ROUND_OPTIONS = [
@@ -255,6 +255,7 @@ export default function PortfolioCompanyDetail() {
             dilutionPercent: dilution,
             investorNames: roundForm.investor_names,
             notes: roundForm.notes,
+            ourValueTodayOverride: toNum(roundForm.our_value_today_override),
         };
 
         if (editingRoundId) {
@@ -326,6 +327,7 @@ export default function PortfolioCompanyDetail() {
             dilution_percent: fo.dilutionPercent?.toString() || '',
             investor_names: fo.investorNames || '',
             notes: fo.notes || '',
+            our_value_today_override: fo.ourValueTodayOverride?.toString() || '',
         });
         setShowAddRound(true);
     };
@@ -684,26 +686,121 @@ export default function PortfolioCompanyDetail() {
                                                 )}
                                             </div>
 
-                                            {/* Other investors + Our Value Today */}
+                                            {/* Other investors + Our Value Today (editable, auto fallback) */}
                                             <div className="form-group">
                                                 <label className="form-label">Other investors</label>
                                                 <input className="form-input" placeholder="e.g. Sequoia, Accel"
                                                     value={roundForm.investor_names} onChange={e => setRoundForm(f => ({ ...f, investor_names: e.target.value }))} />
                                             </div>
                                             <div className="form-group">
-                                                <label className="form-label">Our Value Today</label>
-                                                <div className="form-input" style={{
-                                                    display: 'flex', alignItems: 'center',
-                                                    background: 'var(--bg-secondary)',
-                                                    color: previewValueToday != null ? '#10b981' : 'var(--text-tertiary)',
-                                                    fontWeight: 600,
-                                                }}>
-                                                    {previewValueToday != null ? formatPortfolioCurrency(previewValueToday) : '—'}
-                                                    <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 8, fontWeight: 400 }}>
-                                                        {previewValueByShares != null ? '(shares × price)' : previewValueByEquity != null ? '(equity% × post)' : ''}
-                                                    </span>
-                                                </div>
+                                                <label className="form-label">Our Value Today (&#8377;)</label>
+                                                <input
+                                                    className="form-input"
+                                                    type="number"
+                                                    min="0"
+                                                    placeholder={previewValueToday != null ? `Auto: ${formatPortfolioCurrency(previewValueToday)}` : 'Override our value today'}
+                                                    value={roundForm.our_value_today_override}
+                                                    onChange={e => setRoundForm(f => ({ ...f, our_value_today_override: e.target.value }))}
+                                                />
+                                                {previewValueToday != null && !roundForm.our_value_today_override && (
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                        Auto: {formatPortfolioCurrency(previewValueToday)} {previewValueByShares != null ? '(shares × price)' : '(equity% × post)'}
+                                                    </div>
+                                                )}
                                             </div>
+                                        </>
+                                    )}
+
+                                    {!roundForm.did_we_invest && (
+                                        <>
+                                            {/* Total Money Raised + Outstanding Shares */}
+                                            <div className="form-group">
+                                                <label className="form-label">Total Money Raised in round {roundNumber} (&#8377;)</label>
+                                                <input className="form-input" type="number" min="0" placeholder="Total round size"
+                                                    value={roundForm.total_raised}
+                                                    onChange={e => setRoundForm(f => ({ ...f, total_raised: e.target.value }))} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Outstanding Shares in round {roundNumber}</label>
+                                                <input className="form-input" type="number" min="0" placeholder="Company's total outstanding shares"
+                                                    value={roundForm.total_shares} onChange={e => setRoundForm(f => ({ ...f, total_shares: e.target.value }))} />
+                                            </div>
+
+                                            {/* Share Price + Pre-Money */}
+                                            <div className="form-group">
+                                                <label className="form-label">Share Price in round {roundNumber} (&#8377;)</label>
+                                                <input className="form-input" type="number" min="0" placeholder="e.g. 1500"
+                                                    value={roundForm.share_price} onChange={e => setRoundForm(f => ({ ...f, share_price: e.target.value }))} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Pre-money Valuation in round {roundNumber} (&#8377;)</label>
+                                                <input className="form-input" type="number" min="0" placeholder="Pre-money"
+                                                    value={roundForm.pre_money_valuation} onChange={e => setRoundForm(f => ({ ...f, pre_money_valuation: e.target.value }))} />
+                                            </div>
+
+                                            {/* Post-money (AUTO) + Dilution (AUTO) */}
+                                            <div className="form-group">
+                                                <label className="form-label">Post-money Valuation in round {roundNumber} (&#8377;)</label>
+                                                <input className="form-input" type="number" min="0"
+                                                    placeholder={fmtMoneyPh(autoPost) || 'Post-money'}
+                                                    value={roundForm.post_money_valuation}
+                                                    onChange={e => setRoundForm(f => ({ ...f, post_money_valuation: e.target.value }))} />
+                                                {autoPost != null && autoPost > 0 && !roundForm.post_money_valuation && (
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                        Auto from pre + total raised: {formatPortfolioCurrency(autoPost)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Dilution in round {roundNumber} (%)</label>
+                                                <input className="form-input" type="number" min="0" step="0.01"
+                                                    placeholder={fmtPctPh(autoDilution) || 'e.g. 15.0'}
+                                                    value={roundForm.dilution_percent}
+                                                    onChange={e => setRoundForm(f => ({ ...f, dilution_percent: e.target.value }))} />
+                                                {autoDilution != null && !roundForm.dilution_percent && (
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                        Auto: prev ownership × (raised ÷ post-money) = {autoDilution.toFixed(2)}%
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Total ownership after round (AUTO) + Other investors */}
+                                            <div className="form-group">
+                                                <label className="form-label">Total ownership after round {roundNumber} (%)</label>
+                                                <input className="form-input" type="number" min="0" step="0.01"
+                                                    placeholder={fmtPctPh(autoOwnAfter) || 'e.g. 8.5'}
+                                                    value={roundForm.ownership_after}
+                                                    onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
+                                                {autoOwnAfter != null && !roundForm.ownership_after && (
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                        Auto: prev − dilution = {autoOwnAfter.toFixed(2)}%
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Other investors</label>
+                                                <input className="form-input" placeholder="e.g. Sequoia, Accel"
+                                                    value={roundForm.investor_names} onChange={e => setRoundForm(f => ({ ...f, investor_names: e.target.value }))} />
+                                            </div>
+
+                                            {/* Our Value Today */}
+                                            <div className="form-group">
+                                                <label className="form-label">Our Value Today (&#8377;)</label>
+                                                <input
+                                                    className="form-input"
+                                                    type="number"
+                                                    min="0"
+                                                    placeholder={previewValueToday != null ? `Auto: ${formatPortfolioCurrency(previewValueToday)}` : 'Override our value today'}
+                                                    value={roundForm.our_value_today_override}
+                                                    onChange={e => setRoundForm(f => ({ ...f, our_value_today_override: e.target.value }))}
+                                                />
+                                                {previewValueToday != null && !roundForm.our_value_today_override && (
+                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                        Auto: {formatPortfolioCurrency(previewValueToday)} {previewValueByShares != null ? '(shares × price)' : '(equity% × post)'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="form-group" />
                                         </>
                                     )}
                                 </div>
