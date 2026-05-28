@@ -768,7 +768,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.entryPreMoneyValuation != null ? { entry_pre_money_valuation: toBigint(data.entryPreMoneyValuation) } : {}),
             ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
             ...(data.entryTotalRaised != null ? { entry_total_raised: toBigint(data.entryTotalRaised) } : {}),
-            ...(data.noOfShares != null ? { no_of_shares: toBigint(data.noOfShares) } : {}),
+            ...(data.noOfShares != null ? { no_of_shares: data.noOfShares } : {}),
             ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
             ...(Array.isArray(data.founders) ? { founders: data.founders } : {}),
         };
@@ -864,9 +864,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             founders: 'founders',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
+        // noOfShares is intentionally absent: it's a NUMERIC column holding
+        // a decimal percentage (Total Ownership After Round %) and must not
+        // be rounded to an integer on save.
         const BIGINT_KEYS = new Set([
             'initialInvestment', 'entryValuation', 'latestValuation', 'exitValue',
-            'numShares', 'totalShares', 'noOfShares',
+            'numShares', 'totalShares',
             'entryPreMoneyValuation', 'entryPostMoneyValuation', 'entryTotalRaised',
             'totalFundRaise', 'valuation',
         ]);
@@ -1189,7 +1192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ownership_sought: data.ownershipSought ?? null,
             dilution_percent: data.dilutionPercent ?? null,
             our_value_today_override: data.ourValueTodayOverride ?? null,
-            no_of_shares: toBigint(data.noOfShares),
+            no_of_shares: data.noOfShares ?? null,
         };
 
         let { data: row, error } = await apiDb({
@@ -1231,7 +1234,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.dilutionPercent !== undefined) dbData.dilution_percent = data.dilutionPercent;
         if (data.ourValueTodayOverride !== undefined) dbData.our_value_today_override = data.ourValueTodayOverride;
         if (data.ownershipAfter !== undefined) dbData.ownership_after = data.ownershipAfter;
-        if (data.noOfShares !== undefined) dbData.no_of_shares = toBigint(data.noOfShares);
+        if (data.noOfShares !== undefined) dbData.no_of_shares = data.noOfShares;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;
         await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } });

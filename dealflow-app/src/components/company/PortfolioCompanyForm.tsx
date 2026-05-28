@@ -546,11 +546,11 @@ export default function PortfolioCompanyForm() {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Number of Shares (Owned by DV)</label>
-                            <input className="form-input" type="number" placeholder="e.g. 40000" value={form.num_shares} onChange={upd('num_shares')} />
+                            <input className="form-input" type="number" min="0" placeholder="e.g. 40000" value={form.num_shares} onChange={upd('num_shares')} />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Outstanding Shares</label>
-                            <input className="form-input" type="number" placeholder="Company's total outstanding shares" value={form.total_shares} onChange={upd('total_shares')} />
+                            <input className="form-input" type="number" min="0" placeholder="Company's total outstanding shares" value={form.total_shares} onChange={upd('total_shares')} />
                         </div>
                     </div>
 
@@ -611,6 +611,7 @@ export default function PortfolioCompanyForm() {
                             <input
                                 className="form-input"
                                 type="number"
+                                min="0"
                                 step="0.01"
                                 placeholder="e.g. 8.5"
                                 value={form.no_of_shares}
@@ -762,6 +763,7 @@ export default function PortfolioCompanyForm() {
                                             <input
                                                 className="form-input"
                                                 type="number"
+                                                min="0"
                                                 placeholder="e.g. 5000"
                                                 value={fo.numShares}
                                                 onChange={e => updateFollowOnRow(idx, 'numShares', e.target.value)}
@@ -775,6 +777,7 @@ export default function PortfolioCompanyForm() {
                                             <input
                                                 className="form-input"
                                                 type="number"
+                                                min="0"
                                                 placeholder="Company's total outstanding shares"
                                                 value={fo.totalShares}
                                                 onChange={e => updateFollowOnRow(idx, 'totalShares', e.target.value)}
@@ -785,6 +788,8 @@ export default function PortfolioCompanyForm() {
                                             <input
                                                 className="form-input"
                                                 type="number"
+                                                min="0"
+                                                step="0.01"
                                                 placeholder="Used to compute valuation"
                                                 value={fo.noOfShares}
                                                 onChange={e => updateFollowOnRow(idx, 'noOfShares', e.target.value)}
