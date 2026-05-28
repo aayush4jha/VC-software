@@ -386,12 +386,21 @@ export default function PortfolioCompanyForm() {
             .map(f => ({ name: f.name.trim(), email: f.email.trim() }))
             .filter(f => f.name || f.email);
 
+        // Convert the date input's "YYYY-MM-DD" string to a full ISO timestamp
+        // so Postgres can't fall back to a date-only interpretation. We anchor
+        // to local midnight then serialize as UTC ISO; the detail panel parses
+        // it back via `new Date(...).toLocaleDateString(...)` and shows the
+        // original calendar day.
+        const entryDateIso = form.entry_date
+            ? new Date(`${form.entry_date}T00:00:00`).toISOString()
+            : null;
+
         const data: Record<string, unknown> = {
             companyName: form.company_name,
             // The user's Entry Date drives created_at. Without this, Postgres
             // would fall back to now() and the detail panel would always show
             // today's date even when the user picked a backdated entry.
-            createdAt: form.entry_date,
+            createdAt: entryDateIso,
             // Mirror the first founder into the legacy single-name / single-email
             // columns so any older readers stay correct.
             founderName: cleanedFounders[0]?.name || '',

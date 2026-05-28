@@ -776,9 +776,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.createdAt ? { created_at: data.createdAt } : {}),
         };
 
+        // Verifiable trace for the entry-date bug.
+        if (data.createdAt) {
+            console.log('[createCompany] sending created_at:', data.createdAt);
+        }
+
         let { data: row, error } = await apiDb({
             table: 'companies', operation: 'insert', data: insertPayload,
         });
+
+        if (row && (row as { created_at?: string }).created_at) {
+            console.log('[createCompany] db returned created_at:', (row as { created_at?: string }).created_at);
+        }
 
         // Forward-compat: if the DB hasn't been migrated yet, retry without any
         // columns Postgres says are missing instead of failing the whole insert.
