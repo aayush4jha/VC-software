@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Send, Mail, CheckCircle, AlertCircle, Loader2, LogIn } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error' | 'auth-required';
 
@@ -30,6 +31,8 @@ export default function EmailCompose() {
             setStatusMessage('');
         }
     }, [showEmailCompose, selectedCompany]);
+
+    useEscapeKey(showEmailCompose, () => setShowEmailCompose(false));
 
     if (!showEmailCompose) return null;
 

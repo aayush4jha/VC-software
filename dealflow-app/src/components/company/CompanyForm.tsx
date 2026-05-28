@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, Search } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
 
@@ -111,6 +112,11 @@ export default function CompanyForm() {
             setForm(f => ({ ...f, pipeline_stage_id: pipelineStages[0]?.id || '', industry_id: industries[0]?.id || '', deal_source_name_id: dealSourceNames[0]?.id || '' }));
         }
     }, [editingCompany, pipelineStages, industries, dealSourceNames, companies]);
+
+    useEscapeKey(showCompanyForm, () => {
+        setShowCompanyForm(false);
+        setEditingCompany(null);
+    });
 
     if (!showCompanyForm) return null;
 

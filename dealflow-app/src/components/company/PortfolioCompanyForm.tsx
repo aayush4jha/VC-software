@@ -5,6 +5,7 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
 import { formatPortfolioCurrency, formatPortfolioCurrencyExact } from '@/lib/portfolio-utils';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
 
@@ -332,6 +333,13 @@ export default function PortfolioCompanyForm() {
             setFounders([{ name: '', email: '' }]);
         }
     }, [editingCompany, isEditing, industries, dealSourceNames, fetchFollowOns]);
+
+    useEscapeKey(showCompanyForm && (isEditing || companyFormPortfolioMode), () => {
+        setShowCompanyForm(false);
+        setEditingCompany(null);
+        setCompanyFormPortfolioMode(false);
+        setSubmitError(null);
+    });
 
     if (!showCompanyForm) return null;
     if (!isEditing && !companyFormPortfolioMode) return null;

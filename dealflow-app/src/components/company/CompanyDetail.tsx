@@ -11,6 +11,7 @@ import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import type { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
 import { downloadAsDocx, downloadAsPdf } from '@/lib/report-download';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
 const priorities: PriorityLevel[] = ['Low', 'Medium', 'High'];
@@ -176,6 +177,8 @@ export default function CompanyDetail() {
             .finally(() => { if (!cancelled) setSearchingDeckEmail(false); });
         return () => { cancelled = true; };
     }, [selectedCompany?.id]);
+
+    useEscapeKey(!!selectedCompany, () => setSelectedCompany(null));
 
     if (!selectedCompany) return null;
 

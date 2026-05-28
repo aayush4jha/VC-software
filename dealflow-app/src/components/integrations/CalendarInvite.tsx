@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, Calendar, Video, Clock, Send, ExternalLink, CheckCircle, AlertCircle, Loader2, LogIn, Link2, Plus, Users } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 type SendStatus = 'idle' | 'creating' | 'success' | 'error' | 'auth-required' | 'booking-sent';
 
@@ -78,6 +79,8 @@ export default function CalendarInvite() {
             setTime(nt);
         }
     }, [showCalendarInvite]);
+
+    useEscapeKey(showCalendarInvite, () => setShowCalendarInvite(false));
 
     if (!showCalendarInvite || !selectedCompany) return null;
 

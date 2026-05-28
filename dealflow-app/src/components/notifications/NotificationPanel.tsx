@@ -5,6 +5,7 @@ import { Bell, UserPlus, AlertTriangle, ArrowRightCircle, MessageSquare, Package
 import { useAppContext } from '@/lib/context';
 import { formatDistanceToNow } from 'date-fns';
 import { NotificationType } from '@/types/database';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const iconMap: Record<NotificationType, { icon: React.ElementType; bg: string; color: string }> = {
     assignment: { icon: UserPlus, bg: 'var(--info-bg)', color: 'var(--info)' },
@@ -17,6 +18,8 @@ const iconMap: Record<NotificationType, { icon: React.ElementType; bg: string; c
 export default function NotificationPanel() {
     const { setShowNotifications, notifications, markNotificationsRead } = useAppContext();
     const userNotifs = notifications;
+
+    useEscapeKey(true, () => setShowNotifications(false));
 
     return (
         <>

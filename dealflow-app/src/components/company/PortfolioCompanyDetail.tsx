@@ -11,6 +11,7 @@ import {
     getPortfolioStage, getCurrentStage,
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -106,6 +107,8 @@ export default function PortfolioCompanyDetail() {
             setNotesDirty(false);
         }
     }, [c?.id, isPortfolio]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEscapeKey(!!c && isPortfolio, () => setSelectedCompany(null));
 
     if (!c || !isPortfolio) return null;
 

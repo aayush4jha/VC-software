@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X, Send, Sparkles, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { CommunicationMethod } from '@/types/database';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const communicationMethods: CommunicationMethod[] = [
     'Email', 'Verbal', 'WhatsApp', 'Call', 'Not Yet Communicated'
@@ -20,6 +21,8 @@ export default function RejectionFlow() {
     const [sendingEmail, setSendingEmail] = useState(false);
     const [sendStatus, setSendStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [statusMessage, setStatusMessage] = useState('');
+
+    useEscapeKey(showRejectionFlow, () => setShowRejectionFlow(false));
 
     if (!showRejectionFlow || !selectedCompany) return null;
 
