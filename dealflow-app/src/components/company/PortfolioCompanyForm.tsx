@@ -91,6 +91,32 @@ const toNum = (s: string): number | null => {
     return Number.isFinite(n) ? n : null;
 };
 
+// Clickable chip used under every auto-calculated input. Click → fills the
+// input with the raw numeric value. The formula description sits in the
+// title attribute so power-users can hover to see where the number came from.
+function AutoFillChip({ display, formula, onUse }: { display: string; formula?: string; onUse: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onUse}
+            title={formula}
+            style={{
+                marginTop: 4,
+                padding: '3px 8px',
+                fontSize: 11,
+                borderRadius: 4,
+                border: '1px solid #6366f1',
+                background: 'rgba(99, 102, 241, 0.08)',
+                color: '#6366f1',
+                cursor: 'pointer',
+                fontWeight: 500,
+            }}
+        >
+            Auto: {display}
+        </button>
+    );
+}
+
 export default function PortfolioCompanyForm() {
     const {
         showCompanyForm, setShowCompanyForm,
@@ -614,9 +640,11 @@ export default function PortfolioCompanyForm() {
                                 onChange={upd('entry_total_raised')}
                             />
                             {totalRaisedFromValuations != null && totalRaisedFromValuations > 0 && !form.entry_total_raised && (
-                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                    Auto from post &minus; pre: {formatPortfolioCurrency(totalRaisedFromValuations)} (override above if different)
-                                </div>
+                                <AutoFillChip
+                                    display={formatPortfolioCurrency(totalRaisedFromValuations)}
+                                    formula="Post-money − pre-money"
+                                    onUse={() => setForm(f => ({ ...f, entry_total_raised: String(totalRaisedFromValuations) }))}
+                                />
                             )}
                         </div>
                     </div>
@@ -661,9 +689,11 @@ export default function PortfolioCompanyForm() {
                                 onChange={upd('entry_post_money_valuation')}
                             />
                             {computedPostMoney != null && computedPostMoney > 0 && !form.entry_post_money_valuation && (
-                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                    Auto from pre-money + total raised: {formatPortfolioCurrency(computedPostMoney)} (override above if different)
-                                </div>
+                                <AutoFillChip
+                                    display={formatPortfolioCurrency(computedPostMoney)}
+                                    formula="Pre-money + total raised"
+                                    onUse={() => setForm(f => ({ ...f, entry_post_money_valuation: String(computedPostMoney) }))}
+                                />
                             )}
                         </div>
                         <div className="form-group">
@@ -675,10 +705,12 @@ export default function PortfolioCompanyForm() {
                                 value={form.entry_ownership}
                                 onChange={upd('entry_ownership')}
                             />
-                            {computedEntryOwnership != null && (
-                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                    Computed: Investment / Post-money = {computedEntryOwnership.toFixed(2)}% (override above if needed)
-                                </div>
+                            {computedEntryOwnership != null && !form.entry_ownership && (
+                                <AutoFillChip
+                                    display={`${computedEntryOwnership.toFixed(2)}%`}
+                                    formula="Initial investment ÷ post-money × 100"
+                                    onUse={() => setForm(f => ({ ...f, entry_ownership: computedEntryOwnership.toFixed(2) }))}
+                                />
                             )}
                         </div>
                     </div>
@@ -701,9 +733,11 @@ export default function PortfolioCompanyForm() {
                                 onChange={upd('no_of_shares')}
                             />
                             {effectiveEntryOwnership != null && !form.no_of_shares && (
-                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                    Auto: equals entry ownership at the entry round = {effectiveEntryOwnership.toFixed(2)}%
-                                </div>
+                                <AutoFillChip
+                                    display={`${effectiveEntryOwnership.toFixed(2)}%`}
+                                    formula="Equals entry ownership at the entry round"
+                                    onUse={() => setForm(f => ({ ...f, no_of_shares: effectiveEntryOwnership.toFixed(2) }))}
+                                />
                             )}
                         </div>
                         <div className="form-group">
@@ -922,9 +956,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'postMoneyValuation', e.target.value)}
                                                     />
                                                     {auto.postMoney != null && auto.postMoney > 0 && !fo.postMoneyValuation && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto from pre + total raised: {formatPortfolioCurrency(auto.postMoney)}
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={formatPortfolioCurrency(auto.postMoney)}
+                                                            formula="Pre-money + total raised"
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'postMoneyValuation', String(auto.postMoney))}
+                                                        />
                                                     )}
                                                 </div>
                                                 <div className="form-group">
@@ -939,9 +975,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'ownershipSought', e.target.value)}
                                                     />
                                                     {auto.ownershipSought != null && !fo.ownershipSought && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto: our investment ÷ post-money = {auto.ownershipSought.toFixed(2)}%
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={`${auto.ownershipSought.toFixed(2)}%`}
+                                                            formula="Our investment ÷ post-money × 100"
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'ownershipSought', auto.ownershipSought!.toFixed(2))}
+                                                        />
                                                     )}
                                                 </div>
                                             </div>
@@ -960,9 +998,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'dilutionPercent', e.target.value)}
                                                     />
                                                     {auto.dilution != null && !fo.dilutionPercent && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto: prev ownership × (raised ÷ post-money) = {auto.dilution.toFixed(2)}%
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={`${auto.dilution.toFixed(2)}%`}
+                                                            formula="Previous ownership × (total raised ÷ post-money)"
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'dilutionPercent', auto.dilution!.toFixed(2))}
+                                                        />
                                                     )}
                                                 </div>
                                                 <div className="form-group">
@@ -977,9 +1017,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'ownershipAfter', e.target.value)}
                                                     />
                                                     {auto.ownershipAfter != null && !fo.ownershipAfter && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto: prev − dilution + sought = {auto.ownershipAfter.toFixed(2)}%
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={`${auto.ownershipAfter.toFixed(2)}%`}
+                                                            formula="Previous ownership − dilution + equity sought"
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'ownershipAfter', auto.ownershipAfter!.toFixed(2))}
+                                                        />
                                                     )}
                                                 </div>
                                             </div>
@@ -1006,9 +1048,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', e.target.value)}
                                                     />
                                                     {valueToday != null && !fo.ourValueTodayOverride && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto: {formatPortfolioCurrency(valueToday)} {valueByShares != null ? '(shares × price)' : '(equity% × post)'}
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={formatPortfolioCurrency(valueToday)}
+                                                            formula={valueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', String(Math.round(valueToday)))}
+                                                        />
                                                     )}
                                                 </div>
                                             </div>
@@ -1082,9 +1126,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'postMoneyValuation', e.target.value)}
                                                     />
                                                     {auto.postMoney != null && auto.postMoney > 0 && !fo.postMoneyValuation && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto from pre + total raised: {formatPortfolioCurrency(auto.postMoney)}
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={formatPortfolioCurrency(auto.postMoney)}
+                                                            formula="Pre-money + total raised"
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'postMoneyValuation', String(auto.postMoney))}
+                                                        />
                                                     )}
                                                 </div>
                                                 <div className="form-group">
@@ -1099,9 +1145,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'dilutionPercent', e.target.value)}
                                                     />
                                                     {auto.dilution != null && !fo.dilutionPercent && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto: prev ownership × (raised ÷ post-money) = {auto.dilution.toFixed(2)}%
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={`${auto.dilution.toFixed(2)}%`}
+                                                            formula="Previous ownership × (total raised ÷ post-money)"
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'dilutionPercent', auto.dilution!.toFixed(2))}
+                                                        />
                                                     )}
                                                 </div>
                                             </div>
@@ -1120,9 +1168,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'ownershipAfter', e.target.value)}
                                                     />
                                                     {auto.ownershipAfter != null && !fo.ownershipAfter && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto: prev − dilution = {auto.ownershipAfter.toFixed(2)}%
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={`${auto.ownershipAfter.toFixed(2)}%`}
+                                                            formula="Previous ownership − dilution"
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'ownershipAfter', auto.ownershipAfter!.toFixed(2))}
+                                                        />
                                                     )}
                                                 </div>
                                                 <div className="form-group">
@@ -1149,9 +1199,11 @@ export default function PortfolioCompanyForm() {
                                                         onChange={e => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', e.target.value)}
                                                     />
                                                     {valueToday != null && !fo.ourValueTodayOverride && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                            Auto: {formatPortfolioCurrency(valueToday)} {valueByShares != null ? '(shares × price)' : '(equity% × post)'}
-                                                        </div>
+                                                        <AutoFillChip
+                                                            display={formatPortfolioCurrency(valueToday)}
+                                                            formula={valueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
+                                                            onUse={() => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', String(Math.round(valueToday)))}
+                                                        />
                                                     )}
                                                 </div>
                                                 <div className="form-group" />

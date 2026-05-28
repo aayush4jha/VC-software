@@ -642,9 +642,11 @@ export default function PortfolioCompanyDetail() {
                                                     placeholder={fmtMoneyPh(autoPost) || 'Post-money'}
                                                     value={roundForm.post_money_valuation} onChange={e => setRoundForm(f => ({ ...f, post_money_valuation: e.target.value }))} />
                                                 {autoPost != null && autoPost > 0 && !roundForm.post_money_valuation && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto from pre + total raised: {formatPortfolioCurrency(autoPost)}
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={formatPortfolioCurrency(autoPost)}
+                                                        formula="Pre-money + total raised"
+                                                        onUse={() => setRoundForm(f => ({ ...f, post_money_valuation: String(autoPost) }))}
+                                                    />
                                                 )}
                                             </div>
                                             <div className="form-group">
@@ -654,9 +656,11 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.ownership_sought}
                                                     onChange={e => setRoundForm(f => ({ ...f, ownership_sought: e.target.value }))} />
                                                 {autoEquitySought != null && !roundForm.ownership_sought && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto: our investment ÷ post-money = {autoEquitySought.toFixed(2)}%
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={`${autoEquitySought.toFixed(2)}%`}
+                                                        formula="Our investment ÷ post-money × 100"
+                                                        onUse={() => setRoundForm(f => ({ ...f, ownership_sought: autoEquitySought.toFixed(2) }))}
+                                                    />
                                                 )}
                                             </div>
 
@@ -668,9 +672,11 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.dilution_percent}
                                                     onChange={e => setRoundForm(f => ({ ...f, dilution_percent: e.target.value }))} />
                                                 {autoDilution != null && !roundForm.dilution_percent && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto: prev ownership × (raised ÷ post-money) = {autoDilution.toFixed(2)}%
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={`${autoDilution.toFixed(2)}%`}
+                                                        formula="Previous ownership × (total raised ÷ post-money)"
+                                                        onUse={() => setRoundForm(f => ({ ...f, dilution_percent: autoDilution.toFixed(2) }))}
+                                                    />
                                                 )}
                                             </div>
                                             <div className="form-group">
@@ -680,9 +686,11 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.ownership_after}
                                                     onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
                                                 {autoOwnAfter != null && !roundForm.ownership_after && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto: prev − dilution + sought = {autoOwnAfter.toFixed(2)}%
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={`${autoOwnAfter.toFixed(2)}%`}
+                                                        formula="Previous ownership − dilution + equity sought"
+                                                        onUse={() => setRoundForm(f => ({ ...f, ownership_after: autoOwnAfter.toFixed(2) }))}
+                                                    />
                                                 )}
                                             </div>
 
@@ -703,9 +711,11 @@ export default function PortfolioCompanyDetail() {
                                                     onChange={e => setRoundForm(f => ({ ...f, our_value_today_override: e.target.value }))}
                                                 />
                                                 {previewValueToday != null && !roundForm.our_value_today_override && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto: {formatPortfolioCurrency(previewValueToday)} {previewValueByShares != null ? '(shares × price)' : '(equity% × post)'}
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={formatPortfolioCurrency(previewValueToday)}
+                                                        formula={previewValueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
+                                                        onUse={() => setRoundForm(f => ({ ...f, our_value_today_override: String(Math.round(previewValueToday)) }))}
+                                                    />
                                                 )}
                                             </div>
                                         </>
@@ -746,9 +756,11 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.post_money_valuation}
                                                     onChange={e => setRoundForm(f => ({ ...f, post_money_valuation: e.target.value }))} />
                                                 {autoPost != null && autoPost > 0 && !roundForm.post_money_valuation && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto from pre + total raised: {formatPortfolioCurrency(autoPost)}
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={formatPortfolioCurrency(autoPost)}
+                                                        formula="Pre-money + total raised"
+                                                        onUse={() => setRoundForm(f => ({ ...f, post_money_valuation: String(autoPost) }))}
+                                                    />
                                                 )}
                                             </div>
                                             <div className="form-group">
@@ -758,9 +770,11 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.dilution_percent}
                                                     onChange={e => setRoundForm(f => ({ ...f, dilution_percent: e.target.value }))} />
                                                 {autoDilution != null && !roundForm.dilution_percent && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto: prev ownership × (raised ÷ post-money) = {autoDilution.toFixed(2)}%
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={`${autoDilution.toFixed(2)}%`}
+                                                        formula="Previous ownership × (total raised ÷ post-money)"
+                                                        onUse={() => setRoundForm(f => ({ ...f, dilution_percent: autoDilution.toFixed(2) }))}
+                                                    />
                                                 )}
                                             </div>
 
@@ -772,9 +786,11 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.ownership_after}
                                                     onChange={e => setRoundForm(f => ({ ...f, ownership_after: e.target.value }))} />
                                                 {autoOwnAfter != null && !roundForm.ownership_after && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto: prev − dilution = {autoOwnAfter.toFixed(2)}%
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={`${autoOwnAfter.toFixed(2)}%`}
+                                                        formula="Previous ownership − dilution"
+                                                        onUse={() => setRoundForm(f => ({ ...f, ownership_after: autoOwnAfter.toFixed(2) }))}
+                                                    />
                                                 )}
                                             </div>
                                             <div className="form-group">
@@ -795,9 +811,11 @@ export default function PortfolioCompanyDetail() {
                                                     onChange={e => setRoundForm(f => ({ ...f, our_value_today_override: e.target.value }))}
                                                 />
                                                 {previewValueToday != null && !roundForm.our_value_today_override && (
-                                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                                        Auto: {formatPortfolioCurrency(previewValueToday)} {previewValueByShares != null ? '(shares × price)' : '(equity% × post)'}
-                                                    </div>
+                                                    <AutoFillChip
+                                                        display={formatPortfolioCurrency(previewValueToday)}
+                                                        formula={previewValueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
+                                                        onUse={() => setRoundForm(f => ({ ...f, our_value_today_override: String(Math.round(previewValueToday)) }))}
+                                                    />
                                                 )}
                                             </div>
                                             <div className="form-group" />
@@ -1013,6 +1031,32 @@ export default function PortfolioCompanyDetail() {
 // Inline editor for the founders array: name + email per row, with an
 // Add Founder button, and a remove button on every row past the first.
 // Writes the full array via onChange whenever the user commits an edit.
+// Clickable chip used under every auto-calculated input. Click → fills the
+// input with the raw numeric value. The formula description sits in the
+// title attribute so power-users can hover to see where the number came from.
+function AutoFillChip({ display, formula, onUse }: { display: string; formula?: string; onUse: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onUse}
+            title={formula}
+            style={{
+                marginTop: 4,
+                padding: '3px 8px',
+                fontSize: 11,
+                borderRadius: 4,
+                border: '1px solid #6366f1',
+                background: 'rgba(99, 102, 241, 0.08)',
+                color: '#6366f1',
+                cursor: 'pointer',
+                fontWeight: 500,
+            }}
+        >
+            Auto: {display}
+        </button>
+    );
+}
+
 function FoundersEditor({ company, onChange }: { company: Company; onChange: (next: Founder[]) => Promise<void> | void }) {
     const seed = (): Founder[] => {
         if (company.founders && company.founders.length > 0) return company.founders;
