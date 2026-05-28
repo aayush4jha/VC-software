@@ -771,6 +771,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.noOfShares != null ? { no_of_shares: data.noOfShares } : {}),
             ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
             ...(Array.isArray(data.founders) ? { founders: data.founders } : {}),
+            // Honor caller-supplied created_at (e.g. backdated portfolio
+            // entries). Without this, Postgres applies now() as the default.
+            ...(data.createdAt ? { created_at: data.createdAt } : {}),
         };
 
         let { data: row, error } = await apiDb({
@@ -862,6 +865,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             noOfShares: 'no_of_shares',
             portfolioHealth: 'portfolio_health',
             founders: 'founders',
+            createdAt: 'created_at',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         // noOfShares is intentionally absent: it's a NUMERIC column holding

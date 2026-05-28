@@ -362,6 +362,10 @@ export default function PortfolioCompanyForm() {
 
         const data: Record<string, unknown> = {
             companyName: form.company_name,
+            // The user's Entry Date drives created_at. Without this, Postgres
+            // would fall back to now() and the detail panel would always show
+            // today's date even when the user picked a backdated entry.
+            createdAt: form.entry_date,
             // Mirror the first founder into the legacy single-name / single-email
             // columns so any older readers stay correct.
             founderName: cleanedFounders[0]?.name || '',
