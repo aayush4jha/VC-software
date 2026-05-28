@@ -284,17 +284,17 @@ export default function PortfolioCompanyDetail() {
             setFollowOns(prev => [...prev, created]);
         }
 
-        // Auto-update company fields based on the round
+        // Auto-update company fields based on the round.
+        // companyRound represents the ENTRY round and must not be touched here
+        // — Current Stage is derived from the latest follow-on via
+        // getCurrentStage(), so writing companyRound on every save would
+        // silently clobber the user's entry-stage choice.
         const companyUpdates: Record<string, unknown> = {};
         if (postMoney != null && postMoney > 0) {
             companyUpdates.latestValuation = postMoney;
         }
         if (ownerAfter != null) {
             companyUpdates.currentOwnership = ownerAfter;
-        }
-        const knownStages = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
-        if (knownStages.includes(roundForm.round_name)) {
-            companyUpdates.companyRound = roundForm.round_name;
         }
         if (Object.keys(companyUpdates).length > 0) {
             await updateCompany(c.id, companyUpdates);
