@@ -567,29 +567,18 @@ export default function PortfolioCompanyForm() {
                         </div>
                     </div>
 
-                    {/* Current DV Shareholding + Share Type */}
+                    {/* Total Ownership After Round + Share Type */}
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">Current DV Shareholding</label>
+                            <label className="form-label">Total Ownership After Round (%)</label>
                             <input
                                 className="form-input"
                                 type="number"
-                                placeholder="Used to compute valuation"
+                                step="0.01"
+                                placeholder="e.g. 8.5"
                                 value={form.no_of_shares}
                                 onChange={upd('no_of_shares')}
                             />
-                            {(() => {
-                                const n = toNum(form.no_of_shares);
-                                const p = toNum(form.share_price);
-                                if (n != null && p != null && n > 0 && p > 0) {
-                                    return (
-                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                                            Implied valuation: {formatPortfolioCurrency(n * p)} (shares × share price)
-                                        </div>
-                                    );
-                                }
-                                return null;
-                            })()}
                         </div>
                         <div className="form-group">
                             <label className="form-label">Share Type</label>
