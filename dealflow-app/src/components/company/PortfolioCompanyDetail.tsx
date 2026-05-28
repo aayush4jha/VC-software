@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/lib/context';
 import {
     getTotalInvested, getLatestValuation, getCurrentOwnership,
-    getCompanyIRR, getCompanyMOIC, formatPortfolioCurrency,
+    getCompanyIRR, getCompanyMOIC, formatPortfolioCurrency, formatPortfolioCurrencyExact,
     formatMOIC, formatXIRR, PORTFOLIO_STAGE_COLORS,
     getPortfolioStage, getCurrentStage,
 } from '@/lib/portfolio-utils';
@@ -565,7 +565,7 @@ export default function PortfolioCompanyDetail() {
                             const previewValueByEquity = effectiveOwnAfter != null && effectivePost != null ? (effectiveOwnAfter / 100) * effectivePost : null;
                             const previewValueToday = previewValueByShares ?? previewValueByEquity;
 
-                            const fmtMoneyPh = (v: number | null) => v != null && v > 0 ? `Auto: ${formatPortfolioCurrency(v)}` : '';
+                            const fmtMoneyPh = (v: number | null) => v != null && v > 0 ? `Auto: ${formatPortfolioCurrencyExact(v)}` : '';
                             const fmtPctPh = (v: number | null) => v != null ? `Auto: ${v.toFixed(2)}%` : '';
 
                             return (
@@ -643,7 +643,7 @@ export default function PortfolioCompanyDetail() {
                                                     value={roundForm.post_money_valuation} onChange={e => setRoundForm(f => ({ ...f, post_money_valuation: e.target.value }))} />
                                                 {autoPost != null && autoPost > 0 && !roundForm.post_money_valuation && (
                                                     <AutoFillChip
-                                                        display={formatPortfolioCurrency(autoPost)}
+                                                        display={formatPortfolioCurrencyExact(autoPost)}
                                                         formula="Pre-money + total raised"
                                                         onUse={() => setRoundForm(f => ({ ...f, post_money_valuation: String(autoPost) }))}
                                                     />
@@ -706,13 +706,13 @@ export default function PortfolioCompanyDetail() {
                                                     className="form-input"
                                                     type="number"
                                                     min="0"
-                                                    placeholder={previewValueToday != null ? `Auto: ${formatPortfolioCurrency(previewValueToday)}` : 'Override our value today'}
+                                                    placeholder={previewValueToday != null ? `Auto: ${formatPortfolioCurrencyExact(previewValueToday)}` : 'Override our value today'}
                                                     value={roundForm.our_value_today_override}
                                                     onChange={e => setRoundForm(f => ({ ...f, our_value_today_override: e.target.value }))}
                                                 />
                                                 {previewValueToday != null && !roundForm.our_value_today_override && (
                                                     <AutoFillChip
-                                                        display={formatPortfolioCurrency(previewValueToday)}
+                                                        display={formatPortfolioCurrencyExact(previewValueToday)}
                                                         formula={previewValueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
                                                         onUse={() => setRoundForm(f => ({ ...f, our_value_today_override: String(Math.round(previewValueToday)) }))}
                                                     />
@@ -757,7 +757,7 @@ export default function PortfolioCompanyDetail() {
                                                     onChange={e => setRoundForm(f => ({ ...f, post_money_valuation: e.target.value }))} />
                                                 {autoPost != null && autoPost > 0 && !roundForm.post_money_valuation && (
                                                     <AutoFillChip
-                                                        display={formatPortfolioCurrency(autoPost)}
+                                                        display={formatPortfolioCurrencyExact(autoPost)}
                                                         formula="Pre-money + total raised"
                                                         onUse={() => setRoundForm(f => ({ ...f, post_money_valuation: String(autoPost) }))}
                                                     />
@@ -806,13 +806,13 @@ export default function PortfolioCompanyDetail() {
                                                     className="form-input"
                                                     type="number"
                                                     min="0"
-                                                    placeholder={previewValueToday != null ? `Auto: ${formatPortfolioCurrency(previewValueToday)}` : 'Override our value today'}
+                                                    placeholder={previewValueToday != null ? `Auto: ${formatPortfolioCurrencyExact(previewValueToday)}` : 'Override our value today'}
                                                     value={roundForm.our_value_today_override}
                                                     onChange={e => setRoundForm(f => ({ ...f, our_value_today_override: e.target.value }))}
                                                 />
                                                 {previewValueToday != null && !roundForm.our_value_today_override && (
                                                     <AutoFillChip
-                                                        display={formatPortfolioCurrency(previewValueToday)}
+                                                        display={formatPortfolioCurrencyExact(previewValueToday)}
                                                         formula={previewValueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
                                                         onUse={() => setRoundForm(f => ({ ...f, our_value_today_override: String(Math.round(previewValueToday)) }))}
                                                     />

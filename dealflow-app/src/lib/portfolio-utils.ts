@@ -12,6 +12,14 @@ export function formatPortfolioCurrency(amount: number): string {
     return `₹${amount.toFixed(2)}`;
 }
 
+// Exact rupee formatting with Indian thousands grouping. Use this whenever
+// the displayed number must equal the saved number to the last digit — for
+// example on the AutoFillChip, where the user expects "click to use" to fill
+// the input with the exact same value the chip displays.
+export function formatPortfolioCurrencyExact(amount: number): string {
+    return `₹${Math.round(amount).toLocaleString('en-IN')}`;
+}
+
 export function formatUSD(inrAmount: number): string {
     const usd = inrAmount / 83;
     if (usd >= 1000000000) return `$${(usd / 1000000000).toFixed(2)}B`;

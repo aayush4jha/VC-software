@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
-import { formatPortfolioCurrency } from '@/lib/portfolio-utils';
+import { formatPortfolioCurrency, formatPortfolioCurrencyExact } from '@/lib/portfolio-utils';
 
 type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
 
@@ -642,7 +642,7 @@ export default function PortfolioCompanyForm() {
                                 type="number"
                                 placeholder={
                                     totalRaisedFromValuations != null && totalRaisedFromValuations > 0
-                                        ? `Implied: ${formatPortfolioCurrency(totalRaisedFromValuations)}`
+                                        ? `Auto: ${formatPortfolioCurrencyExact(totalRaisedFromValuations)}`
                                         : 'Total round size'
                                 }
                                 value={form.entry_total_raised}
@@ -650,7 +650,7 @@ export default function PortfolioCompanyForm() {
                             />
                             {totalRaisedFromValuations != null && totalRaisedFromValuations > 0 && !form.entry_total_raised && (
                                 <AutoFillChip
-                                    display={formatPortfolioCurrency(totalRaisedFromValuations)}
+                                    display={formatPortfolioCurrencyExact(totalRaisedFromValuations)}
                                     formula="Post-money − pre-money"
                                     onUse={() => setForm(f => ({ ...f, entry_total_raised: String(totalRaisedFromValuations) }))}
                                 />
@@ -691,7 +691,7 @@ export default function PortfolioCompanyForm() {
                                 type="number"
                                 placeholder={
                                     computedPostMoney != null && computedPostMoney > 0
-                                        ? `Auto: ${formatPortfolioCurrency(computedPostMoney)}`
+                                        ? `Auto: ${formatPortfolioCurrencyExact(computedPostMoney)}`
                                         : 'Post-money valuation'
                                 }
                                 value={form.entry_post_money_valuation}
@@ -699,7 +699,7 @@ export default function PortfolioCompanyForm() {
                             />
                             {computedPostMoney != null && computedPostMoney > 0 && !form.entry_post_money_valuation && (
                                 <AutoFillChip
-                                    display={formatPortfolioCurrency(computedPostMoney)}
+                                    display={formatPortfolioCurrencyExact(computedPostMoney)}
                                     formula="Pre-money + total raised"
                                     onUse={() => setForm(f => ({ ...f, entry_post_money_valuation: String(computedPostMoney) }))}
                                 />
@@ -806,7 +806,7 @@ export default function PortfolioCompanyForm() {
                             const valueByShares = foShares != null && foPrice != null ? foShares * foPrice : null;
                             const valueByEquity = foOwn != null && foPost != null ? (foOwn / 100) * foPost : null;
                             const valueToday = valueByShares ?? valueByEquity;
-                            const fmtMoneyPh = (v: number | null) => v != null && v > 0 ? `Auto: ${formatPortfolioCurrency(v)}` : '';
+                            const fmtMoneyPh = (v: number | null) => v != null && v > 0 ? `Auto: ${formatPortfolioCurrencyExact(v)}` : '';
                             const fmtPercentPh = (v: number | null) => v != null ? `Auto: ${v.toFixed(2)}%` : '';
 
                             return (
@@ -966,7 +966,7 @@ export default function PortfolioCompanyForm() {
                                                     />
                                                     {auto.postMoney != null && auto.postMoney > 0 && !fo.postMoneyValuation && (
                                                         <AutoFillChip
-                                                            display={formatPortfolioCurrency(auto.postMoney)}
+                                                            display={formatPortfolioCurrencyExact(auto.postMoney)}
                                                             formula="Pre-money + total raised"
                                                             onUse={() => updateFollowOnRow(originalIdx, 'postMoneyValuation', String(auto.postMoney))}
                                                         />
@@ -1052,13 +1052,13 @@ export default function PortfolioCompanyForm() {
                                                         className="form-input"
                                                         type="number"
                                                         min="0"
-                                                        placeholder={valueToday != null ? `Auto: ${formatPortfolioCurrency(valueToday)}` : 'Override our value today'}
+                                                        placeholder={valueToday != null ? `Auto: ${formatPortfolioCurrencyExact(valueToday)}` : 'Override our value today'}
                                                         value={fo.ourValueTodayOverride}
                                                         onChange={e => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', e.target.value)}
                                                     />
                                                     {valueToday != null && !fo.ourValueTodayOverride && (
                                                         <AutoFillChip
-                                                            display={formatPortfolioCurrency(valueToday)}
+                                                            display={formatPortfolioCurrencyExact(valueToday)}
                                                             formula={valueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
                                                             onUse={() => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', String(Math.round(valueToday)))}
                                                         />
@@ -1136,7 +1136,7 @@ export default function PortfolioCompanyForm() {
                                                     />
                                                     {auto.postMoney != null && auto.postMoney > 0 && !fo.postMoneyValuation && (
                                                         <AutoFillChip
-                                                            display={formatPortfolioCurrency(auto.postMoney)}
+                                                            display={formatPortfolioCurrencyExact(auto.postMoney)}
                                                             formula="Pre-money + total raised"
                                                             onUse={() => updateFollowOnRow(originalIdx, 'postMoneyValuation', String(auto.postMoney))}
                                                         />
@@ -1203,13 +1203,13 @@ export default function PortfolioCompanyForm() {
                                                         className="form-input"
                                                         type="number"
                                                         min="0"
-                                                        placeholder={valueToday != null ? `Auto: ${formatPortfolioCurrency(valueToday)}` : 'Override our value today'}
+                                                        placeholder={valueToday != null ? `Auto: ${formatPortfolioCurrencyExact(valueToday)}` : 'Override our value today'}
                                                         value={fo.ourValueTodayOverride}
                                                         onChange={e => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', e.target.value)}
                                                     />
                                                     {valueToday != null && !fo.ourValueTodayOverride && (
                                                         <AutoFillChip
-                                                            display={formatPortfolioCurrency(valueToday)}
+                                                            display={formatPortfolioCurrencyExact(valueToday)}
                                                             formula={valueByShares != null ? 'Shares × share price' : 'Equity % × post-money'}
                                                             onUse={() => updateFollowOnRow(originalIdx, 'ourValueTodayOverride', String(Math.round(valueToday)))}
                                                         />
