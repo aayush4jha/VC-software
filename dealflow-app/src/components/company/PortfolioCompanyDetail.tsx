@@ -10,7 +10,7 @@ import {
     formatMOIC, formatXIRR, PORTFOLIO_STAGE_COLORS,
     getPortfolioStage, getCurrentStage,
 } from '@/lib/portfolio-utils';
-import type { Company, FollowOnRound } from '@/types/database';
+import type { Company, FollowOnRound, Founder } from '@/types/database';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -407,27 +407,18 @@ export default function PortfolioCompanyDetail() {
                         <div>
                             <h3 style={sectionTitleStyle}>Team & Info</h3>
                             <div style={detailCardStyle}>
-                                {(() => {
-                                    const list = c.founders && c.founders.length > 0
-                                        ? c.founders
-                                        : (c.founderName || c.founderEmail)
-                                            ? [{ name: c.founderName, email: c.founderEmail }]
-                                            : [];
-                                    if (list.length === 0) {
-                                        return (
-                                            <>
-                                                <DetailRow label="Founder" value="--" />
-                                                <DetailRow label="Email" value="--" />
-                                            </>
-                                        );
-                                    }
-                                    return list.map((f, i) => (
-                                        <React.Fragment key={`${f.name}-${f.email}-${i}`}>
-                                            <DetailRow label={list.length > 1 ? `Founder ${i + 1}` : 'Founder'} value={f.name || '--'} />
-                                            <DetailRow label="Email" value={f.email || '--'} />
-                                        </React.Fragment>
-                                    ));
-                                })()}
+                                <FoundersEditor
+                                    company={c}
+                                    onChange={async next => {
+                                        const data = {
+                                            founders: next,
+                                            founderName: next[0]?.name || '',
+                                            founderEmail: next[0]?.email || '',
+                                        };
+                                        await updateCompany(c.id, data);
+                                        setSelectedCompany({ ...c, ...data } as Company);
+                                    }}
+                                />
                                 <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} />
                                 <EditableRow label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'} field="latestValuation" type="number" rawValue={c.latestValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Status" value={status} field="portfolioStatus" rawValue={status} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Active', 'Exited', 'Written Off']} />
@@ -814,6 +805,181 @@ export default function PortfolioCompanyDetail() {
 }
 
 // ─── Helpers ─────────────────────────────────────
+
+// Inline editor for the founders array: name + email per row, with an
+// Add Founder button, and a remove button on every row past the first.
+// Writes the full array via onChange whenever the user commits an edit.
+function FoundersEditor({ company, onChange }: { company: Company; onChange: (next: Founder[]) => Promise<void> | void }) {
+    const seed = (): Founder[] => {
+        if (company.founders && company.founders.length > 0) return company.founders;
+        if (company.founderName || company.founderEmail) {
+            return [{ name: company.founderName, email: company.founderEmail }];
+        }
+        return [{ name: '', email: '' }];
+    };
+    const [rows, setRows] = useState<Founder[]>(seed);
+    const [editingKey, setEditingKey] = useState<string | null>(null);
+    const [draft, setDraft] = useState('');
+
+    // Re-sync when a different company is opened.
+    useEffect(() => {
+        setRows(seed());
+        setEditingKey(null);
+        setDraft('');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [company.id]);
+
+    const startEdit = (key: string, current: string) => {
+        setEditingKey(key);
+        setDraft(current);
+    };
+
+    const cancelEdit = () => {
+        setEditingKey(null);
+        setDraft('');
+    };
+
+    const commit = async (idx: number, field: 'name' | 'email', value: string) => {
+        const next = rows.map((r, i) => i === idx ? { ...r, [field]: value } : r);
+        setRows(next);
+        setEditingKey(null);
+        setDraft('');
+        await onChange(next);
+    };
+
+    const addFounder = () => {
+        const next = [...rows, { name: '', email: '' }];
+        setRows(next);
+        // Drop straight into editing the new name field so the user can type immediately.
+        setEditingKey(`${next.length - 1}-name`);
+        setDraft('');
+    };
+
+    const removeFounder = async (idx: number) => {
+        const next = rows.filter((_, i) => i !== idx);
+        const final = next.length > 0 ? next : [{ name: '', email: '' }];
+        setRows(final);
+        await onChange(next);
+    };
+
+    return (
+        <>
+            {rows.map((f, idx) => {
+                const nameKey = `${idx}-name`;
+                const emailKey = `${idx}-email`;
+                const isEditingName = editingKey === nameKey;
+                const isEditingEmail = editingKey === emailKey;
+                const founderLabel = rows.length > 1 ? `Founder ${idx + 1}` : 'Founder';
+                return (
+                    <React.Fragment key={idx}>
+                        <FounderFieldRow
+                            label={founderLabel}
+                            value={f.name}
+                            isEditing={isEditingName}
+                            draft={draft}
+                            onStart={() => startEdit(nameKey, f.name)}
+                            onChange={setDraft}
+                            onSave={() => commit(idx, 'name', draft)}
+                            onCancel={cancelEdit}
+                            onRemove={rows.length > 1 ? () => removeFounder(idx) : undefined}
+                            placeholder="Founder name"
+                        />
+                        <FounderFieldRow
+                            label="Email"
+                            value={f.email}
+                            isEditing={isEditingEmail}
+                            draft={draft}
+                            onStart={() => startEdit(emailKey, f.email)}
+                            onChange={setDraft}
+                            onSave={() => commit(idx, 'email', draft)}
+                            onCancel={cancelEdit}
+                            placeholder="founder@company.com"
+                            inputType="email"
+                        />
+                    </React.Fragment>
+                );
+            })}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 0' }}>
+                <button
+                    type="button"
+                    onClick={addFounder}
+                    className="btn btn-ghost btn-sm"
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+                >
+                    <Plus size={12} /> Add Founder
+                </button>
+            </div>
+        </>
+    );
+}
+
+function FounderFieldRow({
+    label, value, isEditing, draft,
+    onStart, onChange, onSave, onCancel, onRemove,
+    placeholder, inputType,
+}: {
+    label: string;
+    value: string;
+    isEditing: boolean;
+    draft: string;
+    onStart: () => void;
+    onChange: (v: string) => void;
+    onSave: () => void;
+    onCancel: () => void;
+    onRemove?: () => void;
+    placeholder?: string;
+    inputType?: string;
+}) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0, flexWrap: 'wrap', rowGap: 4 }}>
+            <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flexShrink: 0 }}>{label}</span>
+            {isEditing ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 120, justifyContent: 'flex-end' }}>
+                    <input
+                        className="form-input"
+                        type={inputType || 'text'}
+                        value={draft}
+                        onChange={e => onChange(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+                        autoFocus
+                        placeholder={placeholder}
+                        style={{ fontSize: 12, padding: '3px 6px', height: 28, flex: 1, minWidth: 80, maxWidth: 200 }}
+                    />
+                    <button onClick={onSave} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                        <Check size={14} style={{ color: 'var(--success)' }} />
+                    </button>
+                    <button onClick={onCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                        <X size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                </div>
+            ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontWeight: 500, fontSize: 13 }}>{value || '--'}</span>
+                    <button
+                        onClick={onStart}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, opacity: 0.4 }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                    >
+                        <Pencil size={12} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                    {onRemove && (
+                        <button
+                            onClick={onRemove}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, opacity: 0.4 }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                            title="Remove founder"
+                        >
+                            <Trash2 size={12} style={{ color: '#ef4444' }} />
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
     return (
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-light)' }}>
