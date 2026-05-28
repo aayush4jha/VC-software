@@ -98,6 +98,7 @@ function mapCompany(r: any): Company {
         entryPostMoneyValuation: r.entry_post_money_valuation ?? null,
         entryTotalRaised: r.entry_total_raised ?? null,
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
+        dvTotalShares: r.dv_total_shares != null ? Number(r.dv_total_shares) : null,
         portfolioHealth: r.portfolio_health ?? null,
         entryDate: r.entry_date ?? null,
         founders: Array.isArray(r.founders)
@@ -775,6 +776,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.entryPostMoneyValuation != null ? { entry_post_money_valuation: toBigint(data.entryPostMoneyValuation) } : {}),
             ...(data.entryTotalRaised != null ? { entry_total_raised: toBigint(data.entryTotalRaised) } : {}),
             ...(data.noOfShares != null ? { no_of_shares: data.noOfShares } : {}),
+            ...(data.dvTotalShares != null ? { dv_total_shares: toBigint(data.dvTotalShares) } : {}),
             ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
             ...(Array.isArray(data.founders) ? { founders: data.founders } : {}),
             // Dedicated business-event date for the entry round. Distinct
@@ -869,6 +871,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             entryPostMoneyValuation: 'entry_post_money_valuation',
             entryTotalRaised: 'entry_total_raised',
             noOfShares: 'no_of_shares',
+            dvTotalShares: 'dv_total_shares',
             portfolioHealth: 'portfolio_health',
             founders: 'founders',
             entryDate: 'entry_date',
@@ -879,7 +882,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // be rounded to an integer on save.
         const BIGINT_KEYS = new Set([
             'initialInvestment', 'entryValuation', 'latestValuation', 'exitValue',
-            'numShares', 'totalShares',
+            'numShares', 'totalShares', 'dvTotalShares',
             'entryPreMoneyValuation', 'entryPostMoneyValuation', 'entryTotalRaised',
             'totalFundRaise', 'valuation',
         ]);

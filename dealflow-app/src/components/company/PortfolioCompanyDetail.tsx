@@ -135,7 +135,7 @@ export default function PortfolioCompanyDetail() {
             'initialInvestment', 'entryValuation', 'entryOwnership', 'currentOwnership',
             'latestValuation', 'exitValue', 'sharePrice', 'numShares', 'totalShares',
             'entryPreMoneyValuation', 'entryPostMoneyValuation',
-            'entryTotalRaised', 'noOfShares',
+            'entryTotalRaised', 'noOfShares', 'dvTotalShares',
         ];
         if (numericFields.includes(editField)) {
             data[editField] = editValue ? parseFloat(editValue) : null;
@@ -437,18 +437,27 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="Total Money Raised in this Round" value={c.entryTotalRaised ? formatPortfolioCurrency(c.entryTotalRaised) : '--'} field="entryTotalRaised" type="number" rawValue={c.entryTotalRaised?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Number of Shares (Owned by DV)" value={c.numShares != null ? c.numShares.toLocaleString('en-IN') : '--'} field="numShares" type="number" rawValue={c.numShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 {(() => {
-                                    // Latest follow-on round (by date) with dvTotalShares set
-                                    // wins; otherwise fall back to the entry-round share count
-                                    // since "total owned" at entry equals what we bought.
+                                    // Priority: explicit company-level override (c.dvTotalShares) →
+                                    // latest follow-on round with dvTotalShares set → entry-round
+                                    // share count (total owned at entry equals what we bought).
                                     const sorted = [...followOns].sort(
                                         (a, b) => new Date(b.roundDate).getTime() - new Date(a.roundDate).getTime(),
                                     );
-                                    const fromLatest = sorted.find(r => r.dvTotalShares != null)?.dvTotalShares ?? null;
-                                    const totalDvShares = fromLatest ?? c.numShares;
+                                    const fromLatestRound = sorted.find(r => r.dvTotalShares != null)?.dvTotalShares ?? null;
+                                    const totalDvShares = c.dvTotalShares ?? fromLatestRound ?? c.numShares;
                                     return (
-                                        <DetailRow
+                                        <EditableRow
                                             label="Total Shares Owned by DV"
                                             value={totalDvShares != null ? totalDvShares.toLocaleString('en-IN') : '--'}
+                                            field="dvTotalShares"
+                                            type="number"
+                                            rawValue={c.dvTotalShares?.toString() || ''}
+                                            editField={editField}
+                                            editValue={editValue}
+                                            onStart={startEdit}
+                                            onChange={setEditValue}
+                                            onSave={saveField}
+                                            onCancel={cancelEdit}
                                         />
                                     );
                                 })()}
