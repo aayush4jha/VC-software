@@ -845,17 +845,17 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
     const isEditing = editField === field;
     const datalistId = datalistOptions ? `editable-row-list-${field}` : undefined;
     return (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0 }}>
             <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flexShrink: 0 }}>{label}</span>
             {isEditing ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
                     {selectOptions ? (
                         <select
                             className="form-select"
                             value={editValue}
                             onChange={e => onChange(e.target.value)}
                             autoFocus
-                            style={{ fontSize: 12, padding: '3px 6px', height: 28 }}
+                            style={{ fontSize: 12, padding: '3px 6px', height: 28, flex: 1, minWidth: 0, maxWidth: 180 }}
                         >
                             <option value="">-- None --</option>
                             {selectOptions.map(o => (
@@ -873,7 +873,7 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
                                 onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
                                 autoFocus
                                 placeholder="Pick a state or type a city/country"
-                                style={{ fontSize: 12, padding: '3px 6px', height: 28, width: 200 }}
+                                style={{ fontSize: 12, padding: '3px 6px', height: 28, flex: 1, minWidth: 0, maxWidth: 200 }}
                             />
                             <datalist id={datalistId}>
                                 {datalistOptions.map(o => <option key={o} value={o} />)}
@@ -887,7 +887,7 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
                             onChange={e => onChange(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
                             autoFocus
-                            style={{ fontSize: 12, padding: '3px 6px', height: 28, width: 130 }}
+                            style={{ fontSize: 12, padding: '3px 6px', height: 28, flex: 1, minWidth: 0, maxWidth: 160 }}
                         />
                     )}
                     <button onClick={onSave} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
