@@ -435,6 +435,22 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="Initial Investment (Our Investment)" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : '--'} field="initialInvestment" type="number" rawValue={c.initialInvestment?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Total Money Raised in this Round" value={c.entryTotalRaised ? formatPortfolioCurrency(c.entryTotalRaised) : '--'} field="entryTotalRaised" type="number" rawValue={c.entryTotalRaised?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Number of Shares (Owned by DV)" value={c.numShares != null ? c.numShares.toLocaleString('en-IN') : '--'} field="numShares" type="number" rawValue={c.numShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                {(() => {
+                                    // Latest follow-on round (by date) with dvTotalShares set
+                                    // wins; otherwise fall back to the entry-round share count
+                                    // since "total owned" at entry equals what we bought.
+                                    const sorted = [...followOns].sort(
+                                        (a, b) => new Date(b.roundDate).getTime() - new Date(a.roundDate).getTime(),
+                                    );
+                                    const fromLatest = sorted.find(r => r.dvTotalShares != null)?.dvTotalShares ?? null;
+                                    const totalDvShares = fromLatest ?? c.numShares;
+                                    return (
+                                        <DetailRow
+                                            label="Total Shares Owned by DV"
+                                            value={totalDvShares != null ? totalDvShares.toLocaleString('en-IN') : '--'}
+                                        />
+                                    );
+                                })()}
                                 <EditableRow label="Outstanding Shares" value={c.totalShares != null ? c.totalShares.toLocaleString('en-IN') : '--'} field="totalShares" type="number" rawValue={c.totalShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Share Price" value={c.sharePrice != null ? `₹${c.sharePrice.toLocaleString('en-IN')}` : '--'} field="sharePrice" type="number" rawValue={c.sharePrice?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Pre-money" value={c.entryPreMoneyValuation ? formatPortfolioCurrency(c.entryPreMoneyValuation) : '--'} field="entryPreMoneyValuation" type="number" rawValue={c.entryPreMoneyValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
