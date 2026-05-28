@@ -8,7 +8,7 @@ import {
     getTotalInvested, getLatestValuation, getCurrentOwnership,
     getCompanyIRR, getCompanyMOIC, formatPortfolioCurrency,
     formatMOIC, formatXIRR, PORTFOLIO_STAGE_COLORS,
-    getPortfolioStage,
+    getPortfolioStage, getCurrentStage,
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound } from '@/types/database';
 
@@ -135,6 +135,7 @@ export default function PortfolioCompanyDetail() {
             'initialInvestment', 'entryValuation', 'entryOwnership', 'currentOwnership',
             'latestValuation', 'exitValue', 'sharePrice', 'numShares', 'totalShares',
             'entryPreMoneyValuation', 'entryPostMoneyValuation',
+            'entryTotalRaised', 'noOfShares',
         ];
         if (numericFields.includes(editField)) {
             data[editField] = editValue ? parseFloat(editValue) : null;
@@ -387,14 +388,19 @@ export default function PortfolioCompanyDetail() {
                             <div style={detailCardStyle}>
                                 <EditableRow label="Entry Date" value={entryDate} field="createdAt" type="date" rawValue={c.createdAt?.split('T')[0] || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Stage" value={c.companyRound || '--'} field="companyRound" rawValue={c.companyRound || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="Initial Investment" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : '--'} field="initialInvestment" type="number" rawValue={c.initialInvestment?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="Share Price" value={c.sharePrice != null ? `₹${c.sharePrice.toLocaleString('en-IN')}` : '--'} field="sharePrice" type="number" rawValue={c.sharePrice?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <DetailRow label="Current Stage" value={getCurrentStage(c, followOns) || '--'} />
+                                <EditableRow label="Initial Investment (Our Investment)" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : '--'} field="initialInvestment" type="number" rawValue={c.initialInvestment?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Total Money Raised in this Round" value={c.entryTotalRaised ? formatPortfolioCurrency(c.entryTotalRaised) : '--'} field="entryTotalRaised" type="number" rawValue={c.entryTotalRaised?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Number of Shares (Owned by DV)" value={c.numShares != null ? c.numShares.toLocaleString('en-IN') : '--'} field="numShares" type="number" rawValue={c.numShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="Shares Outstanding" value={c.totalShares != null ? c.totalShares.toLocaleString('en-IN') : '--'} field="totalShares" type="number" rawValue={c.totalShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Outstanding Shares" value={c.totalShares != null ? c.totalShares.toLocaleString('en-IN') : '--'} field="totalShares" type="number" rawValue={c.totalShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Share Price" value={c.sharePrice != null ? `₹${c.sharePrice.toLocaleString('en-IN')}` : '--'} field="sharePrice" type="number" rawValue={c.sharePrice?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Pre-money" value={c.entryPreMoneyValuation ? formatPortfolioCurrency(c.entryPreMoneyValuation) : '--'} field="entryPreMoneyValuation" type="number" rawValue={c.entryPreMoneyValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Post-money" value={(c.entryPostMoneyValuation ?? c.entryValuation) ? formatPortfolioCurrency((c.entryPostMoneyValuation ?? c.entryValuation) as number) : '--'} field="entryPostMoneyValuation" type="number" rawValue={(c.entryPostMoneyValuation ?? c.entryValuation)?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Ownership %" value={c.entryOwnership ? `${c.entryOwnership}%` : (c.initialInvestment && (c.entryPostMoneyValuation || c.entryValuation) ? `${((c.initialInvestment / ((c.entryPostMoneyValuation || c.entryValuation) as number)) * 100).toFixed(2)}%` : '--')} field="entryOwnership" type="number" rawValue={c.entryOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Total Ownership After Round %" value={c.noOfShares != null ? `${c.noOfShares}%` : '--'} field="noOfShares" type="number" rawValue={c.noOfShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Current Ownership %" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'} field="currentOwnership" type="number" rawValue={c.currentOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Share Type" value={c.shareType || '--'} field="shareType" rawValue={c.shareType || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Primary', 'Secondary']} />
+                                <EditableRow label="Portfolio Health" value={c.portfolioHealth || '--'} field="portfolioHealth" rawValue={c.portfolioHealth || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Bullish', 'Base', 'Bearish']} />
                                 <DetailRow label="MOIC" value={totalInvested > 0 ? formatMOIC(moic) : '--'} />
                             </div>
                         </div>
