@@ -168,6 +168,10 @@ export default function PortfolioCompanyForm() {
         investmentNum != null && effectivePostMoney != null && effectivePostMoney > 0
             ? (investmentNum / effectivePostMoney) * 100
             : null;
+    // What "entry ownership" actually is after considering both explicit
+    // and computed paths — used as the auto value for Total Ownership
+    // After Round at the entry row (since there's no prior position to dilute).
+    const effectiveEntryOwnership = toNum(form.entry_ownership) ?? computedEntryOwnership;
 
     // Follow-on rounds — sort by date so Round 1, 2, 3… reflects actual order.
     // Sortable, but state-update operations need the original array index.
@@ -375,7 +379,8 @@ export default function PortfolioCompanyForm() {
             // Keep entryValuation in sync with post-money for legacy code paths.
             entryValuation: postMoney ?? toNum(form.entry_post_money_valuation),
             entryTotalRaised: toNum(form.entry_total_raised) ?? totalRaisedFromValuations,
-            noOfShares: toNum(form.no_of_shares),
+            // Total Ownership After Round at entry equals entry ownership when blank.
+            noOfShares: toNum(form.no_of_shares) ?? effectiveEntryOwnership,
             entryOwnership,
             portfolioStatus: form.portfolio_status,
             portfolioHealth: form.portfolio_health || null,
@@ -679,10 +684,19 @@ export default function PortfolioCompanyForm() {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                placeholder="e.g. 8.5"
+                                placeholder={
+                                    effectiveEntryOwnership != null
+                                        ? `Auto: ${effectiveEntryOwnership.toFixed(2)}%`
+                                        : 'e.g. 8.5'
+                                }
                                 value={form.no_of_shares}
                                 onChange={upd('no_of_shares')}
                             />
+                            {effectiveEntryOwnership != null && !form.no_of_shares && (
+                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                    Auto: equals entry ownership at the entry round = {effectiveEntryOwnership.toFixed(2)}%
+                                </div>
+                            )}
                         </div>
                         <div className="form-group">
                             <label className="form-label">Share Type</label>
