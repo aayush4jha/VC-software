@@ -93,7 +93,7 @@ export function computeOwnershipChain(
         isEntry: true,
         roundId: '',
         roundName: 'Entry',
-        roundDate: new Date(company.createdAt),
+        roundDate: new Date(company.entryDate ?? company.createdAt),
         preMoney: entryPre,
         postMoney: entryPost,
         totalRaised: null,
@@ -346,7 +346,10 @@ function pushCompanyOutflows(
     followOns: FollowOnRound[],
 ): void {
     if (company.initialInvestment && company.initialInvestment > 0) {
-        cashFlows.push({ date: new Date(company.createdAt), amount: -company.initialInvestment });
+        // Prefer the user-picked Entry Date (the business event); fall back
+        // to createdAt for legacy rows where entry_date hasn't been set.
+        const entryDateStr = company.entryDate ?? company.createdAt;
+        cashFlows.push({ date: new Date(entryDateStr), amount: -company.initialInvestment });
     }
     for (const fo of followOns) {
         if (fo.didWeInvest && fo.ourInvestment && fo.ourInvestment > 0) {
@@ -484,7 +487,7 @@ export function calculateDilution(
 // ─── Holding Period ───────────────────────────────
 
 export function getHoldingPeriodMonths(company: Company): number {
-    const entry = new Date(company.createdAt);
+    const entry = new Date(company.entryDate ?? company.createdAt);
     const now = new Date();
     return (now.getTime() - entry.getTime()) / (1000 * 60 * 60 * 24 * 30);
 }

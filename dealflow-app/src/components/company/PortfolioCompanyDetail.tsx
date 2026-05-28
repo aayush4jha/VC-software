@@ -347,7 +347,8 @@ export default function PortfolioCompanyDetail() {
         loadFollowOns();
     };
 
-    const entryDate = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '--';
+    const effectiveEntryDate = c.entryDate ?? c.createdAt;
+    const entryDate = effectiveEntryDate ? new Date(effectiveEntryDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '--';
     const sortedFollowOns = [...followOns].sort((a, b) => new Date(a.roundDate).getTime() - new Date(b.roundDate).getTime());
 
     return (
@@ -429,7 +430,7 @@ export default function PortfolioCompanyDetail() {
                         <div>
                             <h3 style={sectionTitleStyle}>Investment Details</h3>
                             <div style={detailCardStyle}>
-                                <EditableRow label="Entry Date" value={entryDate} field="createdAt" type="date" rawValue={c.createdAt?.split('T')[0] || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                <EditableRow label="Entry Date" value={entryDate} field="entryDate" type="date" rawValue={effectiveEntryDate?.split('T')[0] || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Stage" value={c.companyRound || '--'} field="companyRound" rawValue={c.companyRound || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <DetailRow label="Current Stage" value={getCurrentStage(c, followOns) || '--'} />
                                 <EditableRow label="Initial Investment (Our Investment)" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : '--'} field="initialInvestment" type="number" rawValue={c.initialInvestment?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />

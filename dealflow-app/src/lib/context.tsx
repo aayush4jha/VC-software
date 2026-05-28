@@ -99,6 +99,7 @@ function mapCompany(r: any): Company {
         entryTotalRaised: r.entry_total_raised ?? null,
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
         portfolioHealth: r.portfolio_health ?? null,
+        entryDate: r.entry_date ?? null,
         founders: Array.isArray(r.founders)
             ? r.founders.filter((f: unknown): f is { name?: unknown; email?: unknown } => !!f && typeof f === 'object')
                 .map((f: { name?: unknown; email?: unknown }) => ({ name: String(f.name ?? ''), email: String(f.email ?? '') }))
@@ -772,23 +773,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.noOfShares != null ? { no_of_shares: data.noOfShares } : {}),
             ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
             ...(Array.isArray(data.founders) ? { founders: data.founders } : {}),
-            // Honor caller-supplied created_at (e.g. backdated portfolio
-            // entries). Without this, Postgres applies now() as the default.
-            ...(data.createdAt ? { created_at: data.createdAt } : {}),
+            // Dedicated business-event date for the entry round. Distinct
+            // from created_at, which stays a pure audit timestamp.
+            ...(data.entryDate ? { entry_date: data.entryDate } : {}),
         };
-
-        // Verifiable trace for the entry-date bug.
-        if (data.createdAt) {
-            console.log('[createCompany] sending created_at:', data.createdAt);
-        }
 
         let { data: row, error } = await apiDb({
             table: 'companies', operation: 'insert', data: insertPayload,
         });
-
-        if (row && (row as { created_at?: string }).created_at) {
-            console.log('[createCompany] db returned created_at:', (row as { created_at?: string }).created_at);
-        }
 
         // Forward-compat: if the DB hasn't been migrated yet, retry without any
         // columns Postgres says are missing instead of failing the whole insert.
@@ -875,7 +867,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             noOfShares: 'no_of_shares',
             portfolioHealth: 'portfolio_health',
             founders: 'founders',
-            createdAt: 'created_at',
+            entryDate: 'entry_date',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         // noOfShares is intentionally absent: it's a NUMERIC column holding

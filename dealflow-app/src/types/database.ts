@@ -182,6 +182,7 @@ export interface Company {
   noOfShares: number | null;        // Current DV Shareholding — drives latest valuation
   portfolioHealth: PortfolioHealth | null;
   founders: Founder[];              // Multiple founders supported; first entry mirrors founder_name / founder_email
+  entryDate: string | null;         // The day DV entered the cap table; falls back to createdAt for legacy rows
 }
 
 export type PortfolioHealth = 'Bullish' | 'Base' | 'Bearish';
