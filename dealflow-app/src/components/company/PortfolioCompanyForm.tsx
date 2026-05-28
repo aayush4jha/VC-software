@@ -158,10 +158,15 @@ export default function PortfolioCompanyForm() {
     const investmentNum = toNum(form.initial_investment);
     const preMoneyNum = toNum(form.entry_pre_money_valuation);
     const postMoneyNum = toNum(form.entry_post_money_valuation);
+    const totalRaisedNum = toNum(form.entry_total_raised);
     const totalRaisedFromValuations = preMoneyNum != null && postMoneyNum != null ? postMoneyNum - preMoneyNum : null;
+    // Auto-derive post-money from pre-money + total raised when the user
+    // hasn't typed a post-money value of their own.
+    const computedPostMoney = preMoneyNum != null && totalRaisedNum != null ? preMoneyNum + totalRaisedNum : null;
+    const effectivePostMoney = postMoneyNum ?? computedPostMoney;
     const computedEntryOwnership =
-        investmentNum != null && postMoneyNum != null && postMoneyNum > 0
-            ? (investmentNum / postMoneyNum) * 100
+        investmentNum != null && effectivePostMoney != null && effectivePostMoney > 0
+            ? (investmentNum / effectivePostMoney) * 100
             : null;
 
     useEffect(() => {
@@ -277,8 +282,11 @@ export default function PortfolioCompanyForm() {
 
         setSaving(true);
 
-        const postMoney = toNum(form.entry_post_money_valuation);
         const preMoney = toNum(form.entry_pre_money_valuation);
+        const totalRaised = toNum(form.entry_total_raised);
+        // Auto-fill post-money from pre + total raised when the user left it blank.
+        const postMoney = toNum(form.entry_post_money_valuation)
+            ?? (preMoney != null && totalRaised != null ? preMoney + totalRaised : null);
         const entryOwnership = form.entry_ownership
             ? toNum(form.entry_ownership)
             : computedEntryOwnership;
@@ -562,7 +570,22 @@ export default function PortfolioCompanyForm() {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Entry Post-money Valuation (&#8377;)</label>
-                            <input className="form-input" type="number" placeholder="Post-money valuation" value={form.entry_post_money_valuation} onChange={upd('entry_post_money_valuation')} />
+                            <input
+                                className="form-input"
+                                type="number"
+                                placeholder={
+                                    computedPostMoney != null && computedPostMoney > 0
+                                        ? `Auto: ${formatPortfolioCurrency(computedPostMoney)}`
+                                        : 'Post-money valuation'
+                                }
+                                value={form.entry_post_money_valuation}
+                                onChange={upd('entry_post_money_valuation')}
+                            />
+                            {computedPostMoney != null && computedPostMoney > 0 && !form.entry_post_money_valuation && (
+                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                    Auto from pre-money + total raised: {formatPortfolioCurrency(computedPostMoney)} (override above if different)
+                                </div>
+                            )}
                         </div>
                         <div className="form-group">
                             <label className="form-label">Entry Ownership (%)</label>
