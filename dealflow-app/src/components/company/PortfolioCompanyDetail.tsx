@@ -857,21 +857,37 @@ export default function PortfolioCompanyDetail() {
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {sortedFollowOns.map(fo => {
+                                {sortedFollowOns.map((fo, idx) => {
+                                    const n = idx + 1;
                                     const post = fo.postMoneyValuation ?? fo.roundValuation ?? null;
+                                    const valueOverride = fo.ourValueTodayOverride;
                                     const valueByShares = fo.numShares != null && fo.sharePrice != null ? fo.numShares * fo.sharePrice : null;
                                     const valueByEquity = fo.ownershipAfter != null && post != null ? (fo.ownershipAfter / 100) * post : null;
-                                    const valueToday = valueByShares ?? valueByEquity;
+                                    const valueToday = valueOverride ?? valueByShares ?? valueByEquity;
+                                    const valueSource = valueOverride != null ? 'override'
+                                        : valueByShares != null ? 'shares \u00d7 price'
+                                        : valueByEquity != null ? 'equity% \u00d7 post'
+                                        : null;
+
                                     return (
                                     <div key={fo.id} style={{
-                                        padding: 14, background: 'var(--bg-tertiary)', borderRadius: 8,
+                                        padding: 16, background: 'var(--bg-tertiary)', borderRadius: 10,
                                         border: '1px solid var(--border)', fontSize: 13,
                                     }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                <span className="badge badge-info" style={{ fontSize: 11 }}>{fo.roundName}</span>
+                                        {/* Header \u2014 round label, date, actions */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                                <span className="badge badge-info" style={{ fontSize: 11 }}>Round {n} \u00b7 {fo.roundName}</span>
                                                 <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                                                     {new Date(fo.roundDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </span>
+                                                <span style={{
+                                                    fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                                                    background: fo.didWeInvest ? 'rgba(16,185,129,0.12)' : 'rgba(148,163,184,0.18)',
+                                                    color: fo.didWeInvest ? '#10b981' : 'var(--text-secondary)',
+                                                    textTransform: 'uppercase', letterSpacing: 0.4,
+                                                }}>
+                                                    {fo.didWeInvest ? 'We invested' : 'We passed (diluted)'}
                                                 </span>
                                             </div>
                                             <div style={{ display: 'flex', gap: 4 }}>
@@ -883,80 +899,88 @@ export default function PortfolioCompanyDetail() {
                                                 </button>
                                             </div>
                                         </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Total Raised</div>
-                                                <div style={{ fontWeight: 600 }}>{fo.totalRaised ? formatPortfolioCurrency(fo.totalRaised) : '--'}</div>
-                                            </div>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                                                    {fo.didWeInvest ? 'Our Investment' : 'We Passed'}
-                                                </div>
-                                                <div style={{ fontWeight: 600, color: fo.didWeInvest ? '#10b981' : 'var(--text-tertiary)' }}>
-                                                    {fo.didWeInvest && fo.ourInvestment ? formatPortfolioCurrency(fo.ourInvestment) : (fo.didWeInvest ? '--' : 'Diluted')}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Ownership After</div>
-                                                <div style={{ fontWeight: 600 }}>{fo.ownershipAfter != null ? `${fo.ownershipAfter}%` : '--'}</div>
-                                            </div>
-                                        </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Pre-money</div>
-                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.preMoneyValuation ? formatPortfolioCurrency(fo.preMoneyValuation) : '--'}</div>
-                                            </div>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Post-money</div>
-                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{post ? formatPortfolioCurrency(post) : '--'}</div>
-                                            </div>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Share Price</div>
-                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.sharePrice != null ? `\u20b9${fo.sharePrice.toLocaleString('en-IN')}` : '--'}</div>
-                                            </div>
-                                        </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>DV Shareholding (this round)</div>
-                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.numShares != null ? fo.numShares.toLocaleString('en-IN') : '--'}</div>
-                                            </div>
-                                            <div>
-                                                <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Shares Outstanding</div>
-                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{fo.totalShares != null ? fo.totalShares.toLocaleString('en-IN') : '--'}</div>
-                                            </div>
-                                        </div>
-                                        {(fo.dilutionPercent != null || (fo.didWeInvest && fo.ownershipSought != null)) && (
-                                            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                                                {fo.dilutionPercent != null && (
-                                                    <span>Dilution this round: <strong style={{ color: 'var(--text-primary)' }}>{fo.dilutionPercent}%</strong></span>
-                                                )}
-                                                {fo.didWeInvest && fo.ownershipSought != null && (
-                                                    <span>Equity sought this round: <strong style={{ color: 'var(--text-primary)' }}>{fo.ownershipSought}%</strong></span>
-                                                )}
+
+                                        {/* Yes-only row: Our investment + No. of Shares + Equity sought */}
+                                        {fo.didWeInvest && (
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                                                <FollowOnStat
+                                                    label={`Our investment in round ${n}`}
+                                                    value={fo.ourInvestment != null ? formatPortfolioCurrency(fo.ourInvestment) : '--'}
+                                                    accent={fo.ourInvestment != null ? '#10b981' : undefined}
+                                                />
+                                                <FollowOnStat
+                                                    label={`No. of Shares in round ${n}`}
+                                                    value={fo.numShares != null ? fo.numShares.toLocaleString('en-IN') : '--'}
+                                                />
+                                                <FollowOnStat
+                                                    label={`Equity sought in round ${n}`}
+                                                    value={fo.ownershipSought != null ? `${fo.ownershipSought}%` : '--'}
+                                                />
                                             </div>
                                         )}
+
+                                        {/* Round-size row */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                                            <FollowOnStat
+                                                label={`Total Money Raised in round ${n}`}
+                                                value={fo.totalRaised ? formatPortfolioCurrency(fo.totalRaised) : '--'}
+                                            />
+                                            <FollowOnStat
+                                                label={`Outstanding Shares in round ${n}`}
+                                                value={fo.totalShares != null ? fo.totalShares.toLocaleString('en-IN') : '--'}
+                                            />
+                                            <FollowOnStat
+                                                label={`Share Price in round ${n}`}
+                                                value={fo.sharePrice != null ? `\u20b9${fo.sharePrice.toLocaleString('en-IN')}` : '--'}
+                                            />
+                                        </div>
+
+                                        {/* Valuation row */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                                            <FollowOnStat
+                                                label={`Pre-money Valuation in round ${n}`}
+                                                value={fo.preMoneyValuation ? formatPortfolioCurrency(fo.preMoneyValuation) : '--'}
+                                            />
+                                            <FollowOnStat
+                                                label={`Post-money Valuation in round ${n}`}
+                                                value={post ? formatPortfolioCurrency(post) : '--'}
+                                            />
+                                            <FollowOnStat
+                                                label={`Total ownership after round ${n}`}
+                                                value={fo.ownershipAfter != null ? `${fo.ownershipAfter}%` : '--'}
+                                            />
+                                        </div>
+
+                                        {/* Dilution */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                                            <FollowOnStat
+                                                label={`Dilution in round ${n}`}
+                                                value={fo.dilutionPercent != null ? `${fo.dilutionPercent}%` : '--'}
+                                            />
+                                            <div style={{ gridColumn: 'span 2' }}>
+                                                <FollowOnStat
+                                                    label="Other investors"
+                                                    value={fo.investorNames || '--'}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Our Value Today footer */}
                                         <div style={{
-                                            marginTop: 8,
-                                            paddingTop: 8,
+                                            paddingTop: 10,
                                             borderTop: '1px dashed var(--border)',
                                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                            fontSize: 12,
                                         }}>
-                                            <span style={{ color: 'var(--text-tertiary)' }}>
+                                            <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                                                 Our Value Today
-                                                <span style={{ marginLeft: 6, fontSize: 10 }}>
-                                                    {valueByShares != null ? '(shares \u00d7 price)' : valueByEquity != null ? '(equity% \u00d7 post)' : ''}
-                                                </span>
+                                                {valueSource && (
+                                                    <span style={{ marginLeft: 6, fontSize: 10 }}>({valueSource})</span>
+                                                )}
                                             </span>
-                                            <span style={{ fontWeight: 700, color: valueToday != null ? '#10b981' : 'var(--text-tertiary)' }}>
+                                            <span style={{ fontWeight: 700, fontSize: 14, color: valueToday != null ? '#10b981' : 'var(--text-tertiary)' }}>
                                                 {valueToday != null ? formatPortfolioCurrency(valueToday) : '--'}
                                             </span>
                                         </div>
-                                        {fo.investorNames && (
-                                            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
-                                                Investors: {fo.investorNames}
-                                            </div>
-                                        )}
                                     </div>
                                     );
                                 })}
@@ -1224,6 +1248,24 @@ function FounderFieldRow({
                     )}
                 </div>
             )}
+        </div>
+    );
+}
+
+// One labelled stat in the follow-on summary card. Tight vertical stack:
+// uppercase-style caption above, value below. Used by the grid above.
+function FollowOnStat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+    return (
+        <div>
+            <div style={{
+                color: 'var(--text-tertiary)',
+                fontSize: 10,
+                textTransform: 'uppercase',
+                letterSpacing: 0.4,
+                fontWeight: 600,
+                marginBottom: 2,
+            }}>{label}</div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: accent || 'var(--text-primary)', wordBreak: 'break-word' }}>{value}</div>
         </div>
     );
 }
