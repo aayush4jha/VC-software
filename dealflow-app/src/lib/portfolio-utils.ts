@@ -209,11 +209,25 @@ export function getCurrentOwnership(company: Company, followOns: FollowOnRound[]
 // ─── Valuation ────────────────────────────────────
 
 export function getLatestValuation(company: Company, followOns: FollowOnRound[]): number {
-    // Most recent follow-on's post-money (or legacy roundValuation), sorted by DATE.
-    const sorted = [...followOns]
+    // Preferred source: most recent round with both noOfShares and sharePrice
+    // (valuation = no_of_shares × share_price). Walk follow-ons newest-first
+    // and fall through to the entry round, then to legacy fields.
+    const byDateDesc = [...followOns].sort(
+        (a, b) => new Date(b.roundDate).getTime() - new Date(a.roundDate).getTime(),
+    );
+    for (const fo of byDateDesc) {
+        if (fo.noOfShares && fo.noOfShares > 0 && fo.sharePrice && fo.sharePrice > 0) {
+            return fo.noOfShares * fo.sharePrice;
+        }
+    }
+    if (company.noOfShares && company.noOfShares > 0 && company.sharePrice && company.sharePrice > 0) {
+        return company.noOfShares * company.sharePrice;
+    }
+
+    // Fallback: most recent post-money on the cap table (legacy data).
+    const sorted = byDateDesc
         .map(fo => ({ ...fo, _post: fo.postMoneyValuation ?? fo.roundValuation }))
-        .filter(fo => fo._post && fo._post > 0)
-        .sort((a, b) => new Date(b.roundDate).getTime() - new Date(a.roundDate).getTime());
+        .filter(fo => fo._post && fo._post > 0);
     if (sorted.length > 0) return sorted[0]._post!;
     if (company.latestValuation) return company.latestValuation;
     if (company.entryPostMoneyValuation) return company.entryPostMoneyValuation;

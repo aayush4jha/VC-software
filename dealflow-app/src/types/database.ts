@@ -179,6 +179,7 @@ export interface Company {
   entryPreMoneyValuation: number | null;
   entryPostMoneyValuation: number | null;
   entryTotalRaised: number | null;
+  noOfShares: number | null;        // Drives latest valuation: no_of_shares × share_price
 }
 
 export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
@@ -201,6 +202,7 @@ export interface FollowOnRound {
   sharePrice: number | null;
   numShares: number | null;       // shares acquired in this round
   totalShares: number | null;     // company's total outstanding shares after this round
+  noOfShares: number | null;      // share count for valuation: no_of_shares × share_price
   preMoneyValuation: number | null;
   postMoneyValuation: number | null;
   ownershipSought: number | null;

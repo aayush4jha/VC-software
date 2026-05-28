@@ -54,6 +54,7 @@ interface LocalFollowOn {
     sharePrice: string;
     numShares: string;
     totalShares: string;
+    noOfShares: string;          // For valuation = noOfShares × sharePrice
     ownershipSought: string;
     ownershipAfter: string;
     dilutionPercent: string;
@@ -73,6 +74,7 @@ function emptyFollowOn(): LocalFollowOn {
         sharePrice: '',
         numShares: '',
         totalShares: '',
+        noOfShares: '',
         ownershipSought: '',
         ownershipAfter: '',
         dilutionPercent: '',
@@ -115,6 +117,7 @@ export default function PortfolioCompanyForm() {
         entry_pre_money_valuation: '',
         entry_post_money_valuation: '',
         entry_total_raised: '',
+        no_of_shares: '',
         entry_ownership: '',
         portfolio_status: 'Active' as PortfolioStatus,
         founder_names: '',
@@ -181,6 +184,7 @@ export default function PortfolioCompanyForm() {
                     || editingCompany.entryValuation?.toString()
                     || '',
                 entry_total_raised: editingCompany.entryTotalRaised?.toString() || '',
+                no_of_shares: editingCompany.noOfShares?.toString() || '',
                 entry_ownership: editingCompany.entryOwnership?.toString() || '',
                 portfolio_status: editingCompany.portfolioStatus || 'Active',
                 founder_names: editingCompany.founderName || '',
@@ -201,6 +205,7 @@ export default function PortfolioCompanyForm() {
                         sharePrice: r.sharePrice?.toString() || '',
                         numShares: r.numShares?.toString() || '',
                         totalShares: r.totalShares?.toString() || '',
+                        noOfShares: r.noOfShares?.toString() || '',
                         ownershipSought: r.ownershipSought?.toString() || '',
                         ownershipAfter: r.ownershipAfter?.toString() || '',
                         dilutionPercent: r.dilutionPercent?.toString() || '',
@@ -287,6 +292,7 @@ export default function PortfolioCompanyForm() {
             // Keep entryValuation in sync with post-money for legacy code paths.
             entryValuation: postMoney ?? toNum(form.entry_post_money_valuation),
             entryTotalRaised: toNum(form.entry_total_raised) ?? totalRaisedFromValuations,
+            noOfShares: toNum(form.no_of_shares),
             entryOwnership,
             portfolioStatus: form.portfolio_status,
             notes: form.notes,
@@ -312,6 +318,7 @@ export default function PortfolioCompanyForm() {
                 sharePrice: toNum(fo.sharePrice),
                 numShares: toNum(fo.numShares),
                 totalShares: toNum(fo.totalShares),
+                noOfShares: toNum(fo.noOfShares),
                 ownershipSought: fo.didWeInvest ? toNum(fo.ownershipSought) : null,
                 ownershipAfter: toNum(fo.ownershipAfter),
                 dilutionPercent: toNum(fo.dilutionPercent),
@@ -508,13 +515,34 @@ export default function PortfolioCompanyForm() {
                         </div>
                     </div>
 
-                    {/* Shares Outstanding (company-wide) */}
+                    {/* Shares Outstanding + No. of Shares (drives valuation) */}
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Shares Outstanding</label>
                             <input className="form-input" type="number" placeholder="Company's total outstanding shares" value={form.total_shares} onChange={upd('total_shares')} />
                         </div>
-                        <div className="form-group" />
+                        <div className="form-group">
+                            <label className="form-label">No. of Shares</label>
+                            <input
+                                className="form-input"
+                                type="number"
+                                placeholder="Used to compute valuation"
+                                value={form.no_of_shares}
+                                onChange={upd('no_of_shares')}
+                            />
+                            {(() => {
+                                const n = toNum(form.no_of_shares);
+                                const p = toNum(form.share_price);
+                                if (n != null && p != null && n > 0 && p > 0) {
+                                    return (
+                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                            Implied valuation: {formatPortfolioCurrency(n * p)} (no. of shares × share price)
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
+                        </div>
                     </div>
 
                     {/* Entry Pre-money + Post-money */}
@@ -716,7 +744,28 @@ export default function PortfolioCompanyForm() {
                                                 onChange={e => updateFollowOnRow(idx, 'totalShares', e.target.value)}
                                             />
                                         </div>
-                                        <div className="form-group" />
+                                        <div className="form-group">
+                                            <label className="form-label" style={{ fontSize: 12 }}>No. of Shares</label>
+                                            <input
+                                                className="form-input"
+                                                type="number"
+                                                placeholder="Used to compute valuation"
+                                                value={fo.noOfShares}
+                                                onChange={e => updateFollowOnRow(idx, 'noOfShares', e.target.value)}
+                                            />
+                                            {(() => {
+                                                const n = toNum(fo.noOfShares);
+                                                const p = toNum(fo.sharePrice);
+                                                if (n != null && p != null && n > 0 && p > 0) {
+                                                    return (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                                            Implied valuation: {formatPortfolioCurrency(n * p)} (no. of shares × share price)
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+                                        </div>
                                     </div>
 
                                     <div className="form-row">
