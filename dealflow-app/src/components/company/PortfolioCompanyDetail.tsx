@@ -877,7 +877,7 @@ export default function PortfolioCompanyDetail() {
                                         {/* Header \u2014 round label, date, actions */}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                                                <span className="badge badge-info" style={{ fontSize: 11 }}>Round {n} \u00b7 {fo.roundName}</span>
+                                                <span className="badge badge-info" style={{ fontSize: 11 }}>Round {n} &middot; {fo.roundName}</span>
                                                 <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                                                     {new Date(fo.roundDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                 </span>
