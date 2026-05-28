@@ -101,8 +101,12 @@ function mapCompany(r: any): Company {
         portfolioHealth: r.portfolio_health ?? null,
         entryDate: r.entry_date ?? null,
         founders: Array.isArray(r.founders)
-            ? r.founders.filter((f: unknown): f is { name?: unknown; email?: unknown } => !!f && typeof f === 'object')
-                .map((f: { name?: unknown; email?: unknown }) => ({ name: String(f.name ?? ''), email: String(f.email ?? '') }))
+            ? r.founders.filter((f: unknown): f is { name?: unknown; email?: unknown; phone?: unknown } => !!f && typeof f === 'object')
+                .map((f: { name?: unknown; email?: unknown; phone?: unknown }) => ({
+                    name: String(f.name ?? ''),
+                    email: String(f.email ?? ''),
+                    phone: f.phone ? String(f.phone) : undefined,
+                }))
             : [],
     };
 }

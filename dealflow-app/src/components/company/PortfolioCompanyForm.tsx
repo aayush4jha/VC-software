@@ -1249,35 +1249,49 @@ export default function PortfolioCompanyForm() {
                             </button>
                         </div>
                         {founders.map((f, idx) => (
-                            <div key={idx} className="form-row" style={{ alignItems: 'center' }}>
-                                <div className="form-group">
-                                    <input
-                                        className="form-input"
-                                        placeholder="Founder name"
-                                        value={f.name}
-                                        onChange={e => setFounders(prev => prev.map((row, i) => i === idx ? { ...row, name: e.target.value } : row))}
-                                    />
+                            <div key={idx} style={{ marginBottom: 8 }}>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <input
+                                            className="form-input"
+                                            placeholder="Founder name"
+                                            value={f.name}
+                                            onChange={e => setFounders(prev => prev.map((row, i) => i === idx ? { ...row, name: e.target.value } : row))}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <input
+                                            className="form-input"
+                                            type="email"
+                                            placeholder="founder@company.com"
+                                            value={f.email}
+                                            onChange={e => setFounders(prev => prev.map((row, i) => i === idx ? { ...row, email: e.target.value } : row))}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="form-group" style={{ display: 'flex', gap: 6 }}>
-                                    <input
-                                        className="form-input"
-                                        type="email"
-                                        placeholder="founder@company.com"
-                                        value={f.email}
-                                        onChange={e => setFounders(prev => prev.map((row, i) => i === idx ? { ...row, email: e.target.value } : row))}
-                                        style={{ flex: 1 }}
-                                    />
-                                    {founders.length > 1 && (
-                                        <button
-                                            type="button"
-                                            className="btn btn-ghost btn-sm"
-                                            onClick={() => setFounders(prev => prev.filter((_, i) => i !== idx))}
-                                            style={{ color: '#ef4444' }}
-                                            title="Remove founder"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    )}
+                                <div className="form-row">
+                                    <div className="form-group" style={{ display: 'flex', gap: 6 }}>
+                                        <input
+                                            className="form-input"
+                                            type="tel"
+                                            placeholder="Phone (optional)"
+                                            value={f.phone || ''}
+                                            onChange={e => setFounders(prev => prev.map((row, i) => i === idx ? { ...row, phone: e.target.value } : row))}
+                                            style={{ flex: 1 }}
+                                        />
+                                        {founders.length > 1 && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => setFounders(prev => prev.filter((_, i) => i !== idx))}
+                                                style={{ color: '#ef4444' }}
+                                                title="Remove founder"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="form-group" />
                                 </div>
                             </div>
                         ))}

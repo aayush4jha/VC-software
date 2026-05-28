@@ -190,6 +190,7 @@ export type PortfolioHealth = 'Bullish' | 'Base' | 'Bearish';
 export interface Founder {
   name: string;
   email: string;
+  phone?: string;
 }
 
 export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';

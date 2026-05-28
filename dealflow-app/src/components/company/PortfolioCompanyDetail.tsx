@@ -1147,7 +1147,7 @@ function FoundersEditor({ company, onChange }: { company: Company; onChange: (ne
         setDraft('');
     };
 
-    const commit = async (idx: number, field: 'name' | 'email', value: string) => {
+    const commit = async (idx: number, field: 'name' | 'email' | 'phone', value: string) => {
         const next = rows.map((r, i) => i === idx ? { ...r, [field]: value } : r);
         setRows(next);
         setEditingKey(null);
@@ -1156,7 +1156,7 @@ function FoundersEditor({ company, onChange }: { company: Company; onChange: (ne
     };
 
     const addFounder = () => {
-        const next = [...rows, { name: '', email: '' }];
+        const next = [...rows, { name: '', email: '', phone: '' }];
         setRows(next);
         // Drop straight into editing the new name field so the user can type immediately.
         setEditingKey(`${next.length - 1}-name`);
@@ -1175,8 +1175,10 @@ function FoundersEditor({ company, onChange }: { company: Company; onChange: (ne
             {rows.map((f, idx) => {
                 const nameKey = `${idx}-name`;
                 const emailKey = `${idx}-email`;
+                const phoneKey = `${idx}-phone`;
                 const isEditingName = editingKey === nameKey;
                 const isEditingEmail = editingKey === emailKey;
+                const isEditingPhone = editingKey === phoneKey;
                 const founderLabel = rows.length > 1 ? `Founder ${idx + 1}` : 'Founder';
                 return (
                     <React.Fragment key={idx}>
@@ -1203,6 +1205,18 @@ function FoundersEditor({ company, onChange }: { company: Company; onChange: (ne
                             onCancel={cancelEdit}
                             placeholder="founder@company.com"
                             inputType="email"
+                        />
+                        <FounderFieldRow
+                            label="Phone"
+                            value={f.phone || ''}
+                            isEditing={isEditingPhone}
+                            draft={draft}
+                            onStart={() => startEdit(phoneKey, f.phone || '')}
+                            onChange={setDraft}
+                            onSave={() => commit(idx, 'phone', draft)}
+                            onCancel={cancelEdit}
+                            placeholder="+91 9XXXXXXXXX"
+                            inputType="tel"
                         />
                     </React.Fragment>
                 );

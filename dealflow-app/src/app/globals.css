@@ -807,6 +807,19 @@ html, body {
   background: var(--primary-bg);
 }
 
+/* Contacts table overrides — long company names and emails wrap instead
+ * of forcing the row to overflow; rows are not clickable so disable the
+ * pointer cursor inherited from .data-table tr. */
+.contacts-table td {
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: top;
+  padding: 12px 14px;
+}
+.contacts-table tr {
+  cursor: default;
+}
+
 .table-company-name {
   font-weight: 600;
   color: var(--text-primary);
