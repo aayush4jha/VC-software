@@ -12,6 +12,17 @@ const rounds: CompanyRound[] = [
     'Pre-Seed', 'Seed', 'Pre-Series A', 'Series A',
     'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO',
 ];
+
+// Ensures the rendered options always include the currently-selected value
+// even if it isn't in the canonical list (e.g. legacy or custom round names
+// pulled from the DB). Without this, the <select> silently displays blank
+// because `value` doesn't match any <option>.
+function roundOptions(current: string): string[] {
+    if (current && !rounds.includes(current as CompanyRound)) {
+        return [current, ...rounds];
+    }
+    return rounds;
+}
 const shareTypes: ShareType[] = ['Primary', 'Secondary'];
 const portfolioStatuses: PortfolioStatus[] = ['Active', 'Exited', 'Written Off'];
 
@@ -460,13 +471,13 @@ export default function PortfolioCompanyForm() {
                         <div className="form-group">
                             <label className="form-label">Entry Stage *</label>
                             <select className="form-select" value={form.entry_stage} onChange={upd('entry_stage')}>
-                                {rounds.map(r => <option key={r} value={r}>{r}</option>)}
+                                {roundOptions(form.entry_stage).map(r => <option key={r} value={r}>{r}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Current Stage *</label>
                             <select className="form-select" value={form.current_stage} onChange={upd('current_stage')}>
-                                {rounds.map(r => <option key={r} value={r}>{r}</option>)}
+                                {roundOptions(form.current_stage).map(r => <option key={r} value={r}>{r}</option>)}
                             </select>
                         </div>
                     </div>
@@ -634,7 +645,7 @@ export default function PortfolioCompanyForm() {
                                                 value={fo.roundName}
                                                 onChange={e => updateFollowOnRow(idx, 'roundName', e.target.value)}
                                             >
-                                                {rounds.map(r => <option key={r} value={r}>{r}</option>)}
+                                                {roundOptions(fo.roundName).map(r => <option key={r} value={r}>{r}</option>)}
                                             </select>
                                         </div>
                                         <div className="form-group">

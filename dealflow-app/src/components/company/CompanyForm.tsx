@@ -6,6 +6,15 @@ import { useAppContext } from '@/lib/context';
 import { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
+
+// Surface legacy / custom round values that aren't in the canonical list so
+// the <select> doesn't render blank when value doesn't match any <option>.
+function roundOptions(current: string): string[] {
+    if (current && !rounds.includes(current as CompanyRound)) {
+        return [current, ...rounds];
+    }
+    return rounds;
+}
 const priorities: PriorityLevel[] = ['Low', 'Medium', 'High'];
 const dealSourceTypes: DealSourceType[] = ['Founder Network', 'Investment Banker', 'Friends & Family', 'VC & PE'];
 const shareTypes: ShareType[] = ['Primary', 'Secondary'];
@@ -202,7 +211,7 @@ export default function CompanyForm() {
                         <div className="form-group">
                             <label className="form-label">Company Round</label>
                             <select className="form-select" value={form.company_round} onChange={upd('company_round')}>
-                                {rounds.map(r => <option key={r} value={r}>{r}</option>)}
+                                {roundOptions(form.company_round).map(r => <option key={r} value={r}>{r}</option>)}
                             </select>
                         </div>
                     </div>
