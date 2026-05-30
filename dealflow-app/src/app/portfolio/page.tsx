@@ -152,7 +152,12 @@ function PortfolioContent() {
         filtered.forEach(c => {
             let stage: string;
             if (groupBy === 'current') {
-                stage = getPortfolioStage(c);
+                // Derive from latest follow-on round so a company that entered
+                // at Seed and has since taken a Series B round groups under
+                // Series B. Falls back to the entry round when there are no
+                // follow-ons. getPortfolioStage would return c.companyRound
+                // (the entry stage) which is wrong for this mode.
+                stage = getCurrentStage(c, followOnsByCompany[c.id] || []);
             } else {
                 stage = c.companyRound || 'Pre-Seed';
             }
@@ -163,7 +168,7 @@ function PortfolioContent() {
         });
 
         return groups;
-    }, [filtered, groupBy]);
+    }, [filtered, groupBy, followOnsByCompany]);
 
     const handleAddPortfolioCompany = () => {
         setCompanyFormPortfolioMode(true);
