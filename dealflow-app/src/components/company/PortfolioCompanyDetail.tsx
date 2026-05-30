@@ -52,6 +52,7 @@ export default function PortfolioCompanyDetail() {
     const [savingRound, setSavingRound] = useState(false);
     const [saveRoundError, setSaveRoundError] = useState<string | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [confirmDeleteRoundId, setConfirmDeleteRoundId] = useState<string | null>(null);
     const [notesValue, setNotesValue] = useState('');
     const [notesDirty, setNotesDirty] = useState(false);
     const [editField, setEditField] = useState<string | null>(null);
@@ -99,6 +100,7 @@ export default function PortfolioCompanyDetail() {
         // state — otherwise a left-over showDeleteConfirm from the previous
         // company surfaces as "Delete <new company>?" on the next open.
         setShowDeleteConfirm(false);
+        setConfirmDeleteRoundId(null);
         setEditField(null);
         setEditValue('');
         if (c && isPortfolio) {
@@ -345,8 +347,12 @@ export default function PortfolioCompanyDetail() {
         setSaveRoundError(null);
     };
 
-    const handleDeleteRound = async (id: string) => {
-        await deleteFollowOn(id);
+    const requestDeleteRound = (id: string) => setConfirmDeleteRoundId(id);
+    const cancelDeleteRound = () => setConfirmDeleteRoundId(null);
+    const confirmDeleteRound = async () => {
+        if (!confirmDeleteRoundId) return;
+        await deleteFollowOn(confirmDeleteRoundId);
+        setConfirmDeleteRoundId(null);
         loadFollowOns();
     };
 
@@ -932,7 +938,7 @@ export default function PortfolioCompanyDetail() {
                                                 <button className="btn btn-ghost btn-sm" onClick={() => handleStartEditRound(fo)} title="Edit round">
                                                     <Pencil size={13} />
                                                 </button>
-                                                <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteRound(fo.id)} title="Delete round">
+                                                <button className="btn btn-ghost btn-sm" onClick={() => requestDeleteRound(fo.id)} title="Delete round">
                                                     <Trash2 size={13} style={{ color: 'var(--danger)' }} />
                                                 </button>
                                             </div>
@@ -1093,6 +1099,29 @@ export default function PortfolioCompanyDetail() {
                         </div>
                     </div>
                 )}
+
+                {/* Delete Follow-on Round Confirm */}
+                {confirmDeleteRoundId && (() => {
+                    const roundNumber = sortedFollowOns.findIndex(r => r.id === confirmDeleteRoundId) + 1;
+                    if (roundNumber === 0) return null;
+                    return (
+                        <div style={{
+                            position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'inherit',
+                        }}>
+                            <div style={{ background: 'var(--bg-secondary)', padding: 24, borderRadius: 12, textAlign: 'center', maxWidth: 360 }}>
+                                <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                                    Are you sure you want to delete follow round {roundNumber}?
+                                </div>
+                                <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>This cannot be undone.</div>
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                                    <button className="btn btn-ghost" onClick={cancelDeleteRound}>Cancel</button>
+                                    <button className="btn" style={{ background: 'var(--danger)', color: '#fff' }} onClick={confirmDeleteRound}>Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );
