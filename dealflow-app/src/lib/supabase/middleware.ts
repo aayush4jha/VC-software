@@ -9,6 +9,26 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 // Always grants admin access on every request, regardless of DB state.
 const SUPER_ADMIN_EMAIL = 'aayush4jha@gmail.com';
 
+// Hard cap on any single Supabase network call in middleware. Without this, a
+// slow/paused/unreachable Supabase makes the fetch hang until Vercel kills the
+// whole request → 504 MIDDLEWARE_INVOCATION_TIMEOUT. Failing fast lets us
+// degrade gracefully (treat as unauthenticated) instead of taking the site down.
+const SUPABASE_TIMEOUT_MS = 5000;
+
+async function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), SUPABASE_TIMEOUT_MS);
+    });
+    try {
+        return await Promise.race([promise, timeout]);
+    } catch {
+        return fallback;
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
 export async function updateSession(request: NextRequest) {
     let supabaseResponse = NextResponse.next({ request });
 
@@ -33,7 +53,17 @@ export async function updateSession(request: NextRequest) {
         }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await withTimeout(
+        (async () => {
+            try {
+                const { data } = await supabase.auth.getUser();
+                return data.user;
+            } catch {
+                return null;
+            }
+        })(),
+        null
+    );
     const pathname = request.nextUrl.pathname;
 
     // Public paths that don't need auth
@@ -81,11 +111,21 @@ export async function updateSession(request: NextRequest) {
         if (!isSuperAdmin) {
             // Use service role key so RLS never blocks this check
             const serviceClient = createServiceClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-            const { data: profileById } = await serviceClient
-                .from('profiles')
-                .select('role, permissions')
-                .eq('id', user.id)
-                .single();
+            const profileById = await withTimeout(
+                (async () => {
+                    try {
+                        const { data } = await serviceClient
+                            .from('profiles')
+                            .select('role, permissions')
+                            .eq('id', user.id)
+                            .single();
+                        return data;
+                    } catch {
+                        return null;
+                    }
+                })(),
+                null
+            );
 
             let hasAccess = false;
 
@@ -103,11 +143,21 @@ export async function updateSession(request: NextRequest) {
 
             // Email fallback for UUID mismatch
             if (!hasAccess && user.email) {
-                const { data: profileByEmail } = await serviceClient
-                    .from('profiles')
-                    .select('role, permissions')
-                    .eq('email', user.email)
-                    .single();
+                const profileByEmail = await withTimeout(
+                    (async () => {
+                        try {
+                            const { data } = await serviceClient
+                                .from('profiles')
+                                .select('role, permissions')
+                                .eq('email', user.email)
+                                .single();
+                            return data;
+                        } catch {
+                            return null;
+                        }
+                    })(),
+                    null
+                );
 
                 if (profileByEmail) {
                     const permissions = profileByEmail.permissions as string[] | null;
