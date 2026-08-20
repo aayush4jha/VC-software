@@ -5642,6 +5642,32 @@ textarea.inline-input {
   to { opacity: 1; transform: translateX(0); }
 }
 
+/* ── Notes full screen ──
+   The pane takes over the whole window: the details column is hidden (not
+   unmounted) and the shell is pinned to a fixed tall box so the timeline
+   gets the height, rather than collapsing to its content. */
+.pd-col-hidden { display: none; }
+
+.modal.pd-shell.notes-full { height: 96vh; }
+
+.pd-col-notes.pd-col-notes-full {
+  width: auto;
+  flex: 1;
+  border-left: none;
+  border-radius: var(--radius-xl);
+  animation: none;
+}
+
+/* Centre the toolbar and timeline on a readable measure — a note card
+   stretched across the full 1600px is worse to read than the 430px column
+   it replaced. The header bar stays full width. */
+.pd-col-notes-full .notes-pane-toolbar > *,
+.pd-col-notes-full .notes-pane-body > * {
+  max-width: 980px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* Stack below the two-column breakpoint so neither column gets squeezed. */
 @media (max-width: 1024px) {
   .modal.pd-shell { flex-direction: column; }
@@ -5651,6 +5677,11 @@ textarea.inline-input {
     border-left: none;
     border-top: 1px solid var(--border);
     border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  }
+  /* Stacked layout: full screen still means the whole window, not 46vh. */
+  .pd-col-notes.pd-col-notes-full {
+    height: auto;
+    border-top: none;
   }
 }
 
@@ -5696,7 +5727,10 @@ textarea.inline-input {
   font-size: 11px;
   font-weight: 700;
 }
-.notes-pane-header .note-action-btn { margin-left: auto; }
+/* Trailing action group sits hard right. Only the first button carries the
+   push, so the header lays out correctly with or without the expand toggle. */
+.notes-pane-header .note-action-btn { margin-left: 2px; }
+.notes-pane-header .note-action-btn:nth-of-type(1) { margin-left: auto; }
 
 .notes-pane-toolbar {
   display: flex;

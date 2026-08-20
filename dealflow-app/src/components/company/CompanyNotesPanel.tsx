@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     X, Plus, Search, Pin, PinOff, Pencil, Trash2, Check,
-    Loader2, NotebookPen, AlertTriangle,
+    Loader2, NotebookPen, AlertTriangle, Maximize2, Minimize2,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { COMPANY_NOTE_CATEGORIES } from '@/types/database';
@@ -74,11 +74,15 @@ const emptyDraft = (): DraftState => ({
 });
 
 export default function CompanyNotesPanel({
-    company, onClose, onCountChange,
+    company, onClose, onCountChange, fullscreen = false, onToggleFullscreen,
 }: {
     company: Company;
     onClose: () => void;
     onCountChange?: (count: number) => void;
+    /** Pane has taken over the whole detail window; the toggle is only
+        rendered when the parent supplies a handler for it. */
+    fullscreen?: boolean;
+    onToggleFullscreen?: () => void;
 }) {
     const {
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote, updateCompany,
@@ -158,18 +162,20 @@ export default function CompanyNotesPanel({
         setDraftError(null);
     }, []);
 
-    // Escape closes the composer first, then the pane. The detail modal
-    // behind us suspends its own Escape handler while this pane is open.
+    // Escape unwinds one layer at a time, innermost first: composer, then
+    // full screen, then the pane itself. The detail modal behind us suspends
+    // its own Escape handler while this pane is open.
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
             e.stopPropagation();
             if (composerOpen) closeComposer();
+            else if (fullscreen && onToggleFullscreen) onToggleFullscreen();
             else if (!dirty) onClose();
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [composerOpen, closeComposer, onClose, dirty]);
+    }, [composerOpen, closeComposer, onClose, dirty, fullscreen, onToggleFullscreen]);
 
     const openComposer = () => {
         setEditingId(null);
@@ -389,6 +395,17 @@ export default function CompanyNotesPanel({
                     <div className="notes-pane-title">Notes</div>
                     {!loading && notes.length > 0 && (
                         <span className="notes-pane-count">{notes.length}</span>
+                    )}
+                    {onToggleFullscreen && (
+                        <button
+                            className="note-action-btn notes-pane-expand"
+                            onClick={onToggleFullscreen}
+                            title={fullscreen ? 'Exit full screen' : 'Expand to full screen'}
+                            aria-label={fullscreen ? 'Exit full screen' : 'Expand to full screen'}
+                            aria-pressed={fullscreen}
+                        >
+                            {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                        </button>
                     )}
                     <button className="note-action-btn" onClick={requestClose} title="Close notes">
                         <X size={16} />

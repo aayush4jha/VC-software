@@ -56,6 +56,7 @@ export default function PortfolioCompanyDetail() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [confirmDeleteRoundId, setConfirmDeleteRoundId] = useState<string | null>(null);
     const [showNotesPanel, setShowNotesPanel] = useState(false);
+    const [notesFullscreen, setNotesFullscreen] = useState(false);
     const [notesCount, setNotesCount] = useState<number | null>(null);
     const [editField, setEditField] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
@@ -106,6 +107,7 @@ export default function PortfolioCompanyDetail() {
         setEditField(null);
         setEditValue('');
         setShowNotesPanel(false);
+        setNotesFullscreen(false);
         setNotesCount(null);
         if (c && isPortfolio) {
             loadFollowOns();
@@ -375,11 +377,16 @@ export default function PortfolioCompanyDetail() {
                 right. Each column owns its own scroll, so both stay usable
                 at once — no overlay sits between them. */}
             <div
-                className={`modal pd-shell${showNotesPanel ? ' notes-open' : ''}`}
+                className={`modal pd-shell${showNotesPanel ? ' notes-open' : ''}${notesFullscreen ? ' notes-full' : ''}`}
                 onClick={e => e.stopPropagation()}
-                style={{ maxWidth: showNotesPanel ? 1200 : 720, maxHeight: '92vh' }}
+                style={{
+                    maxWidth: notesFullscreen ? 1600 : showNotesPanel ? 1200 : 720,
+                    maxHeight: notesFullscreen ? '96vh' : '92vh',
+                }}
             >
-              <div className="pd-col pd-col-main">
+              {/* Hidden rather than unmounted while notes are fullscreen, so an
+                  in-progress inline field edit survives the round trip. */}
+              <div className={`pd-col pd-col-main${notesFullscreen ? ' pd-col-hidden' : ''}`}>
                 {/* Header */}
                 <div className="modal-header" style={{ borderBottom: '1px solid var(--border)' }}>
                     <div className="modal-title">Company Details</div>
@@ -1096,11 +1103,13 @@ export default function PortfolioCompanyDetail() {
               </div>
 
               {showNotesPanel && (
-                <div className="pd-col pd-col-notes">
+                <div className={`pd-col pd-col-notes${notesFullscreen ? ' pd-col-notes-full' : ''}`}>
                     <CompanyNotesPanel
                         company={c}
-                        onClose={() => setShowNotesPanel(false)}
+                        onClose={() => { setNotesFullscreen(false); setShowNotesPanel(false); }}
                         onCountChange={setNotesCount}
+                        fullscreen={notesFullscreen}
+                        onToggleFullscreen={() => setNotesFullscreen(f => !f)}
                     />
                 </div>
               )}
