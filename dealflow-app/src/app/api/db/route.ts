@@ -7,7 +7,7 @@ const ALLOWED_TABLES = new Set([
     'rejection_reason_categories', 'rejection_sub_reasons', 'rejection_records',
     'comments', 'activity_logs', 'notifications', 'saved_views', 'email_logs',
     'profiles', 'ingested_emails', 'company_scores', 'company_feedback', 'audit_logs', 'booking_tokens',
-    'portfolio_follow_ons',
+    'portfolio_follow_ons', 'company_notes',
 ]);
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';

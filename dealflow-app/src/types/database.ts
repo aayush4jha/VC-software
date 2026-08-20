@@ -186,6 +186,41 @@ export interface Company {
   entryDate: string | null;         // The day DV entered the cap table; falls back to createdAt for legacy rows
 }
 
+export const COMPANY_NOTE_CATEGORIES = [
+  'General',
+  'Update',
+  'Meeting',
+  'Call',
+  'Financial',
+  'Milestone',
+  'Risk',
+  'Action Item',
+] as const;
+
+export type CompanyNoteCategory = (typeof COMPANY_NOTE_CATEGORIES)[number];
+
+/**
+ * One entry in a company's notes timeline (table: company_notes).
+ *
+ * `noteDate` is the business date the note is *about* and is user-editable —
+ * it drives the newest-first ordering. `createdAt` / `updatedAt` stay as pure
+ * audit timestamps.
+ */
+export interface CompanyNote {
+  id: string;
+  companyId: string;
+  organizationId: string | null;
+  authorId: string | null;
+  authorName: string;
+  noteDate: string;   // YYYY-MM-DD
+  title: string;
+  category: CompanyNoteCategory | string;
+  content: string;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PortfolioHealth = 'Bullish' | 'Base' | 'Bearish';
 
 export interface Founder {

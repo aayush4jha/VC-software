@@ -9,7 +9,7 @@ import type {
     User, Company, PipelineStage, Industry, DealSourceName,
     RejectionReasonCategory, RejectionSubReason, RejectionRecord, Notification,
     Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
-    PagePermission, FollowOnRound, CompanyScore, CompanyFeedback,
+    PagePermission, FollowOnRound, CompanyScore, CompanyFeedback, CompanyNote,
 } from '@/types/database';
 
 // ──────────────────────────────────────────────────
@@ -168,6 +168,25 @@ function mapFollowOn(r: any): FollowOnRound {
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
         createdAt: r.created_at ?? '',
         updatedAt: r.updated_at ?? '',
+    };
+}
+
+function mapCompanyNote(r: any): CompanyNote {
+    return {
+        id: r.id,
+        companyId: r.company_id,
+        organizationId: r.organization_id ?? null,
+        authorId: r.author_id ?? null,
+        authorName: r.author_name ?? '',
+        // Postgres DATE comes back as YYYY-MM-DD; a TIMESTAMPTZ fallback is
+        // sliced to the same shape so the <input type="date"> round-trips.
+        noteDate: (r.note_date ?? r.created_at ?? '').toString().slice(0, 10),
+        title: r.title ?? '',
+        category: r.category ?? 'General',
+        content: r.content ?? '',
+        pinned: r.pinned ?? false,
+        createdAt: r.created_at ?? '',
+        updatedAt: r.updated_at ?? r.created_at ?? '',
     };
 }
 
@@ -338,6 +357,12 @@ interface AppContextType {
     addFollowOn: (data: Record<string, unknown>) => Promise<FollowOnRound | null>;
     updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<void>;
     deleteFollowOn: (id: string) => Promise<void>;
+
+    // Company notes (dated timeline)
+    fetchCompanyNotes: (companyId: string) => Promise<{ notes: CompanyNote[]; error: string | null }>;
+    addCompanyNote: (data: Record<string, unknown>) => Promise<{ note: CompanyNote | null; error: string | null }>;
+    updateCompanyNote: (id: string, data: Record<string, unknown>) => Promise<{ note: CompanyNote | null; error: string | null }>;
+    deleteCompanyNote: (id: string) => Promise<{ error: string | null }>;
 
     // Email ingestion
     syncEmails: () => Promise<{ processed: number; skipped: number; created: { companyName: string; companyId: string }[]; errors?: string[] } | null>;
@@ -1259,6 +1284,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await apiDb({ table: 'portfolio_follow_ons', operation: 'delete', match: { id } });
     }, [apiDb]);
 
+    // ─── Company Notes (dated notes timeline) ───────
+    // These return the error string rather than swallowing it: the notes pane
+    // shows it inline so a missing `company_notes` table (migration not yet
+    // run) is visible instead of silently dropping what the user typed.
+
+    const fetchCompanyNotes = useCallback(async (companyId: string): Promise<{ notes: CompanyNote[]; error: string | null }> => {
+        const { data: rows, error } = await apiDb({
+            table: 'company_notes', operation: 'select',
+            match: { company_id: companyId },
+            order: { column: 'note_date', ascending: false },
+        });
+        if (error) return { notes: [], error };
+        if (!rows) return { notes: [], error: null };
+        return { notes: (Array.isArray(rows) ? rows : [rows]).map(mapCompanyNote), error: null };
+    }, [apiDb]);
+
+    const addCompanyNote = useCallback(async (data: Record<string, unknown>): Promise<{ note: CompanyNote | null; error: string | null }> => {
+        const row = {
+            company_id: data.companyId,
+            organization_id: ORGANIZATION_ID,
+            author_id: user?.id ?? null,
+            author_name: (data.authorName as string) || user?.name || '',
+            note_date: data.noteDate || new Date().toISOString().slice(0, 10),
+            title: data.title || '',
+            category: data.category || 'General',
+            content: data.content || '',
+            pinned: data.pinned ?? false,
+        };
+        const { data: inserted, error } = await apiDb({
+            table: 'company_notes', operation: 'insert', data: row,
+        });
+        if (error || !inserted) {
+            console.error('addCompanyNote error:', error);
+            return { note: null, error: error || 'Could not save note.' };
+        }
+        return { note: mapCompanyNote(Array.isArray(inserted) ? inserted[0] : inserted), error: null };
+    }, [apiDb, user]);
+
+    const updateCompanyNote = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ note: CompanyNote | null; error: string | null }> => {
+        const dbData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (data.noteDate !== undefined) dbData.note_date = data.noteDate;
+        if (data.title !== undefined) dbData.title = data.title;
+        if (data.category !== undefined) dbData.category = data.category;
+        if (data.content !== undefined) dbData.content = data.content;
+        if (data.pinned !== undefined) dbData.pinned = data.pinned;
+
+        const { data: rows, error } = await apiDb({
+            table: 'company_notes', operation: 'update', data: dbData, match: { id },
+        });
+        if (error) {
+            console.error('updateCompanyNote error:', error);
+            return { note: null, error };
+        }
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        return { note: row ? mapCompanyNote(row) : null, error: null };
+    }, [apiDb]);
+
+    const deleteCompanyNote = useCallback(async (id: string): Promise<{ error: string | null }> => {
+        const { error } = await apiDb({ table: 'company_notes', operation: 'delete', match: { id } });
+        if (error) console.error('deleteCompanyNote error:', error);
+        return { error };
+    }, [apiDb]);
+
     // ─── AI Generation Mutations ────────────────────
 
     const generateAISummary = useCallback(async (companyId: string) => {
@@ -1713,6 +1801,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
         fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
+        fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany,
         deckEmailLinks,
         selectedCompany, setSelectedCompany,
@@ -1744,6 +1833,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
         fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
+        fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany, deckEmailLinks,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,

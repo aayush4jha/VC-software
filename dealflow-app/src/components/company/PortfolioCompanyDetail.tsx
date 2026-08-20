@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, FileText, Loader2, Pencil, Check, Scale } from 'lucide-react';
+import { X, Plus, Trash2, FileText, Loader2, Pencil, Check, Scale, NotebookPen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/lib/context';
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
 import { useEscapeKey } from '@/lib/useEscapeKey';
+import CompanyNotesPanel from './CompanyNotesPanel';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -41,6 +42,7 @@ export default function PortfolioCompanyDetail() {
         selectedCompany, setSelectedCompany,
         getIndustryById, getDealSourceNameById, getUserById,
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, updateCompany, deleteCompany,
+        fetchCompanyNotes,
         setEditingCompany, setShowCompanyForm, setCompanyFormPortfolioMode,
         dealSourceNames, users,
     } = useAppContext();
@@ -53,8 +55,8 @@ export default function PortfolioCompanyDetail() {
     const [saveRoundError, setSaveRoundError] = useState<string | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [confirmDeleteRoundId, setConfirmDeleteRoundId] = useState<string | null>(null);
-    const [notesValue, setNotesValue] = useState('');
-    const [notesDirty, setNotesDirty] = useState(false);
+    const [showNotesPanel, setShowNotesPanel] = useState(false);
+    const [notesCount, setNotesCount] = useState<number | null>(null);
     const [editField, setEditField] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
 
@@ -103,14 +105,26 @@ export default function PortfolioCompanyDetail() {
         setConfirmDeleteRoundId(null);
         setEditField(null);
         setEditValue('');
+        setShowNotesPanel(false);
+        setNotesCount(null);
         if (c && isPortfolio) {
             loadFollowOns();
-            setNotesValue(c.notes || '');
-            setNotesDirty(false);
         }
     }, [c?.id, isPortfolio]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    useEscapeKey(!!c && isPortfolio, () => setSelectedCompany(null));
+    // Note count for the header trigger — loaded up front so the badge is
+    // accurate before the pane has ever been opened.
+    useEffect(() => {
+        if (!c || !isPortfolio) return;
+        let cancelled = false;
+        fetchCompanyNotes(c.id).then(({ notes, error }) => {
+            if (cancelled) return;
+            setNotesCount(error ? null : notes.length);
+        });
+        return () => { cancelled = true; };
+    }, [c?.id, isPortfolio, fetchCompanyNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEscapeKey(!!c && isPortfolio && !showNotesPanel, () => setSelectedCompany(null));
 
     if (!c || !isPortfolio) return null;
 
@@ -169,11 +183,6 @@ export default function PortfolioCompanyDetail() {
         await deleteCompany(c.id);
         setShowDeleteConfirm(false);
         setSelectedCompany(null);
-    };
-
-    const handleSaveNotes = async () => {
-        await updateCompany(c.id, { notes: notesValue });
-        setNotesDirty(false);
     };
 
     const handleSaveRound = async () => {
@@ -362,7 +371,15 @@ export default function PortfolioCompanyDetail() {
 
     return (
         <div className="modal-overlay" onClick={handleClose}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 720, maxHeight: '92vh', overflow: 'auto' }}>
+            {/* Two columns in one window: details on the left, notes on the
+                right. Each column owns its own scroll, so both stay usable
+                at once — no overlay sits between them. */}
+            <div
+                className={`modal pd-shell${showNotesPanel ? ' notes-open' : ''}`}
+                onClick={e => e.stopPropagation()}
+                style={{ maxWidth: showNotesPanel ? 1200 : 720, maxHeight: '92vh' }}
+            >
+              <div className="pd-col pd-col-main">
                 {/* Header */}
                 <div className="modal-header" style={{ borderBottom: '1px solid var(--border)' }}>
                     <div className="modal-title">Company Details</div>
@@ -388,8 +405,8 @@ export default function PortfolioCompanyDetail() {
                         </div>
                     </div>
 
-                    {/* Stage + Status badges */}
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                    {/* Stage + Status badges, with the notes pane trigger on the right */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
                         <span className="badge" style={{
                             backgroundColor: `${PORTFOLIO_STAGE_COLORS[stage] || '#6366f1'}20`,
                             color: PORTFOLIO_STAGE_COLORS[stage] || '#6366f1',
@@ -398,6 +415,18 @@ export default function PortfolioCompanyDetail() {
                             backgroundColor: status === 'Active' ? 'var(--success-bg)' : status === 'Exited' ? 'var(--info-bg)' : 'var(--danger-bg)',
                             color: status === 'Active' ? 'var(--success)' : status === 'Exited' ? 'var(--info)' : 'var(--danger)',
                         }}>{status === 'Active' ? '\u25CF ' : ''}{status}</span>
+                        <button
+                            className={`notes-trigger${showNotesPanel ? ' active' : ''}`}
+                            style={{ marginLeft: 'auto' }}
+                            onClick={() => setShowNotesPanel(v => !v)}
+                            title="Open the notes timeline for this company"
+                        >
+                            <NotebookPen size={13} />
+                            Notes
+                            {notesCount != null && notesCount > 0 && (
+                                <span className="notes-trigger-count">{notesCount}</span>
+                            )}
+                        </button>
                     </div>
 
                     {/* 4 Metric Cards — clickable to edit */}
@@ -1041,24 +1070,6 @@ export default function PortfolioCompanyDetail() {
                             </div>
                         )}
                     </div>
-
-                    {/* Notes */}
-                    <div style={{ marginBottom: 20 }}>
-                        <h3 style={sectionTitleStyle}>Notes</h3>
-                        <textarea
-                            className="form-input"
-                            rows={3}
-                            placeholder="Add notes..."
-                            value={notesValue}
-                            onChange={e => { setNotesValue(e.target.value); setNotesDirty(true); }}
-                            style={{ width: '100%', resize: 'vertical' }}
-                        />
-                        {notesDirty && (
-                            <button className="btn btn-sm btn-primary" onClick={handleSaveNotes} style={{ marginTop: 6 }}>
-                                Save Notes
-                            </button>
-                        )}
-                    </div>
                 </div>
 
                 {/* Footer */}
@@ -1082,6 +1093,17 @@ export default function PortfolioCompanyDetail() {
                         <button className="btn btn-primary" onClick={handleEdit}>Edit Company</button>
                     </div>
                 </div>
+              </div>
+
+              {showNotesPanel && (
+                <div className="pd-col pd-col-notes">
+                    <CompanyNotesPanel
+                        company={c}
+                        onClose={() => setShowNotesPanel(false)}
+                        onCountChange={setNotesCount}
+                    />
+                </div>
+              )}
 
                 {/* Delete Confirm */}
                 {showDeleteConfirm && (
