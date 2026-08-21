@@ -175,14 +175,11 @@ function PortfolioContent() {
         setShowCompanyForm(true);
     };
 
-    // Empty follow-ons for now
-    const followOns: never[] = [];
-
     // ─── Render Board Card ────────────────────────
     const renderBoardCard = (c: Company) => {
         const industry = getIndustryById(c.industryId || '')?.name || '';
         const sourcer = getDealSourceNameById(c.dealSourceNameId || '')?.name || '';
-        const invested = getTotalInvested(c, followOns);
+        const invested = getTotalInvested(c, followOnsByCompany[c.id] || []);
         const initials = getInitials(c.companyName || 'NA');
         const avatarBg = getAvatarColor(c.companyName || '');
 
@@ -272,9 +269,10 @@ function PortfolioContent() {
                 <tbody>
                     {filtered.map(c => {
                         const industry = getIndustryById(c.industryId || '')?.name || '\u2014';
-                        const invested = getTotalInvested(c, followOns);
-                        const valuation = getLatestValuation(c, followOns);
-                        const moic = getCompanyMOIC(c, followOns);
+                        const companyFollowOns = followOnsByCompany[c.id] || [];
+                        const invested = getTotalInvested(c, companyFollowOns);
+                        const valuation = getLatestValuation(c, companyFollowOns);
+                        const moic = getCompanyMOIC(c, companyFollowOns);
                         const status = c.portfolioStatus || 'Active';
                         const stage = getPortfolioStage(c);
 
