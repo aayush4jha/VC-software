@@ -432,10 +432,14 @@ export default function SettingsPage() {
                                 if (!inviteEmail.trim()) return;
                                 setInviteStatus('sending'); setInviteMsg('');
                                 try {
-                                    await inviteUser(inviteEmail, inviteRole, invitePerms);
-                                    setInviteStatus('success'); setInviteMsg('Invitation sent!');
+                                    const result = await inviteUser(inviteEmail, inviteRole, invitePerms);
+                                    setInviteStatus('success');
+                                    // Access is granted either way; only the email may have failed.
+                                    setInviteMsg(result.emailSent
+                                        ? 'Invitation sent!'
+                                        : 'Invited — but the email failed to send. Share the login link with them directly.');
                                     setInviteEmail(''); setInvitePerms([]);
-                                    setTimeout(() => { setInviteStatus('idle'); setShowAdd(false); }, 2000);
+                                    setTimeout(() => { setInviteStatus('idle'); setShowAdd(false); }, result.emailSent ? 2000 : 6000);
                                 } catch {
                                     setInviteStatus('error'); setInviteMsg('Failed to send invite.');
                                 }

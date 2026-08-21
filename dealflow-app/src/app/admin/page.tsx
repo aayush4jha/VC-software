@@ -640,11 +640,22 @@ export default function AdminPage() {
                                             onClick={async () => {
                                                 setInviting(true);
                                                 try {
-                                                    await inviteUser(inviteEmail, inviteRole, invitePermissions);
+                                                    const invitedEmail = inviteEmail;
+                                                    const result = await inviteUser(inviteEmail, inviteRole, invitePermissions);
                                                     setInviteEmail('');
                                                     setInviteRole('analyst');
                                                     setInvitePermissions(['dashboard', 'dealflow', 'contacts', 'emails']);
                                                     setShowInvite(false);
+                                                    // The invite itself is live either way — only the
+                                                    // notification failed, so say so rather than
+                                                    // implying nothing happened.
+                                                    if (!result.emailSent) {
+                                                        console.error('Invite email failed:', result.emailError);
+                                                        alert(
+                                                            `${invitedEmail} has been invited and can sign in now — but the notification email could not be sent.\n\n` +
+                                                            `Send them this link:\n${result.registrationUrl ?? `${window.location.origin}/login`}`
+                                                        );
+                                                    }
                                                 } catch (err) {
                                                     alert((err as Error).message);
                                                 }

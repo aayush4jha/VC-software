@@ -347,7 +347,11 @@ interface AppContextType {
     addSubReason: (categoryId: string, name: string) => Promise<void>;
     updateSubReason: (id: string, name: string) => Promise<void>;
     deleteSubReason: (id: string) => Promise<void>;
-    inviteUser: (email: string, role: UserRole, permissions?: PagePermission[]) => Promise<void>;
+    inviteUser: (email: string, role: UserRole, permissions?: PagePermission[]) => Promise<{
+        emailSent: boolean;
+        registrationUrl?: string;
+        emailError?: string;
+    }>;
     updateUserPermissions: (userId: string, permissions: PagePermission[]) => Promise<void>;
     updateUserRole: (userId: string, role: string) => Promise<void>;
 
@@ -1693,6 +1697,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
         }
         await refreshData();
+        // The invite can succeed while the notification email fails; the
+        // caller needs that distinction so it can offer the link manually.
+        return {
+            emailSent: data?.emailSent !== false,
+            registrationUrl: data?.registrationUrl as string | undefined,
+            emailError: data?.emailError as string | undefined,
+        };
     }, [user, refreshData]);
 
     const updateUserPermissions = useCallback(async (userId: string, permissions: PagePermission[]) => {

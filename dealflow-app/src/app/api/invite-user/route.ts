@@ -44,6 +44,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to record invite.', details: inviteError.message }, { status: 500 });
   }
 
+  // Registration link — role/permissions are NOT included; the callback
+  // reads them from the pending_invites row keyed by the user's verified
+  // Google email, so URL params can't be forged to escalate privileges.
+  // Declared outside the try so the catch can hand it back.
+  const registrationUrl = `${SITE_URL}/login`;
+
   // 2️⃣ Send Custom Email via Gmail SMTP
   try {
     const transporter = nodemailer.createTransport({
@@ -53,11 +59,6 @@ export async function POST(req: NextRequest) {
         pass: GMAIL_APP_PASSWORD,
       },
     });
-
-    // Registration link — role/permissions are NOT included; the callback
-    // reads them from the pending_invites row keyed by the user's verified
-    // Google email, so URL params can't be forged to escalate privileges.
-    const registrationUrl = `${SITE_URL}/login`;
 
     await transporter.sendMail({
       from: `"VC-SAAS" <${GMAIL_USER}>`,
@@ -75,11 +76,18 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('Gmail SMTP error:', err);
-    return NextResponse.json(
-      { error: 'Failed to send invite email.', details: String(err) },
-      { status: 500 }
-    );
+    // The pending_invites row above is already committed, so the invite is
+    // live whether or not the notification goes out — the email only carries
+    // a link to the login page. Reporting this as an outright failure made
+    // admins re-send an invite that had in fact worked. Succeed, and hand
+    // back the link so it can be passed on by hand.
+    return NextResponse.json({
+      success: true,
+      emailSent: false,
+      registrationUrl,
+      emailError: String(err),
+    });
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, emailSent: true });
 }
