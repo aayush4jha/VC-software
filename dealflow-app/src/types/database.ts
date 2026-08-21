@@ -7,6 +7,7 @@ export type PagePermission =
   | 'dealflow'
   | 'portfolio'
   | 'legal'
+  | 'fund'
   | 'analytics'
   | 'pipeline-analytics'
   | 'audit-trail'
@@ -21,6 +22,7 @@ export const ALL_PAGE_PERMISSIONS: { key: PagePermission; label: string }[] = [
   { key: 'dealflow', label: 'Deal Flow' },
   { key: 'portfolio', label: 'Portfolio' },
   { key: 'legal', label: 'Legal' },
+  { key: 'fund', label: 'Fund' },
   { key: 'analytics', label: 'Analytics' },
   { key: 'pipeline-analytics', label: 'Pipeline Analytics' },
   { key: 'audit-trail', label: 'Audit Trail' },

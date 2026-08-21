@@ -90,6 +90,7 @@ export async function updateSession(request: NextRequest) {
         '/settings': 'settings',
         '/dealflow': 'dealflow',
         '/portfolio': 'portfolio',
+        '/fund': 'fund',
         '/analytics': 'analytics',
         '/contacts': 'contacts',
         '/emails': 'emails',

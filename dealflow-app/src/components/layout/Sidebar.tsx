@@ -14,7 +14,7 @@ const navItems: { label: string; href: string; icon: React.ElementType; permissi
     { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid, permission: 'dealflow' },
     { label: 'Portfolio', href: '/portfolio', icon: Briefcase, permission: 'portfolio' },
     { label: 'Legal', href: '/legal', icon: Scale, permission: 'portfolio' },
-    { label: 'Fund', href: '/fund', icon: Wallet, permission: 'portfolio' },
+    { label: 'Fund', href: '/fund', icon: Wallet, permission: 'fund' },
     { label: 'Analytics', href: '/analytics', icon: BarChart3, permission: 'analytics' },
     { label: 'Pipeline Analytics', href: '/pipeline-analytics', icon: Activity, permission: 'pipeline-analytics' },
     { label: 'Audit Trail', href: '/audit-trail', icon: FileText, permission: 'audit-trail' },
