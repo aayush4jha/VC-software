@@ -60,6 +60,7 @@ function PortfolioContent() {
         searchQuery, setSearchQuery,
         setShowCompanyForm, setCompanyFormPortfolioMode,
         fetchAllFollowOns,
+        followOnsVersion,
     } = useAppContext();
 
     const [companyView, setCompanyView] = useState<CompanyView>('board');
@@ -83,7 +84,9 @@ function PortfolioContent() {
             setFollowOnsByCompany(grouped);
         }).catch(() => { if (!cancelled) setFollowOnsByCompany({}); });
         return () => { cancelled = true; };
-    }, [fetchAllFollowOns]);
+        // followOnsVersion changes when a round is added, edited or deleted
+        // in the detail panel, which is what pulls the new totals into the tiles.
+    }, [fetchAllFollowOns, followOnsVersion]);
 
     // Portfolio companies = terminalStatus === 'Portfolio'
     const portfolioCompanies = useMemo(

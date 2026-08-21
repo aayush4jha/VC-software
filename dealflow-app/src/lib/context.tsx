@@ -358,6 +358,8 @@ interface AppContextType {
     // Follow-on rounds
     fetchFollowOns: (companyId: string) => Promise<FollowOnRound[]>;
     fetchAllFollowOns: () => Promise<FollowOnRound[]>;
+    /** Increments on every follow-on add/edit/delete; watch it to refetch. */
+    followOnsVersion: number;
     addFollowOn: (data: Record<string, unknown>) => Promise<FollowOnRound | null>;
     updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<void>;
     deleteFollowOn: (id: string) => Promise<void>;
@@ -1194,6 +1196,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Bulk-load every follow-on round, used by views that need to derive
     // per-company state (e.g. current stage) without N round-trips.
+    // Bumped whenever a follow-on round is added, edited or removed. Views
+    // that hold their own copy of the rounds (the portfolio board and table
+    // load every company's at once) watch this to know their copy is stale —
+    // otherwise a round added in the detail panel only reached the tiles
+    // after a full page reload.
+    const [followOnsVersion, setFollowOnsVersion] = useState(0);
+
     const fetchAllFollowOns = useCallback(async (): Promise<FollowOnRound[]> => {
         const { data: rows, error } = await apiDb({
             table: 'portfolio_follow_ons', operation: 'select',
@@ -1249,6 +1258,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }));
         }
         if (error || !row) { console.error('addFollowOn error:', error); return null; }
+        setFollowOnsVersion(v => v + 1);
         return mapFollowOn(row);
     }, [apiDb]);
 
@@ -1282,10 +1292,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;
         await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } });
+        setFollowOnsVersion(v => v + 1);
     }, [apiDb]);
 
     const deleteFollowOn = useCallback(async (id: string) => {
         await apiDb({ table: 'portfolio_follow_ons', operation: 'delete', match: { id } });
+        setFollowOnsVersion(v => v + 1);
     }, [apiDb]);
 
     // ─── Company Notes (dated notes timeline) ───────
@@ -1811,7 +1823,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
-        fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
+        fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, followOnsVersion,
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany,
         deckEmailLinks,
@@ -1843,7 +1855,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
         inviteUser, updateUserPermissions, updateUserRole, refreshData,
-        fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
+        fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, followOnsVersion,
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany, deckEmailLinks,
         selectedCompany, editingCompany,
