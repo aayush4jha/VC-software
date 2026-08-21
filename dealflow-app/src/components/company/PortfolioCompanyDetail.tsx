@@ -447,7 +447,9 @@ export default function PortfolioCompanyDetail() {
                         />
                         <MetricCard
                             label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'}
-                            sub={followOns.length > 0 ? 'From latest round' : 'Entry valuation'}
+                            sub={c.latestValuation && c.latestValuation > 0
+                                ? 'Set on this company'
+                                : followOns.length > 0 ? 'From latest round' : 'Entry valuation'}
                             field="latestValuation" rawValue={(c.latestValuation || c.entryValuation || '')?.toString()} type="number"
                             editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit}
                             editLabel="Latest Valuation (₹)"

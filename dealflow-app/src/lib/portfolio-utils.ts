@@ -214,6 +214,16 @@ export function getCurrentOwnership(company: Company, followOns: FollowOnRound[]
 // ─── Valuation ────────────────────────────────────
 
 export function getLatestValuation(company: Company, followOns: FollowOnRound[]): number {
+    // A valuation typed into the detail panel wins over anything re-derived
+    // here. The field is editable, and saving a round writes post-money back
+    // to it, so it is the value of record rather than a stale legacy column —
+    // deriving regardless meant a manually entered figure was silently
+    // discarded. Clearing the field falls back through the chain below.
+    // Mirrors getInitialOwnership, where a typed override also wins.
+    if (company.latestValuation && company.latestValuation > 0) {
+        return company.latestValuation;
+    }
+
     // Preferred source: most recent round with both noOfShares and sharePrice
     // (valuation = no_of_shares × share_price). Walk follow-ons newest-first
     // and fall through to the entry round, then to legacy fields.
@@ -234,7 +244,7 @@ export function getLatestValuation(company: Company, followOns: FollowOnRound[])
         .map(fo => ({ ...fo, _post: fo.postMoneyValuation ?? fo.roundValuation }))
         .filter(fo => fo._post && fo._post > 0);
     if (sorted.length > 0) return sorted[0]._post!;
-    if (company.latestValuation) return company.latestValuation;
+    // latestValuation is handled at the top of this function.
     if (company.entryPostMoneyValuation) return company.entryPostMoneyValuation;
     if (company.entryValuation) return company.entryValuation;
     return company.valuation || 0;
