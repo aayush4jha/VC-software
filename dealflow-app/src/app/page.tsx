@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import CompanyDetail from '@/components/company/CompanyDetail';
 import RejectionFlow from '@/components/company/RejectionFlow';
@@ -16,7 +16,11 @@ export default function Home() {
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        <DashboardPage />
+        {/* DashboardPage reads ?denied= via useSearchParams, which needs a
+            Suspense boundary to prerender. */}
+        <Suspense fallback={null}>
+          <DashboardPage />
+        </Suspense>
       </main>
       <CompanyDetail />
       <RejectionFlow />

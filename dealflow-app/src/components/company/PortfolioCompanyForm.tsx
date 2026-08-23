@@ -471,16 +471,34 @@ export default function PortfolioCompanyForm() {
             await updateCompany(editingCompany.id, data);
 
             for (const id of deletedFollowOnIds) {
-                await deleteFollowOn(id);
+                const { error } = await deleteFollowOn(id);
+                if (error) {
+                    setSaving(false);
+                    setSubmitError(`Could not delete a round: ${error}`);
+                    return;
+                }
             }
 
+            // Round writes are checked rather than fired and forgotten: a
+            // rejected UPDATE used to leave the modal closing on unchanged
+            // data, which read as "saved but nothing changed".
             for (let i = 0; i < orderedFollowOns.length; i++) {
                 const { fo } = orderedFollowOns[i];
                 const payload = buildFollowOnPayload(fo, followOnAuto[i]);
                 if (fo.id) {
-                    await updateFollowOn(fo.id, payload);
+                    const { error } = await updateFollowOn(fo.id, payload);
+                    if (error) {
+                        setSaving(false);
+                        setSubmitError(`Could not save round "${fo.roundName || i + 1}": ${error}`);
+                        return;
+                    }
                 } else {
-                    await addFollowOn({ ...payload, companyId: editingCompany.id });
+                    const created = await addFollowOn({ ...payload, companyId: editingCompany.id });
+                    if (!created) {
+                        setSaving(false);
+                        setSubmitError(`Could not add round "${fo.roundName || i + 1}". Check the browser console for the database error.`);
+                        return;
+                    }
                 }
             }
         } else {

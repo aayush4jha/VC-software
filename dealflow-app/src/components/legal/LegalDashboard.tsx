@@ -57,7 +57,7 @@ function fmtDate(iso: string | null | undefined): string {
 }
 
 export default function LegalDashboard({ company, record, onUpdate }: Props) {
-    const { fetchFollowOns, getIndustryById, getDealSourceNameById, getUserById } = useAppContext();
+    const { fetchFollowOns, followOnsVersion, getIndustryById, getDealSourceNameById, getUserById } = useAppContext();
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
     const [loading, setLoading] = useState(true);
     const [entityOptions, setEntityOptions] = useState<string[]>([]);
@@ -91,7 +91,9 @@ export default function LegalDashboard({ company, record, onUpdate }: Props) {
             .catch(() => { if (!cancelled) setFollowOns([]); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [company.id, fetchFollowOns]);
+        // followOnsVersion re-reads the cap table after a round is edited
+        // elsewhere, so MOIC / IRR here never lag behind the portfolio panel.
+    }, [company.id, fetchFollowOns, followOnsVersion]);
 
     // ─── Derive every metric from portfolio data + post-investment overrides ──
     const post = record.postInvestment;

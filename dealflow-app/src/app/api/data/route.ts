@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { requireMember } from '@/lib/api-auth';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
-
-function parseJwt(token: string): Record<string, unknown> | null {
-    try {
-        const payload = token.split('.')[1];
-        return JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
-    } catch {
-        return null;
-    }
-}
 
 export async function GET(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -20,16 +12,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Server config missing' }, { status: 500 });
     }
 
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const jwt = parseJwt(authHeader.slice(7));
-    const userId = jwt?.sub as string | undefined;
-    if (!userId) {
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
+    // The bearer token is verified against the auth server and matched to a
+    // profile — a decoded-but-unchecked `sub` used to be enough to pull the
+    // entire workspace through the service-role client.
+    const auth = await requireMember(request);
+    if (auth.response) return auth.response;
+    const userId = auth.actor.userId;
 
     const db = createServiceClient(supabaseUrl, serviceRoleKey);
 

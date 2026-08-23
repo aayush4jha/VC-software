@@ -1,19 +1,25 @@
 import { createServerClient } from '@supabase/ssr';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
+import { hasAnyPermission, isSuperAdmin, permissionsForRoute } from '@/lib/permissions';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-// Always grants admin access on every request, regardless of DB state.
-const SUPER_ADMIN_EMAIL = 'aayush4jha@gmail.com';
 
 // Hard cap on any single Supabase network call in middleware. Without this, a
 // slow/paused/unreachable Supabase makes the fetch hang until Vercel kills the
 // whole request → 504 MIDDLEWARE_INVOCATION_TIMEOUT. Failing fast lets us
 // degrade gracefully (treat as unauthenticated) instead of taking the site down.
 const SUPABASE_TIMEOUT_MS = 5000;
+
+// A timed-out lookup is "unknown", not "denied" — see the handling below.
+const TIMED_OUT = Symbol('timed-out');
+
+interface ProfileRow {
+    role: string | null;
+    permissions: string[] | null;
+}
 
 async function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -29,6 +35,17 @@ async function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
     }
 }
 
+// API routes that are deliberately reachable without a session: the founder-
+// facing booking flow (authorised by a one-time token in the URL) and the
+// OAuth callbacks, which establish the session in the first place. Every
+// other route under /api requires a signed-in member — and re-checks that
+// for itself, since middleware is a gate, not the guard.
+const PUBLIC_API_PATHS = ['/api/calendar/book', '/api/calendar/slots', '/api/auth/google/callback'];
+
+function isPublicApi(pathname: string): boolean {
+    return PUBLIC_API_PATHS.some(p => pathname === p || pathname.startsWith(p));
+}
+
 export async function updateSession(request: NextRequest) {
     let supabaseResponse = NextResponse.next({ request });
 
@@ -41,7 +58,7 @@ export async function updateSession(request: NextRequest) {
                     return request.cookies.getAll();
                 },
                 setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) =>
+                    cookiesToSet.forEach(({ name, value }) =>
                         request.cookies.set(name, value)
                     );
                     supabaseResponse = NextResponse.next({ request });
@@ -53,131 +70,132 @@ export async function updateSession(request: NextRequest) {
         }
     );
 
-    const user = await withTimeout(
+    const lookup = await withTimeout<
+        { id: string; email: string | null } | null | typeof TIMED_OUT
+    >(
         (async () => {
             try {
                 const { data } = await supabase.auth.getUser();
-                return data.user;
+                return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
             } catch {
                 return null;
             }
         })(),
-        null
+        TIMED_OUT,
     );
+
+    const timedOut = lookup === TIMED_OUT;
+    const user = timedOut ? null : lookup;
     const pathname = request.nextUrl.pathname;
+    const isApi = pathname.startsWith('/api/');
 
-    // Public paths that don't need auth
-    const publicPaths = ['/login', '/auth/callback', '/api/', '/book'];
-    const isPublic = publicPaths.some(p => pathname.startsWith(p));
+    // ── API routes ──
+    // These used to be exempt from middleware entirely. They now need a
+    // session, answered with a 401 rather than a redirect so fetch() callers
+    // see the failure instead of a login page's HTML. A timed-out lookup is
+    // passed through: every route verifies the caller itself, so a Supabase
+    // hiccup must not turn into a wall of spurious 401s.
+    if (isApi) {
+        if (isPublicApi(pathname) || timedOut) return supabaseResponse;
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        return supabaseResponse;
+    }
 
-    if (!user && !isPublic) {
+    // ── Pages ──
+    // /auth/callback and /book are reachable by anyone; the callback is what
+    // establishes the session in the first place, and /book is the founder-
+    // facing scheduling page.
+    if (pathname.startsWith('/auth/callback') || pathname === '/book' || pathname.startsWith('/book/')) {
+        return supabaseResponse;
+    }
+
+    const isLoginPage = pathname === '/login';
+
+    if (!user) {
+        if (isLoginPage) return supabaseResponse;
         const url = request.nextUrl.clone();
         url.pathname = '/login';
+        url.search = '';
         return NextResponse.redirect(url);
     }
 
-    // If logged in user visits /login, redirect to home
-    if (user && pathname === '/login') {
+    // Super-admin email always has access — no DB lookup needed.
+    if (isSuperAdmin(user.email)) {
+        if (isLoginPage) {
+            const url = request.nextUrl.clone();
+            url.pathname = '/';
+            url.search = '';
+            return NextResponse.redirect(url);
+        }
+        return supabaseResponse;
+    }
+
+    // Service role so RLS never blocks these checks.
+    const serviceClient = createServiceClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+    const loadProfile = (column: 'id' | 'email', value: string) =>
+        withTimeout<ProfileRow | null | typeof TIMED_OUT>(
+            (async () => {
+                try {
+                    const { data } = await serviceClient
+                        .from('profiles')
+                        .select('role, permissions')
+                        .eq(column, value)
+                        .maybeSingle();
+                    return data as ProfileRow | null;
+                } catch {
+                    return null;
+                }
+            })(),
+            TIMED_OUT,
+        );
+
+    let profile = await loadProfile('id', user.id);
+    // Email fallback for profiles created with a different UUID.
+    if (profile === null && user.email) profile = await loadProfile('email', user.email);
+
+    // A slow Supabase must not log everyone out: an unknown answer falls
+    // through to the page, which cannot load any data without the API layer
+    // independently authorising the same request.
+    if (profile === TIMED_OUT) return supabaseResponse;
+
+    // A Supabase login is not the same thing as membership here. Without a
+    // profile row the account was never granted access — or has since been
+    // removed — so nothing is reachable. Staying on /login rather than
+    // bouncing back to '/' is what keeps this from ping-ponging.
+    if (!profile) {
+        if (isLoginPage) return supabaseResponse;
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        url.search = '';
+        url.searchParams.set('error', 'unauthorized');
+        return NextResponse.redirect(url);
+    }
+
+    if (isLoginPage) {
         const url = request.nextUrl.clone();
         url.pathname = '/';
+        url.search = '';
         return NextResponse.redirect(url);
     }
 
-    // Page-level permission protection
-    // Map routes to permission keys
-    const routePermissionMap: Record<string, string> = {
-        '/admin': 'admin',
-        '/settings': 'settings',
-        '/dealflow': 'dealflow',
-        '/portfolio': 'portfolio',
-        '/fund': 'fund',
-        '/analytics': 'analytics',
-        '/contacts': 'contacts',
-        '/emails': 'emails',
-        '/pipeline-analytics': 'pipeline-analytics',
-        '/audit-trail': 'audit-trail',
-        '/news': 'news',
+    const subject = {
+        email: user.email,
+        role: profile.role,
+        permissions: profile.permissions,
     };
 
-    const matchedPermission = Object.entries(routePermissionMap).find(
-        ([route]) => pathname.startsWith(route)
-    );
-
-    if (user && matchedPermission) {
-        const requiredPermission = matchedPermission[1];
-
-        // Super-admin email always has access — no DB lookup needed.
-        const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
-
-        if (!isSuperAdmin) {
-            // Use service role key so RLS never blocks this check
-            const serviceClient = createServiceClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-            const profileById = await withTimeout(
-                (async () => {
-                    try {
-                        const { data } = await serviceClient
-                            .from('profiles')
-                            .select('role, permissions')
-                            .eq('id', user.id)
-                            .single();
-                        return data;
-                    } catch {
-                        return null;
-                    }
-                })(),
-                null
-            );
-
-            let hasAccess = false;
-
-            if (profileById) {
-                const permissions = profileById.permissions as string[] | null;
-                if (permissions && permissions.length > 0) {
-                    hasAccess = permissions.includes(requiredPermission);
-                } else {
-                    // Backward compat: if no permissions set, use role-based defaults
-                    hasAccess = profileById.role === 'admin' ||
-                        (profileById.role === 'partner' && !['admin', 'settings'].includes(requiredPermission)) ||
-                        (profileById.role === 'analyst' && !['admin', 'settings'].includes(requiredPermission));
-                }
-            }
-
-            // Email fallback for UUID mismatch
-            if (!hasAccess && user.email) {
-                const profileByEmail = await withTimeout(
-                    (async () => {
-                        try {
-                            const { data } = await serviceClient
-                                .from('profiles')
-                                .select('role, permissions')
-                                .eq('email', user.email)
-                                .single();
-                            return data;
-                        } catch {
-                            return null;
-                        }
-                    })(),
-                    null
-                );
-
-                if (profileByEmail) {
-                    const permissions = profileByEmail.permissions as string[] | null;
-                    if (permissions && permissions.length > 0) {
-                        hasAccess = permissions.includes(requiredPermission);
-                    } else {
-                        hasAccess = profileByEmail.role === 'admin' ||
-                            (profileByEmail.role === 'partner' && !['admin', 'settings'].includes(requiredPermission)) ||
-                            (profileByEmail.role === 'analyst' && !['admin', 'settings'].includes(requiredPermission));
-                    }
-                }
-            }
-
-            if (!hasAccess) {
-                const url = request.nextUrl.clone();
-                url.pathname = '/';
-                return NextResponse.redirect(url);
-            }
-        }
+    const required = permissionsForRoute(pathname);
+    if (required && !hasAnyPermission(subject, required)) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/';
+        url.search = '';
+        // Tells the dashboard why it was bounced, rather than looking like a
+        // stray click.
+        url.searchParams.set('denied', required[0]);
+        return NextResponse.redirect(url);
     }
 
     return supabaseResponse;

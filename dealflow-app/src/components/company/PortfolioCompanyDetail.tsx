@@ -42,7 +42,7 @@ export default function PortfolioCompanyDetail() {
         selectedCompany, setSelectedCompany,
         getIndustryById, getDealSourceNameById, getUserById,
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, updateCompany, deleteCompany,
-        fetchCompanyNotes,
+        followOnsVersion, fetchCompanyNotes,
         setEditingCompany, setShowCompanyForm, setCompanyFormPortfolioMode,
         dealSourceNames, users,
     } = useAppContext();
@@ -60,6 +60,7 @@ export default function PortfolioCompanyDetail() {
     const [notesCount, setNotesCount] = useState<number | null>(null);
     const [editField, setEditField] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
+    const [fieldError, setFieldError] = useState<string | null>(null);
 
     // New round form
     const [roundForm, setRoundForm] = useState({
@@ -106,13 +107,25 @@ export default function PortfolioCompanyDetail() {
         setConfirmDeleteRoundId(null);
         setEditField(null);
         setEditValue('');
+        setFieldError(null);
         setShowNotesPanel(false);
         setNotesFullscreen(false);
         setNotesCount(null);
+        setSaveRoundError(null);
+        // Drop the previous company's rounds too, so its MOIC / IRR can't
+        // flash against the new company while the reload is in flight.
+        setFollowOns([]);
+    }, [c?.id, isPortfolio]);
+
+    // followOnsVersion bumps on every round add / edit / delete, wherever it
+    // happened — this panel, or the Edit Portfolio Company modal layered over
+    // it. Re-reading here is what makes a saved round (and every figure derived
+    // from it: invested, ownership, MOIC, IRR) appear without a page reload.
+    useEffect(() => {
         if (c && isPortfolio) {
             loadFollowOns();
         }
-    }, [c?.id, isPortfolio]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [c?.id, isPortfolio, followOnsVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Note count for the header trigger — loaded up front so the badge is
     // accurate before the pane has ever been opened.
@@ -167,13 +180,21 @@ export default function PortfolioCompanyDetail() {
         } else {
             data[editField] = editValue || null;
         }
-        await updateCompany(c.id, data);
-        setSelectedCompany({ ...c, ...data } as Company);
+        // updateCompany writes the saved row straight back into context, which
+        // is what re-derives Total Invested / ownership / MOIC / IRR here and
+        // the tiles on the board. A rejected write used to be painted on
+        // locally anyway, so the panel showed a value the database never took.
+        const { error } = await updateCompany(c.id, data);
+        if (error) {
+            setFieldError(`Could not save ${editField}: ${error}`);
+            return;
+        }
+        setFieldError(null);
         setEditField(null);
         setEditValue('');
     };
 
-    const cancelEdit = () => { setEditField(null); setEditValue(''); };
+    const cancelEdit = () => { setEditField(null); setEditValue(''); setFieldError(null); };
 
     const handleEdit = () => {
         setCompanyFormPortfolioMode(true);
@@ -277,12 +298,13 @@ export default function PortfolioCompanyDetail() {
         };
 
         if (editingRoundId) {
-            try {
-                await updateFollowOn(editingRoundId, payload);
-            } catch (err) {
-                console.error('updateFollowOn error:', err);
+            // updateFollowOn resolves with the database error rather than
+            // throwing, so this has to be checked — it used to be swallowed,
+            // and a rejected UPDATE looked exactly like a successful save.
+            const { error } = await updateFollowOn(editingRoundId, payload);
+            if (error) {
                 setSavingRound(false);
-                setSaveRoundError('Could not update round.');
+                setSaveRoundError(`Could not update round: ${error}`);
                 return;
             }
         } else {
@@ -315,15 +337,20 @@ export default function PortfolioCompanyDetail() {
             companyUpdates.currentOwnership = ownerAfter;
         }
         if (Object.keys(companyUpdates).length > 0) {
-            await updateCompany(c.id, companyUpdates);
+            const { error } = await updateCompany(c.id, companyUpdates);
+            if (error) {
+                setSavingRound(false);
+                setSaveRoundError(`Round saved, but the company's latest valuation / ownership could not be updated: ${error}`);
+                return;
+            }
         }
 
         resetRoundForm();
         setEditingRoundId(null);
         setShowAddRound(false);
         setSavingRound(false);
-        // Re-load from server to get the canonical row (including server-generated fields)
-        loadFollowOns();
+        // The followOnsVersion effect above re-reads the canonical rows
+        // (including server-generated fields) — no explicit reload needed.
     };
 
     const handleStartEditRound = (fo: FollowOnRound) => {
@@ -362,9 +389,9 @@ export default function PortfolioCompanyDetail() {
     const cancelDeleteRound = () => setConfirmDeleteRoundId(null);
     const confirmDeleteRound = async () => {
         if (!confirmDeleteRoundId) return;
-        await deleteFollowOn(confirmDeleteRoundId);
+        const { error } = await deleteFollowOn(confirmDeleteRoundId);
         setConfirmDeleteRoundId(null);
-        loadFollowOns();
+        if (error) setSaveRoundError(`Could not delete round: ${error}`);
     };
 
     const effectiveEntryDate = c.entryDate ?? c.createdAt;
@@ -435,6 +462,18 @@ export default function PortfolioCompanyDetail() {
                             )}
                         </button>
                     </div>
+
+                    {fieldError && (
+                        <div style={{
+                            marginBottom: 16, padding: '10px 14px',
+                            background: 'var(--danger-bg, #fef2f2)',
+                            color: 'var(--danger, #b91c1c)',
+                            border: '1px solid var(--danger, #b91c1c)',
+                            borderRadius: 8, fontSize: 12,
+                        }}>
+                            {fieldError}
+                        </div>
+                    )}
 
                     {/* 4 Metric Cards — clickable to edit */}
                     <div className="portfolio-detail-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
@@ -531,8 +570,8 @@ export default function PortfolioCompanyDetail() {
                                             founderName: next[0]?.name || '',
                                             founderEmail: next[0]?.email || '',
                                         };
-                                        await updateCompany(c.id, data);
-                                        setSelectedCompany({ ...c, ...data } as Company);
+                                        const { error } = await updateCompany(c.id, data);
+                                        if (error) setFieldError(`Could not save founders: ${error}`);
                                     }}
                                 />
                                 <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} />
@@ -575,6 +614,21 @@ export default function PortfolioCompanyDetail() {
                                 <Plus size={14} /> Add Round
                             </button>
                         </div>
+
+                        {/* Section-level failure notice — the in-form banner
+                            below only renders while the form is open, so a
+                            failed delete would otherwise vanish silently. */}
+                        {saveRoundError && !showAddRound && (
+                            <div style={{
+                                marginBottom: 12, padding: '8px 12px',
+                                background: 'var(--danger-bg, #fef2f2)',
+                                color: 'var(--danger, #b91c1c)',
+                                border: '1px solid var(--danger, #b91c1c)',
+                                borderRadius: 6, fontSize: 12,
+                            }}>
+                                {saveRoundError}
+                            </div>
+                        )}
 
                         {/* Add Round Form */}
                         {showAddRound && (() => {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { requireMember, forbidden, invalidateAuthCache, type ApiActor } from '@/lib/api-auth';
+import { hasAnyPermission } from '@/lib/permissions';
 
 // Allowed tables — prevents arbitrary table access
 const ALLOWED_TABLES = new Set([
@@ -12,13 +14,54 @@ const ALLOWED_TABLES = new Set([
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';
 
-function parseJwt(token: string): Record<string, unknown> | null {
-    try {
-        const payload = token.split('.')[1];
-        return JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
-    } catch {
+// Reading a table requires holding at least one of these page permissions.
+// Tables backing pages everyone uses (companies, stages, lookups) are absent
+// and readable by any member; tables scoped to a single section are listed so
+// a member without that section cannot pull its data straight from the proxy,
+// even though the page itself is already blocked in middleware.
+const TABLE_READ_PERMISSIONS: Record<string, string[]> = {
+    portfolio_follow_ons: ['portfolio', 'analytics', 'legal', 'fund'],
+    company_notes: ['portfolio', 'dealflow', 'analytics', 'legal'],
+    email_logs: ['emails', 'dealflow'],
+    ingested_emails: ['emails', 'dealflow'],
+    audit_logs: ['audit-trail'],
+    rejection_records: ['dealflow', 'analytics', 'pipeline-analytics'],
+};
+
+// Tables only an admin may write to. `profiles` carries `role` and
+// `permissions`, so an ordinary member who could update it could grant
+// themselves the admin page — the proxy runs as service role and RLS never
+// sees these statements.
+const ADMIN_WRITE_TABLES = new Set(['profiles']);
+
+// The audit trail is append-only: it exists to record what happened, so the
+// proxy must not offer a way to rewrite or erase it.
+const APPEND_ONLY_TABLES = new Set(['audit_logs']);
+
+function authorize(actor: ApiActor, table: string, operation: Operation): string | null {
+    if (actor.isAdmin) return null;
+
+    if (operation === 'select') {
+        const required = TABLE_READ_PERMISSIONS[table];
+        if (required && !hasAnyPermission(actor, required)) {
+            return `You do not have access to ${table}.`;
+        }
         return null;
     }
+
+    if (ADMIN_WRITE_TABLES.has(table)) {
+        return `Only an admin can modify ${table}.`;
+    }
+    if (APPEND_ONLY_TABLES.has(table) && operation !== 'insert') {
+        return `${table} is append-only.`;
+    }
+
+    // Writes to a section-scoped table need the same permission as reads.
+    const required = TABLE_READ_PERMISSIONS[table];
+    if (required && !hasAnyPermission(actor, required)) {
+        return `You do not have access to ${table}.`;
+    }
+    return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -29,17 +72,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Server config missing' }, { status: 500 });
     }
 
-    // Validate auth
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const jwt = parseJwt(authHeader.slice(7));
-    const userId = jwt?.sub as string | undefined;
-    if (!userId) {
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
+    // Verified identity + workspace membership. Previously this route trusted
+    // an unverified base64 decode of the bearer token, which let anyone drive
+    // the service-role client as any user id they cared to name.
+    const auth = await requireMember(request);
+    if (auth.response) return auth.response;
+    const actor = auth.actor;
 
     const body = await request.json();
     const { table, operation, data, match, order, filter, single, limit: queryLimit } = body as {
@@ -63,7 +101,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Table '${table}' not allowed` }, { status: 400 });
     }
 
+    const denial = authorize(actor, table, operation);
+    if (denial) return forbidden(denial);
+
     const db = createServiceClient(supabaseUrl, serviceRoleKey);
+
+    // A write to `profiles` changes who can do what, so the cached membership
+    // lookups have to go — otherwise a revoked permission would keep working
+    // until the cache window closed.
+    if (table === 'profiles' && operation !== 'select') {
+        invalidateAuthCache();
+    }
 
     try {
         if (operation === 'select') {

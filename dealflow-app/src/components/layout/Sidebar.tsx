@@ -8,32 +8,34 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { PagePermission } from '@/types/database';
+import { hasAnyPermission, hasPermission } from '@/lib/permissions';
 
-const navItems: { label: string; href: string; icon: React.ElementType; permission: PagePermission }[] = [
-    { label: 'Dashboard', href: '/', icon: Home, permission: 'dashboard' },
-    { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid, permission: 'dealflow' },
-    { label: 'Portfolio', href: '/portfolio', icon: Briefcase, permission: 'portfolio' },
-    { label: 'Legal', href: '/legal', icon: Scale, permission: 'portfolio' },
-    { label: 'Fund', href: '/fund', icon: Wallet, permission: 'fund' },
-    { label: 'Analytics', href: '/analytics', icon: BarChart3, permission: 'analytics' },
-    { label: 'Pipeline Analytics', href: '/pipeline-analytics', icon: Activity, permission: 'pipeline-analytics' },
-    { label: 'Audit Trail', href: '/audit-trail', icon: FileText, permission: 'audit-trail' },
-    { label: 'Contacts', href: '/contacts', icon: Users, permission: 'contacts' },
-    { label: 'Email Workspace', href: '/emails', icon: Mail, permission: 'emails' },
-    { label: 'News', href: '/news', icon: Newspaper, permission: 'news' },
+// Each entry lists the permissions that open the page; holding any one shows
+// the link. The lists mirror ROUTE_PERMISSIONS, which is what middleware
+// enforces — a link is only ever shown for a page you can actually open.
+const navItems: { label: string; href: string; icon: React.ElementType; permissions: PagePermission[] }[] = [
+    { label: 'Dashboard', href: '/', icon: Home, permissions: ['dashboard'] },
+    { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid, permissions: ['dealflow'] },
+    { label: 'Portfolio', href: '/portfolio', icon: Briefcase, permissions: ['portfolio'] },
+    { label: 'Legal', href: '/legal', icon: Scale, permissions: ['legal', 'portfolio'] },
+    { label: 'Fund', href: '/fund', icon: Wallet, permissions: ['fund'] },
+    { label: 'Analytics', href: '/analytics', icon: BarChart3, permissions: ['analytics'] },
+    { label: 'Pipeline Analytics', href: '/pipeline-analytics', icon: Activity, permissions: ['pipeline-analytics'] },
+    { label: 'Audit Trail', href: '/audit-trail', icon: FileText, permissions: ['audit-trail'] },
+    { label: 'Contacts', href: '/contacts', icon: Users, permissions: ['contacts'] },
+    { label: 'Email Workspace', href: '/emails', icon: Mail, permissions: ['emails'] },
+    { label: 'News', href: '/news', icon: Newspaper, permissions: ['news'] },
 ];
 
-function hasPermission(userPermissions: PagePermission[] | undefined, required: PagePermission): boolean {
-    if (!userPermissions || userPermissions.length === 0) return true; // backward compat: no permissions = show all
-    return userPermissions.includes(required);
-}
 
 export default function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
     const { user, signOut } = useAppContext();
 
-    const userPerms = user?.permissions;
+    // One subject, matching what middleware and the API evaluate, so a link
+    // is shown exactly when the page behind it is actually reachable.
+    const subject = { email: user?.email, role: user?.role, permissions: user?.permissions };
 
     const closeMobileSidebar = () => {
         document.querySelector('.sidebar')?.classList.remove('mobile-open');
@@ -56,7 +58,7 @@ export default function Sidebar() {
             <nav className="sidebar-nav">
                 {!collapsed && <div className="sidebar-section-label">Main</div>}
                 {navItems
-                    .filter(item => hasPermission(userPerms, item.permission))
+                    .filter(item => hasAnyPermission(subject, item.permissions))
                     .map((item) => {
                         const Icon = item.icon;
                         const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
@@ -74,7 +76,7 @@ export default function Sidebar() {
                         );
                     })}
 
-                {hasPermission(userPerms, 'admin') && (
+                {hasPermission(subject, 'admin') && (
                     <Link
                         href="/admin"
                         className={`sidebar-nav-item ${pathname.startsWith('/admin') ? 'active' : ''}`}
@@ -88,8 +90,8 @@ export default function Sidebar() {
 
                 <div style={{ flex: 1 }} />
 
-                {!collapsed && hasPermission(userPerms, 'settings') && <div className="sidebar-section-label">System</div>}
-                {hasPermission(userPerms, 'settings') && (
+                {!collapsed && hasPermission(subject, 'settings') && <div className="sidebar-section-label">System</div>}
+                {hasPermission(subject, 'settings') && (
                     <Link
                         href="/settings"
                         className={`sidebar-nav-item ${pathname === '/settings' ? 'active' : ''}`}

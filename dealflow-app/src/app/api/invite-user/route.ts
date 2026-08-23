@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { requireAdmin } from '@/lib/api-auth';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -10,6 +11,12 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
 export async function POST(req: NextRequest) {
+  // This route writes the allowlist that decides who may register at all, so
+  // it is the front door to the platform. It had no auth check whatsoever —
+  // anyone who knew the URL could add their own address and then sign in.
+  const auth = await requireAdmin(req);
+  if (auth.response) return auth.response;
+
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: 'Supabase env vars not set' }, { status: 500 });
   }
@@ -37,6 +44,7 @@ export async function POST(req: NextRequest) {
       email: normalizedEmail,
       role,
       permissions: Array.isArray(permissions) ? permissions : [],
+      invited_by: auth.actor.userId,
     }, { onConflict: 'email' });
 
   if (inviteError) {

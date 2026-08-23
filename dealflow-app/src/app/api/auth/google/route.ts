@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUrl } from '@/lib/google';
+import { requireMember } from '@/lib/api-auth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    // Starting the Google link flow is a member action — the resulting tokens
+    // are stored against whoever completes the callback.
+    const auth = await requireMember(request);
+    if (auth.response) return auth.response;
+
     try {
         const url = getAuthUrl();
         return NextResponse.json({ url });

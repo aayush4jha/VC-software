@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callGeminiMultimodal, getGeminiApiKeys, type GeminiPart } from '@/lib/gemini';
+import { requireMember } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+    // These routes spend real money on model calls and read company data back
+    // out in the response, so they are members-only like the rest of the app.
+    const auth = await requireMember(request);
+    if (auth.response) return auth.response;
+
     if (getGeminiApiKeys().length === 0) {
         return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }

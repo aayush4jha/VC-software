@@ -2,6 +2,7 @@
 
 import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { BarChart3, AlertTriangle, ArrowRight, Users, Sparkles, PhoneCall, UserPlus, Video } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import TopHeader from '@/components/layout/TopHeader';
 import { formatCurrency, getDaysInPipeline, isStageOverdue } from '@/lib/context';
 import { useAppContext } from '@/lib/context';
@@ -26,6 +27,11 @@ export default function DashboardPage() {
         setSelectedCompany, companies, pipelineStages, user, getUserById,
         getIndustryById, getStageById, getUnassignedCompanies, users, assignAnalyst,
     } = useAppContext();
+
+    // Middleware redirects here with ?denied=<permission> when someone opens a
+    // page they don't hold. Without this the bounce is silent and reads like a
+    // broken link rather than a deliberate restriction.
+    const deniedPermission = useSearchParams().get('denied');
 
     const isPartnerOrAdmin = user?.role === 'partner' || user?.role === 'admin';
 
@@ -138,6 +144,22 @@ export default function DashboardPage() {
         <>
             <TopHeader title="Dashboard" subtitle={`Good ${new Date().getHours() < 12 ? 'morning' : 'afternoon'}, ${user?.name?.split(' ')[0] || 'there'}`} />
             <div className="page-content page-enter">
+                {deniedPermission && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        marginBottom: 16, padding: '10px 14px', borderRadius: 8,
+                        background: 'var(--warning-bg, #fffbeb)',
+                        border: '1px solid var(--warning, #d97706)',
+                        color: 'var(--warning, #b45309)', fontSize: 13,
+                    }}>
+                        <AlertTriangle size={15} />
+                        <span>
+                            You don&apos;t have access to the <strong>{deniedPermission}</strong> page.
+                            Ask an admin if you need it.
+                        </span>
+                    </div>
+                )}
+
                 {/* ── Stats ─────────────────────────────────────── */}
                 <div className="dashboard-grid">
                     <div className="stat-card purple">

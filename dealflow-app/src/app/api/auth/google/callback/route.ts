@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { getOAuth2Client } from '@/lib/google';
 import { saveGoogleTokens } from '@/lib/google-tokens';
+import { getRouteUser } from '@/lib/auth-helpers';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -40,7 +41,11 @@ export async function GET(request: NextRequest) {
 
         const { data: { user } } = await supabase.auth.getUser();
 
-        if (user) {
+        // Membership, not just a session: tokens are stored against a profile,
+        // so someone who is not on the team has nothing to attach them to.
+        const member = user ? await getRouteUser(request) : null;
+
+        if (user && member) {
             // Store tokens in the database — persists across sessions
             await saveGoogleTokens(user.id, ORGANIZATION_ID, {
                 access_token: tokens.access_token,

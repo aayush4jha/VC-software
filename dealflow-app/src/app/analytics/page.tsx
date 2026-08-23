@@ -41,7 +41,7 @@ function AnalyticsContent() {
     const {
         companies, industries, users, dealSourceNames,
         getIndustryById, getDealSourceNameById, getUserById,
-        fetchFollowOns,
+        fetchFollowOns, followOnsVersion,
     } = useAppContext();
 
     // ─── Follow-on data ──────────────────────────
@@ -69,11 +69,13 @@ function AnalyticsContent() {
         setFollowOnsLoaded(true);
     }, [portfolioCompanies, fetchFollowOns]);
 
+    // followOnsVersion bumps on any round add / edit / delete, so every metric
+    // on this page re-derives from fresh rounds instead of a stale first load.
     useEffect(() => {
         if (portfolioCompanies.length > 0) {
             loadFollowOns();
         }
-    }, [portfolioCompanies.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [portfolioCompanies.length, followOnsVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Filter State ────────────────────────────
     const [filterStage, setFilterStage] = useState('all');

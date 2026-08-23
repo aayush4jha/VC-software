@@ -251,12 +251,29 @@ export function getLatestValuation(company: Company, followOns: FollowOnRound[])
 }
 
 // ─── Terminal Value (per IRR engine spec v2 section 7.6) ─────
-// Latest Round's valueToday — which already respects the per-round OUR VALUE TODAY
-// override, and otherwise auto-computes as postMoney × ownershipAfter ÷ 100.
+// What our stake is worth today: latest valuation × ownership after the
+// latest round. A per-round OUR VALUE TODAY override still wins outright.
 
 export function getTerminalValue(company: Company, followOns: FollowOnRound[]): number {
     const chain = computeOwnershipChain(company, followOns);
-    return chain[chain.length - 1].valueToday;
+    const last = chain[chain.length - 1];
+
+    // An explicit OUR VALUE TODAY typed on the latest round is a hard
+    // override — the user has stated the number to carry into MOIC / IRR.
+    if (last.valueTodaySource === 'override') return last.valueToday;
+
+    // Otherwise mark to the latest valuation of record. getLatestValuation
+    // already honours a manually entered Latest Valuation first, then
+    // shares × share price, then the newest post-money on the cap table —
+    // so raising the valuation anywhere flows straight through to MOIC, IRR
+    // and every portfolio roll-up. This used to read the chain's own
+    // post-money only, which left IRR frozen when the Latest Valuation on
+    // the company was bumped by hand.
+    const latest = getLatestValuation(company, followOns);
+    const ownership = last.ownershipAfter;
+    if (latest > 0 && ownership > 0) return (latest * ownership) / 100;
+
+    return last.valueToday;
 }
 
 // ─── Unrealized Value ─────────────────────────────

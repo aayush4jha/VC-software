@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireMember } from '@/lib/api-auth';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 export async function POST(request: NextRequest) {
+    // These routes spend real money on model calls and read company data back
+    // out in the response, so they are members-only like the rest of the app.
+    const auth = await requireMember(request);
+    if (auth.response) return auth.response;
+
     if (!GEMINI_API_KEY) {
         return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }

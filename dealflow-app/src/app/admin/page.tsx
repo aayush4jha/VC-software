@@ -9,6 +9,7 @@ import {
     ChevronDown, Filter,
 } from 'lucide-react';
 import { ALL_PAGE_PERMISSIONS, type PagePermission } from '@/types/database';
+import { hasPermission, isSuperAdmin } from '@/lib/permissions';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
@@ -179,7 +180,7 @@ export default function AdminPage() {
         dealSourceNames, rejectionReasonCategories,
         getUserById, getStageById, getIndustryById,
         deleteCompany, setSelectedCompany, refreshData,
-        updateUserPermissions, updateUserRole, inviteUser,
+        updateUserPermissions, updateUserRole, inviteUser, removeUser,
     } = useAppContext();
 
     const [activeSection, setActiveSection] = useState<AdminSection>('overview');
@@ -193,6 +194,9 @@ export default function AdminPage() {
     const [inviteRole, setInviteRole] = useState('analyst');
     const [invitePermissions, setInvitePermissions] = useState<PagePermission[]>(['dashboard', 'dealflow', 'contacts', 'emails']);
     const [inviting, setInviting] = useState(false);
+    const [confirmRemoveUserId, setConfirmRemoveUserId] = useState<string | null>(null);
+    const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+    const [userActionError, setUserActionError] = useState<string | null>(null);
 
     // Column filters for All Companies
     const [filterStage, setFilterStage] = useState<Set<string>>(new Set());
@@ -275,7 +279,9 @@ export default function AdminPage() {
         { id: 'settings', label: 'Configuration', icon: Settings },
     ];
 
-    if (user && !user.permissions.includes('admin') && user.role !== 'admin' && user.role !== 'partner') {
+    // Matches what middleware enforces — partners no longer see a page they
+    // would immediately be bounced off.
+    if (user && !hasPermission({ email: user.email, role: user.role, permissions: user.permissions }, 'admin')) {
         return (
             <div className="app-layout">
                 <Sidebar />
@@ -286,7 +292,7 @@ export default function AdminPage() {
                             <div className="empty-state-icon"><Shield size={28} /></div>
                             <div className="empty-state-title">Access Denied</div>
                             <div className="empty-state-text">
-                                You need admin or partner privileges to access this page.
+                                You need admin privileges to access this page.
                             </div>
                         </div>
                     </div>
@@ -671,11 +677,33 @@ export default function AdminPage() {
                                 </div>
                             )}
 
+                            {userActionError && (
+                                <div style={{
+                                    marginBottom: 12, padding: '10px 14px',
+                                    background: 'var(--danger-bg, #fef2f2)',
+                                    color: 'var(--danger, #b91c1c)',
+                                    border: '1px solid var(--danger, #b91c1c)',
+                                    borderRadius: 8, fontSize: 13,
+                                }}>
+                                    {userActionError}
+                                </div>
+                            )}
+
                             {/* User list with permissions */}
                             <div className="config-list">
                                 {users.map(u => {
                                     const assigned = activeCompanies.filter(c => c.analystId === u.id).length;
                                     const isEditing = editingUserId === u.id;
+                                    // An admin cannot remove their own account — that would
+                                    // leave the workspace with one fewer admin and lock the
+                                    // person out mid-session. Another admin has to do it.
+                                    const isSelf = u.id === user?.id;
+                                    // The owner account is rejected by the server too; disabling
+                                    // it here means the button never offers something that fails.
+                                    const isOwner = isSuperAdmin(u.email);
+                                    const cannotRemove = isSelf || isOwner;
+                                    const isConfirmingRemove = confirmRemoveUserId === u.id;
+                                    const isRemoving = removingUserId === u.id;
                                     return (
                                         <div key={u.id} className="config-item" style={{ padding: '14px 16px', flexDirection: 'column', alignItems: 'stretch' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -708,8 +736,76 @@ export default function AdminPage() {
                                                     >
                                                         <Edit2 size={14} />
                                                     </button>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm"
+                                                        disabled={cannotRemove || isRemoving}
+                                                        onClick={() => {
+                                                            setUserActionError(null);
+                                                            setConfirmRemoveUserId(isConfirmingRemove ? null : u.id);
+                                                        }}
+                                                        title={
+                                                            isSelf ? 'You cannot remove your own account'
+                                                                : isOwner ? 'The owner account cannot be removed'
+                                                                : 'Remove from team'
+                                                        }
+                                                        style={{ opacity: cannotRemove ? 0.4 : 1, cursor: cannotRemove ? 'not-allowed' : 'pointer' }}
+                                                    >
+                                                        <Trash2 size={14} style={{ color: cannotRemove ? 'var(--text-tertiary)' : 'var(--danger)' }} />
+                                                    </button>
                                                 </div>
                                             </div>
+
+                                            {/* Remove confirmation — spells out what goes,
+                                                because this revokes the login itself and
+                                                cannot be undone from here. */}
+                                            {isConfirmingRemove && (
+                                                <div style={{
+                                                    marginTop: 12, marginLeft: 48, padding: '12px 16px',
+                                                    background: 'var(--danger-bg, #fef2f2)',
+                                                    border: '1px solid var(--danger, #b91c1c)',
+                                                    borderRadius: 8,
+                                                }}>
+                                                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--danger, #b91c1c)' }}>
+                                                        Remove {u.name} from the team?
+                                                    </div>
+                                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.5 }}>
+                                                        Their sign-in, page permissions, pending invite and connected
+                                                        Google account are all revoked immediately, and their comments
+                                                        and activity entries are deleted.
+                                                        {assigned > 0 && ` The ${assigned} deal${assigned === 1 ? '' : 's'} they analyse will become unassigned.`}
+                                                        {' '}Companies and the audit trail are kept. This cannot be undone —
+                                                        they would need a fresh invite to return.
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
+                                                        <button
+                                                            className="btn btn-danger btn-sm"
+                                                            disabled={isRemoving}
+                                                            onClick={async () => {
+                                                                setRemovingUserId(u.id);
+                                                                setUserActionError(null);
+                                                                const { error, warning } = await removeUser(u.id);
+                                                                setRemovingUserId(null);
+                                                                if (error) {
+                                                                    setUserActionError(error);
+                                                                    return;
+                                                                }
+                                                                setConfirmRemoveUserId(null);
+                                                                if (editingUserId === u.id) setEditingUserId(null);
+                                                                if (warning) setUserActionError(warning);
+                                                            }}
+                                                        >
+                                                            {isRemoving ? 'Removing...' : 'Remove access'}
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-ghost btn-sm"
+                                                            disabled={isRemoving}
+                                                            onClick={() => setConfirmRemoveUserId(null)}
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* Permission badges (read-only) */}
                                             {!isEditing && (
@@ -774,8 +870,17 @@ export default function AdminPage() {
                                                         <button
                                                             className="btn btn-primary btn-sm"
                                                             onClick={async () => {
-                                                                await updateUserRole(u.id, editRole);
-                                                                await updateUserPermissions(u.id, editPermissions);
+                                                                setUserActionError(null);
+                                                                const roleResult = await updateUserRole(u.id, editRole);
+                                                                if (roleResult.error) {
+                                                                    setUserActionError(`Could not save the role: ${roleResult.error}`);
+                                                                    return;
+                                                                }
+                                                                const permResult = await updateUserPermissions(u.id, editPermissions);
+                                                                if (permResult.error) {
+                                                                    setUserActionError(`Could not save permissions: ${permResult.error}`);
+                                                                    return;
+                                                                }
                                                                 setEditingUserId(null);
                                                             }}
                                                         >

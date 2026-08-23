@@ -11,18 +11,13 @@ import type {
     Comment, ActivityLog, UserRole, SavedView, EmailLog, TerminalStatus,
     PagePermission, FollowOnRound, CompanyScore, CompanyFeedback, CompanyNote,
 } from '@/types/database';
+import { defaultPermissionsForRole } from '@/lib/permissions';
 
 // ──────────────────────────────────────────────────
 // DB → TypeScript Mappers
 // ──────────────────────────────────────────────────
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, PagePermission[]> = {
-    admin: ['dashboard', 'dealflow', 'portfolio', 'fund', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'news', 'admin', 'settings'],
-    partner: ['dashboard', 'dealflow', 'portfolio', 'fund', 'analytics', 'pipeline-analytics', 'audit-trail', 'contacts', 'emails', 'news', 'admin'],
-    analyst: ['dashboard', 'dealflow', 'contacts', 'emails', 'news'],
-};
 
 function mapUser(r: any): User {
     if (!r) return r;
@@ -31,7 +26,7 @@ function mapUser(r: any): User {
     // If no permissions set, fall back to role-based defaults
     const permissions = (rawPermissions && rawPermissions.length > 0)
         ? rawPermissions
-        : (DEFAULT_PERMISSIONS_BY_ROLE[role] || DEFAULT_PERMISSIONS_BY_ROLE['analyst']);
+        : (defaultPermissionsForRole(role) as PagePermission[]);
     return {
         id: r.id,
         name: r.name ?? '',
@@ -307,7 +302,7 @@ interface AppContextType {
 
     // Mutations
     createCompany: (data: Record<string, unknown>) => Promise<Company | null>;
-    updateCompany: (id: string, data: Record<string, unknown>) => Promise<void>;
+    updateCompany: (id: string, data: Record<string, unknown>) => Promise<{ error: string | null }>;
     deleteCompany: (id: string) => Promise<void>;
     moveCompanyStage: (companyId: string, targetStageId: string) => Promise<string | null>;
     assignAnalyst: (companyId: string, analystId: string | null) => Promise<void>;
@@ -352,8 +347,9 @@ interface AppContextType {
         registrationUrl?: string;
         emailError?: string;
     }>;
-    updateUserPermissions: (userId: string, permissions: PagePermission[]) => Promise<void>;
-    updateUserRole: (userId: string, role: string) => Promise<void>;
+    updateUserPermissions: (userId: string, permissions: PagePermission[]) => Promise<{ error: string | null }>;
+    updateUserRole: (userId: string, role: string) => Promise<{ error: string | null }>;
+    removeUser: (userId: string) => Promise<{ error: string | null; warning?: string }>;
 
     // Follow-on rounds
     fetchFollowOns: (companyId: string) => Promise<FollowOnRound[]>;
@@ -361,8 +357,8 @@ interface AppContextType {
     /** Increments on every follow-on add/edit/delete; watch it to refetch. */
     followOnsVersion: number;
     addFollowOn: (data: Record<string, unknown>) => Promise<FollowOnRound | null>;
-    updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<void>;
-    deleteFollowOn: (id: string) => Promise<void>;
+    updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<{ error: string | null }>;
+    deleteFollowOn: (id: string) => Promise<{ error: string | null }>;
 
     // Company notes (dated timeline)
     fetchCompanyNotes: (companyId: string) => Promise<{ notes: CompanyNote[]; error: string | null }>;
@@ -821,8 +817,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         // Forward-compat: if the DB hasn't been migrated yet, retry without any
         // columns Postgres says are missing instead of failing the whole insert.
-        if (error && isMissingColumnError(error)) {
-            const missing = extractMissingColumns(error);
+        // apiDb hands back the message as a plain string, so it is wrapped here
+        // — passing the string straight in read `.message` off it, came back
+        // undefined, and the retry never actually fired. Postgrest names one
+        // column per error, hence the loop.
+        for (let attempt = 0; attempt < 8 && error && isMissingColumnError({ message: error }); attempt++) {
+            const missing = extractMissingColumns({ message: error }).filter(col => col in insertPayload);
+            if (missing.length === 0) break;
             for (const col of missing) delete insertPayload[col];
             console.warn(`Retrying create company without missing column(s): ${missing.join(', ')}`);
             ({ data: row, error } = await apiDb({
@@ -875,7 +876,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         'hqLocation', 'notes', 'portfolioStatus', 'initialInvestment', 'entryValuation',
     ]);
 
-    const updateCompany = useCallback(async (id: string, data: Record<string, unknown>) => {
+    const updateCompany = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ error: string | null }> => {
         // Capture old values for audit
         const oldCompany = companies.find(c => c.id === id);
 
@@ -925,13 +926,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         // Same forward-compat retry as createCompany — drop any columns Postgres
         // doesn't know about yet rather than discarding the entire update.
-        if (error && isMissingColumnError(error)) {
-            const missing = extractMissingColumns(error);
+        // Postgrest names one column per error, so this loops: with two
+        // un-applied migrations a single retry still failed, and the edit was
+        // dropped on the floor.
+        for (let attempt = 0; attempt < 8 && error && isMissingColumnError({ message: error }); attempt++) {
+            const missing = extractMissingColumns({ message: error }).filter(col => col in dbData);
+            if (missing.length === 0) break;
             for (const col of missing) delete dbData[col];
             console.warn(`Retrying update company without missing column(s): ${missing.join(', ')}`);
             ({ data: rows, error } = await apiDb({ table: 'companies', operation: 'update', data: dbData, match: { id } }));
         }
-        if (error) { console.error('Update company error:', error); return; }
+        if (error) { console.error('Update company error:', error); return { error }; }
         const row = Array.isArray(rows) ? rows[0] : rows;
         if (row) {
             const updated = mapCompany(row);
@@ -962,6 +967,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 apiDb({ table: 'audit_logs', operation: 'insert', data: auditInserts }).catch(() => {});
             }
         }
+
+        return { error: null };
     }, [apiDb, user, companies]);
 
     const deleteCompany = useCallback(async (id: string) => {
@@ -1262,7 +1269,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return mapFollowOn(row);
     }, [apiDb]);
 
-    const updateFollowOn = useCallback(async (id: string, data: Record<string, unknown>) => {
+    const updateFollowOn = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ error: string | null }> => {
         const dbData: Record<string, unknown> = {};
         if (data.roundName !== undefined) dbData.round_name = data.roundName;
         if (data.roundDate !== undefined) dbData.round_date = data.roundDate;
@@ -1291,13 +1298,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.noOfShares !== undefined) dbData.no_of_shares = data.noOfShares;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;
-        await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } });
+
+        let { error } = await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } });
+
+        // Same forward-compat retry addFollowOn already had. Without it an
+        // un-applied migration (share_price, dv_total_shares, …) rejected the
+        // whole UPDATE, so editing a round silently changed nothing while
+        // creating one still worked via the legacy-column fallback.
+        //
+        // Postgrest names one missing column per error, so this loops rather
+        // than retrying once — several un-applied migrations would otherwise
+        // still leave the update failing. Bounded so a mis-parsed message
+        // can't spin.
+        for (let attempt = 0; attempt < 8 && error && isMissingColumnError({ message: error }); attempt++) {
+            const missing = extractMissingColumns({ message: error }).filter(col => col in dbData);
+            if (missing.length === 0) break;
+            for (const col of missing) delete dbData[col];
+            console.warn(`Retrying follow-on update without missing column(s): ${missing.join(', ')}`);
+            ({ error } = await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } }));
+        }
+
+        if (error) {
+            console.error('updateFollowOn error:', error);
+            return { error };
+        }
         setFollowOnsVersion(v => v + 1);
+        return { error: null };
     }, [apiDb]);
 
-    const deleteFollowOn = useCallback(async (id: string) => {
-        await apiDb({ table: 'portfolio_follow_ons', operation: 'delete', match: { id } });
+    const deleteFollowOn = useCallback(async (id: string): Promise<{ error: string | null }> => {
+        const { error } = await apiDb({ table: 'portfolio_follow_ons', operation: 'delete', match: { id } });
+        if (error) {
+            console.error('deleteFollowOn error:', error);
+            return { error };
+        }
         setFollowOnsVersion(v => v + 1);
+        return { error: null };
     }, [apiDb]);
 
     // ─── Company Notes (dated notes timeline) ───────
@@ -1688,9 +1724,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Invite user: calls API route to send invite and upsert profile
     const inviteUser = useCallback(async (email: string, role: UserRole, permissions?: PagePermission[]) => {
+        const token = await getToken();
         const res = await fetch('/api/invite-user', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify({ email, role, organizationId: ORGANIZATION_ID, permissions }),
         });
         let data;
@@ -1716,16 +1756,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             registrationUrl: data?.registrationUrl as string | undefined,
             emailError: data?.emailError as string | undefined,
         };
-    }, [user, refreshData]);
+    }, [user, refreshData, getToken]);
 
+    // These now report the failure instead of swallowing it: /api/db rejects
+    // profile writes from anyone but an admin, and a silent 403 looked
+    // identical to a successful save.
     const updateUserPermissions = useCallback(async (userId: string, permissions: PagePermission[]) => {
         const { error } = await apiDb({
             table: 'profiles', operation: 'update',
             data: { permissions },
             match: { id: userId },
         });
-        if (error) { console.error('updateUserPermissions error:', error); return; }
+        if (error) { console.error('updateUserPermissions error:', error); return { error }; }
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions } : u));
+        return { error: null };
     }, [apiDb]);
 
     const updateUserRole = useCallback(async (userId: string, role: string) => {
@@ -1734,9 +1778,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
             data: { role },
             match: { id: userId },
         });
-        if (error) { console.error('updateUserRole error:', error); return; }
+        if (error) { console.error('updateUserRole error:', error); return { error }; }
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+        return { error: null };
     }, [apiDb]);
+
+    // Removes the member and every access they hold — profile, pending invite,
+    // Google tokens and the Supabase login itself. Admin-only, enforced on the
+    // server; this just drives it and drops them from the local list.
+    const removeUser = useCallback(async (userId: string): Promise<{ error: string | null; warning?: string }> => {
+        try {
+            const token = await getToken();
+            const res = await fetch('/api/admin/remove-user', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ userId }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) return { error: data?.error || `Failed to remove member (status ${res.status})` };
+
+            setUsers(prev => prev.filter(u => u.id !== userId));
+            // Deals they were the analyst on are now unassigned.
+            setCompanies(prev => prev.map(c => c.analystId === userId ? { ...c, analystId: null } : c));
+            return {
+                error: null,
+                warning: data?.authDeleted === false
+                    ? 'Their profile and permissions are gone, but the Supabase login could not be deleted — remove it by hand in the Supabase dashboard.'
+                    : undefined,
+            };
+        } catch (err) {
+            return { error: (err as Error).message };
+        }
+    }, [getToken]);
 
     // ─── Email Ingestion ─────────────────────────────
 
@@ -1822,7 +1898,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addIndustry, updateIndustry, deleteIndustry,
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
-        inviteUser, updateUserPermissions, updateUserRole, refreshData,
+        inviteUser, updateUserPermissions, updateUserRole, removeUser, refreshData,
         fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, followOnsVersion,
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany,
@@ -1854,7 +1930,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addIndustry, updateIndustry, deleteIndustry,
         addDealSourceName, updateDealSourceName, deleteDealSourceName,
         addRejectionCategory, deleteRejectionCategory, addSubReason, updateSubReason, deleteSubReason,
-        inviteUser, updateUserPermissions, updateUserRole, refreshData,
+        inviteUser, updateUserPermissions, updateUserRole, removeUser, refreshData,
         fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, followOnsVersion,
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany, deckEmailLinks,
