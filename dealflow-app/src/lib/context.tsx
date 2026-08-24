@@ -135,6 +135,35 @@ function extractMissingColumns(error: unknown): string[] {
     return [...cols];
 }
 
+// Postgrest rejects an entire INSERT/UPDATE when it meets a column the database
+// does not have, and names only one column per error. This retries, dropping
+// just the named column each time, and reports back what it had to drop.
+//
+// Dropping only what is actually missing matters: the follow-on insert used to
+// collapse to a hand-written "legacy" column set on any such error, so one
+// un-applied migration silently discarded nine fields the user had filled in.
+async function writeWithColumnFallback(
+    send: (payload: Record<string, unknown>) => Promise<{ data: any; error: string | null }>,
+    payload: Record<string, unknown>,
+): Promise<{ data: any; error: string | null; dropped: string[] }> {
+    const working = { ...payload };
+    const dropped: string[] = [];
+    let { data, error } = await send(working);
+
+    for (let attempt = 0; attempt < 12 && error && isMissingColumnError({ message: error }); attempt++) {
+        const missing = extractMissingColumns({ message: error }).filter(col => col in working);
+        if (missing.length === 0) break;
+        for (const col of missing) {
+            delete working[col];
+            dropped.push(col);
+        }
+        console.warn(`Retrying without column(s) the database does not have: ${missing.join(', ')}`);
+        ({ data, error } = await send(working));
+    }
+
+    return { data, error, dropped };
+}
+
 function mapFollowOn(r: any): FollowOnRound {
     // Prefer the new post_money_valuation column, fall back to legacy round_valuation.
     const postMoney = r.post_money_valuation ?? r.round_valuation ?? null;
@@ -356,8 +385,8 @@ interface AppContextType {
     fetchAllFollowOns: () => Promise<FollowOnRound[]>;
     /** Increments on every follow-on add/edit/delete; watch it to refetch. */
     followOnsVersion: number;
-    addFollowOn: (data: Record<string, unknown>) => Promise<FollowOnRound | null>;
-    updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<{ error: string | null }>;
+    addFollowOn: (data: Record<string, unknown>) => Promise<{ round: FollowOnRound | null; dropped: string[] }>;
+    updateFollowOn: (id: string, data: Record<string, unknown>) => Promise<{ error: string | null; dropped: string[] }>;
     deleteFollowOn: (id: string) => Promise<{ error: string | null }>;
 
     // Company notes (dated timeline)
@@ -1219,13 +1248,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return (Array.isArray(rows) ? rows : [rows]).map(mapFollowOn);
     }, [apiDb]);
 
-    const addFollowOn = useCallback(async (data: Record<string, unknown>): Promise<FollowOnRound | null> => {
+    const addFollowOn = useCallback(async (data: Record<string, unknown>): Promise<{ round: FollowOnRound | null; dropped: string[] }> => {
         // Prefer post_money_valuation; fall back to roundValuation alias so older code paths keep working.
         const postMoneyRaw = data.postMoneyValuation ?? data.roundValuation ?? null;
         const postMoney = toBigint(postMoneyRaw);
 
-        // Columns the schema has always had — guaranteed safe.
-        const legacyRow: Record<string, unknown> = {
+        const row: Record<string, unknown> = {
             company_id: data.companyId,
             organization_id: ORGANIZATION_ID,
             round_name: data.roundName || '',
@@ -1237,11 +1265,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ownership_after: data.ownershipAfter ?? null,
             investor_names: data.investorNames || '',
             notes: data.notes || '',
-        };
-        // Columns added by supabase/portfolio-extras.sql. If the migration
-        // hasn't been applied yet, Postgres rejects the whole insert.
-        const newRow: Record<string, unknown> = {
-            ...legacyRow,
             post_money_valuation: postMoney,
             pre_money_valuation: toBigint(data.preMoneyValuation),
             share_price: data.sharePrice ?? null,
@@ -1254,22 +1277,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             no_of_shares: data.noOfShares ?? null,
         };
 
-        let { data: row, error } = await apiDb({
-            table: 'portfolio_follow_ons', operation: 'insert', data: newRow,
-        });
-        // Fall back to the legacy column set if the new columns are missing on the DB.
-        if (error && /column .* does not exist|schema cache|could not find the/i.test(error)) {
-            console.warn('addFollowOn: new columns missing, retrying with legacy schema. Run supabase/portfolio-extras.sql to enable share price / pre-money / ownership-sought fields.');
-            ({ data: row, error } = await apiDb({
-                table: 'portfolio_follow_ons', operation: 'insert', data: legacyRow,
-            }));
+        const { data: inserted, error, dropped } = await writeWithColumnFallback(
+            payload => apiDb({ table: 'portfolio_follow_ons', operation: 'insert', data: payload }),
+            row,
+        );
+
+        if (error || !inserted) {
+            console.error('addFollowOn error:', error);
+            return { round: null, dropped };
         }
-        if (error || !row) { console.error('addFollowOn error:', error); return null; }
         setFollowOnsVersion(v => v + 1);
-        return mapFollowOn(row);
+        return { round: mapFollowOn(inserted), dropped };
     }, [apiDb]);
 
-    const updateFollowOn = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ error: string | null }> => {
+    const updateFollowOn = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ error: string | null; dropped: string[] }> => {
         const dbData: Record<string, unknown> = {};
         if (data.roundName !== undefined) dbData.round_name = data.roundName;
         if (data.roundDate !== undefined) dbData.round_date = data.roundDate;
@@ -1299,31 +1320,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;
 
-        let { error } = await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } });
-
-        // Same forward-compat retry addFollowOn already had. Without it an
-        // un-applied migration (share_price, dv_total_shares, …) rejected the
-        // whole UPDATE, so editing a round silently changed nothing while
-        // creating one still worked via the legacy-column fallback.
-        //
-        // Postgrest names one missing column per error, so this loops rather
-        // than retrying once — several un-applied migrations would otherwise
-        // still leave the update failing. Bounded so a mis-parsed message
-        // can't spin.
-        for (let attempt = 0; attempt < 8 && error && isMissingColumnError({ message: error }); attempt++) {
-            const missing = extractMissingColumns({ message: error }).filter(col => col in dbData);
-            if (missing.length === 0) break;
-            for (const col of missing) delete dbData[col];
-            console.warn(`Retrying follow-on update without missing column(s): ${missing.join(', ')}`);
-            ({ error } = await apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: dbData, match: { id } }));
-        }
+        const { error, dropped } = await writeWithColumnFallback(
+            payload => apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: payload, match: { id } }),
+            dbData,
+        );
 
         if (error) {
             console.error('updateFollowOn error:', error);
-            return { error };
+            return { error, dropped };
         }
         setFollowOnsVersion(v => v + 1);
-        return { error: null };
+        return { error: null, dropped };
     }, [apiDb]);
 
     const deleteFollowOn = useCallback(async (id: string): Promise<{ error: string | null }> => {

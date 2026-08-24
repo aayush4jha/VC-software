@@ -8,7 +8,7 @@ import {
     getTotalInvested, getLatestValuation, getCurrentOwnership,
     getCompanyIRR, getCompanyMOIC, formatPortfolioCurrency, formatPortfolioCurrencyExact,
     formatMOIC, formatXIRR, PORTFOLIO_STAGE_COLORS,
-    getPortfolioStage, getCurrentStage,
+    getPortfolioStage, getCurrentStage, describeDroppedColumns,
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
 import { useEscapeKey } from '@/lib/useEscapeKey';
@@ -53,6 +53,7 @@ export default function PortfolioCompanyDetail() {
     const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
     const [savingRound, setSavingRound] = useState(false);
     const [saveRoundError, setSaveRoundError] = useState<string | null>(null);
+    const [saveRoundNotice, setSaveRoundNotice] = useState<string | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [confirmDeleteRoundId, setConfirmDeleteRoundId] = useState<string | null>(null);
     const [showNotesPanel, setShowNotesPanel] = useState(false);
@@ -112,6 +113,7 @@ export default function PortfolioCompanyDetail() {
         setNotesFullscreen(false);
         setNotesCount(null);
         setSaveRoundError(null);
+        setSaveRoundNotice(null);
         // Drop the previous company's rounds too, so its MOIC / IRR can't
         // flash against the new company while the reload is in flight.
         setFollowOns([]);
@@ -210,6 +212,7 @@ export default function PortfolioCompanyDetail() {
 
     const handleSaveRound = async () => {
         setSaveRoundError(null);
+        setSaveRoundNotice(null);
         if (!roundForm.round_name) {
             setSaveRoundError('Pick a round name.');
             return;
@@ -301,14 +304,15 @@ export default function PortfolioCompanyDetail() {
             // updateFollowOn resolves with the database error rather than
             // throwing, so this has to be checked — it used to be swallowed,
             // and a rejected UPDATE looked exactly like a successful save.
-            const { error } = await updateFollowOn(editingRoundId, payload);
+            const { error, dropped } = await updateFollowOn(editingRoundId, payload);
             if (error) {
                 setSavingRound(false);
                 setSaveRoundError(`Could not update round: ${error}`);
                 return;
             }
+            setSaveRoundNotice(describeDroppedColumns(dropped));
         } else {
-            const created = await addFollowOn({
+            const { round: created, dropped } = await addFollowOn({
                 ...payload,
                 companyId: c.id,
                 organizationId: ORGANIZATION_ID,
@@ -316,9 +320,10 @@ export default function PortfolioCompanyDetail() {
 
             if (!created) {
                 setSavingRound(false);
-                setSaveRoundError('Could not save round. Check the browser console for the database error (e.g. the new columns may not be applied to the DB yet — run supabase/portfolio-extras.sql).');
+                setSaveRoundError('Could not save round. Check the browser console for the database error.');
                 return;
             }
+            setSaveRoundNotice(describeDroppedColumns(dropped));
 
             // Optimistically show the new round immediately.
             setFollowOns(prev => [...prev, created]);
@@ -383,6 +388,7 @@ export default function PortfolioCompanyDetail() {
         setEditingRoundId(null);
         setShowAddRound(false);
         setSaveRoundError(null);
+        setSaveRoundNotice(null);
     };
 
     const requestDeleteRound = (id: string) => setConfirmDeleteRoundId(id);
@@ -627,6 +633,21 @@ export default function PortfolioCompanyDetail() {
                                 borderRadius: 6, fontSize: 12,
                             }}>
                                 {saveRoundError}
+                            </div>
+                        )}
+
+                        {/* The save went through, but the database had nowhere to
+                            put one of the fields. Saying so beats letting a typed
+                            value quietly vanish. */}
+                        {saveRoundNotice && (
+                            <div style={{
+                                marginBottom: 12, padding: '8px 12px',
+                                background: 'var(--warning-bg, #fffbeb)',
+                                color: 'var(--warning, #b45309)',
+                                border: '1px solid var(--warning, #d97706)',
+                                borderRadius: 6, fontSize: 12,
+                            }}>
+                                {saveRoundNotice}
                             </div>
                         )}
 

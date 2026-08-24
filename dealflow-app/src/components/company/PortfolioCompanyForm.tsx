@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
-import { formatPortfolioCurrency, formatPortfolioCurrencyExact } from '@/lib/portfolio-utils';
+import { formatPortfolioCurrency, formatPortfolioCurrencyExact, describeDroppedColumns } from '@/lib/portfolio-utils';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
 type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
@@ -467,6 +467,11 @@ export default function PortfolioCompanyForm() {
             };
         };
 
+        // Columns the database doesn't have yet: the write still goes through
+        // without them, but the user has to be told rather than watching a
+        // value they typed disappear.
+        const droppedColumns: string[] = [];
+
         if (isEditing && editingCompany) {
             await updateCompany(editingCompany.id, data);
 
@@ -486,19 +491,21 @@ export default function PortfolioCompanyForm() {
                 const { fo } = orderedFollowOns[i];
                 const payload = buildFollowOnPayload(fo, followOnAuto[i]);
                 if (fo.id) {
-                    const { error } = await updateFollowOn(fo.id, payload);
+                    const { error, dropped } = await updateFollowOn(fo.id, payload);
                     if (error) {
                         setSaving(false);
                         setSubmitError(`Could not save round "${fo.roundName || i + 1}": ${error}`);
                         return;
                     }
+                    droppedColumns.push(...dropped);
                 } else {
-                    const created = await addFollowOn({ ...payload, companyId: editingCompany.id });
+                    const { round: created, dropped } = await addFollowOn({ ...payload, companyId: editingCompany.id });
                     if (!created) {
                         setSaving(false);
                         setSubmitError(`Could not add round "${fo.roundName || i + 1}". Check the browser console for the database error.`);
                         return;
                     }
+                    droppedColumns.push(...dropped);
                 }
             }
         } else {
@@ -511,11 +518,19 @@ export default function PortfolioCompanyForm() {
             }
             for (let i = 0; i < orderedFollowOns.length; i++) {
                 const { fo } = orderedFollowOns[i];
-                await addFollowOn({ ...buildFollowOnPayload(fo, followOnAuto[i]), companyId: created.id });
+                const { dropped } = await addFollowOn({ ...buildFollowOnPayload(fo, followOnAuto[i]), companyId: created.id });
+                droppedColumns.push(...dropped);
             }
         }
 
         setSaving(false);
+
+        const notice = describeDroppedColumns([...new Set(droppedColumns)]);
+        if (notice) {
+            // Keep the modal open so the notice is actually read.
+            setSubmitError(notice);
+            return;
+        }
         handleClose();
     };
 

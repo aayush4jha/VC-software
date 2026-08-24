@@ -537,6 +537,43 @@ export function formatMOIC(val: number): string {
     return `${val.toFixed(2)}x`;
 }
 
+// ─── Missing-column reporting ─────────────────────
+// Postgrest rejects a whole INSERT/UPDATE when it meets a column the database
+// doesn't have yet. The client drops those columns and retries so the rest of
+// the save survives — but a field the user typed must never disappear in
+// silence, so these turn the raw column names into something worth reading.
+
+interface ColumnFact { label: string; migration: string }
+
+const PORTFOLIO_COLUMN_FACTS: Record<string, ColumnFact> = {
+    dv_total_shares: { label: 'Total shares owned by DV', migration: 'supabase/dv-total-shares.sql' },
+    no_of_shares: { label: 'Total Ownership After Round %', migration: 'supabase/no-of-shares.sql' },
+    share_price: { label: 'Share price', migration: 'supabase/portfolio-extras.sql' },
+    num_shares: { label: 'Number of shares', migration: 'supabase/portfolio-extras.sql' },
+    total_shares: { label: 'Outstanding shares', migration: 'supabase/portfolio-extras.sql' },
+    pre_money_valuation: { label: 'Pre-money valuation', migration: 'supabase/portfolio-extras.sql' },
+    post_money_valuation: { label: 'Post-money valuation', migration: 'supabase/portfolio-extras.sql' },
+    ownership_sought: { label: 'Equity sought', migration: 'supabase/portfolio-extras.sql' },
+    dilution_percent: { label: 'Dilution %', migration: 'supabase/portfolio-extras.sql' },
+    our_value_today_override: { label: 'Our value today', migration: 'supabase/portfolio-extras.sql' },
+    entry_date: { label: 'Entry date', migration: 'supabase/entry-date.sql' },
+    entry_total_raised: { label: 'Total raised at entry', migration: 'supabase/entry-total-raised.sql' },
+    portfolio_health: { label: 'Portfolio health', migration: 'supabase/portfolio-health.sql' },
+    founders: { label: 'Founders', migration: 'supabase/founders.sql' },
+};
+
+// Human-readable "these fields could not be saved" text, or null when nothing
+// was dropped. Names the migration so the fix is one paste away.
+export function describeDroppedColumns(columns: string[]): string | null {
+    if (columns.length === 0) return null;
+    const facts = columns.map(c => PORTFOLIO_COLUMN_FACTS[c] ?? { label: c, migration: 'supabase/' });
+    const labels = facts.map(f => `"${f.label}"`).join(', ');
+    const migrations = [...new Set(facts.map(f => f.migration))].join(' and ');
+    const plural = columns.length === 1 ? 'this field is' : 'these fields are';
+    return `Saved — but ${labels} could not be stored, because ${plural} missing from the database. `
+        + `Run ${migrations} in the Supabase SQL editor, then save again to keep the value.`;
+}
+
 // ─── Stage grouping for portfolio board ───────────
 
 export const PORTFOLIO_STAGES = [
