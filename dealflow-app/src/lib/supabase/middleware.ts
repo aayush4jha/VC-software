@@ -46,6 +46,37 @@ function isPublicApi(pathname: string): boolean {
     return PUBLIC_API_PATHS.some(p => pathname === p || pathname.startsWith(p));
 }
 
+// Every navigation re-ran the profile lookup (and, on a UUID mismatch, a
+// second one by email) before any HTML was sent — two serial round trips to
+// Supabase on the critical path of each page.
+//
+// The TTL is deliberately short. Access removal clears the API-layer cache
+// directly, but middleware may run in a separate isolate that the clear
+// cannot reach, so this window is the longest a just-removed account could
+// still be handed a page shell. It cannot load data: every API route
+// re-authorises independently.
+const PROFILE_TTL_MS = 15_000;
+const PROFILE_CACHE_MAX = 500;
+const middlewareProfileCache = new Map<string, { profile: ProfileRow | null; expires: number }>();
+
+function cachedProfile(key: string): ProfileRow | null | undefined {
+    const hit = middlewareProfileCache.get(key);
+    if (!hit) return undefined;
+    if (hit.expires < Date.now()) {
+        middlewareProfileCache.delete(key);
+        return undefined;
+    }
+    return hit.profile;
+}
+
+function cacheProfile(key: string, profile: ProfileRow | null) {
+    if (middlewareProfileCache.size >= PROFILE_CACHE_MAX) {
+        const oldest = middlewareProfileCache.keys().next();
+        if (!oldest.done) middlewareProfileCache.delete(oldest.value);
+    }
+    middlewareProfileCache.set(key, { profile, expires: Date.now() + PROFILE_TTL_MS });
+}
+
 export async function updateSession(request: NextRequest) {
     let supabaseResponse = NextResponse.next({ request });
 
@@ -152,9 +183,16 @@ export async function updateSession(request: NextRequest) {
             TIMED_OUT,
         );
 
-    let profile = await loadProfile('id', user.id);
-    // Email fallback for profiles created with a different UUID.
-    if (profile === null && user.email) profile = await loadProfile('email', user.email);
+    const cacheKey = user.id;
+    let profile: ProfileRow | null | typeof TIMED_OUT | undefined = cachedProfile(cacheKey);
+
+    if (profile === undefined) {
+        profile = await loadProfile('id', user.id);
+        // Email fallback for profiles created with a different UUID.
+        if (profile === null && user.email) profile = await loadProfile('email', user.email);
+        // A timeout is an unknown answer, not an absent profile — never cache it.
+        if (profile !== TIMED_OUT) cacheProfile(cacheKey, profile);
+    }
 
     // A slow Supabase must not log everyone out: an unknown answer falls
     // through to the page, which cannot load any data without the API layer

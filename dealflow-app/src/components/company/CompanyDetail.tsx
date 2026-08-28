@@ -67,7 +67,7 @@ function InlineSelect({ value, options, placeholder, onCommit }: {
 
 export default function CompanyDetail() {
     const {
-        selectedCompany, setSelectedCompany,
+        selectedCompany, setSelectedCompany, hydrateCompany,
         showRejectionFlow, setShowRejectionFlow,
         showEmailCompose, setShowEmailCompose,
         showCalendarInvite, setShowCalendarInvite,
@@ -125,6 +125,9 @@ export default function CompanyDetail() {
 
     useEffect(() => {
         if (selectedCompany) {
+            // The list load omits the large AI blobs; pull the full row now
+            // that a panel showing them is open.
+            hydrateCompany(selectedCompany.id);
             fetchComments(selectedCompany.id).then(setComments);
             fetchActivity(selectedCompany.id).then(setActivities);
             fetchScores(selectedCompany.id).then(setScores);

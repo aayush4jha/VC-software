@@ -4,6 +4,30 @@ import { requireMember } from '@/lib/api-auth';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
+// Large AI text/JSON blobs that only the detail panel ever renders.
+// deck_analysis alone was a fifth of this response. They are stripped from the
+// list payload and re-fetched per company when a detail panel opens.
+//
+// Stripping here rather than narrowing the SELECT is deliberate: Postgrest has
+// no column-exclusion syntax, so an explicit list would have to name every
+// other column — and would break the entire board the moment one of them was
+// renamed or dropped. This costs a little database bandwidth and is immune to
+// schema drift.
+const DETAIL_ONLY_FIELDS = [
+    'deck_analysis', 'call_transcript', 'filter_brief', 'ic_memo', 'kpi_data',
+] as const;
+
+function stripDetailBlobs(rows: Record<string, unknown>[] | null) {
+    if (!rows) return [];
+    return rows.map(row => {
+        const lean: Record<string, unknown> = {};
+        for (const key in row) {
+            if (!(DETAIL_ONLY_FIELDS as readonly string[]).includes(key)) lean[key] = row[key];
+        }
+        return lean;
+    });
+}
+
 export async function GET(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -63,7 +87,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-        companies: companies || [],
+        companies: stripDetailBlobs(companies),
         stages: stages || [],
         industries: industries || [],
         sources: sources || [],

@@ -3,7 +3,7 @@
 // Single-tenant organization UUID
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type {
     User, Company, PipelineStage, Industry, DealSourceName,
@@ -408,6 +408,7 @@ interface AppContextType {
     // UI state
     selectedCompany: Company | null;
     setSelectedCompany: (company: Company | null) => void;
+    hydrateCompany: (id: string) => Promise<void>;
     editingCompany: Company | null;
     setEditingCompany: (company: Company | null) => void;
     showNotifications: boolean;
@@ -579,15 +580,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     return;
                 }
 
-                // fetchProfile uses the same session access token
-                const profile = await fetchProfile();
+                // The profile fetch and the bulk data load both need only the
+                // access token, so they run together. Awaiting the profile
+                // first made every page pay two serial round trips to Supabase
+                // before any data started loading. /api/data enforces
+                // membership itself, so a caller without access still gets
+                // nothing back.
+                const dataLoad = fetchAllData(session.user.id);
+                const profile = await fetchProfile(session.access_token);
+
                 if (mounted && profile) {
                     setUser(profile);
-                    fetchAllData(session.user.id); // fire and forget — finally runs immediately
                 } else if (mounted && !profile) {
                     // Profile not found — set isLoading false so UI doesn't hang
                     setIsLoading(false);
                 }
+                void dataLoad;
             } catch (err) {
                 console.error('Auth init error:', err);
             } finally {
@@ -904,6 +912,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         'customTags', 'terminalStatus', 'needsReview', 'pipelineStageId', 'slaDeadline',
         'hqLocation', 'notes', 'portfolioStatus', 'initialInvestment', 'entryValuation',
     ]);
+
+    // The bulk load leaves out the large AI blobs (deck analysis, transcript,
+    // KPI JSON…) so the board isn't paying for text only the detail panel
+    // shows. This pulls the full row for one company and merges it in, so the
+    // panel and the AI actions still see complete data.
+    const hydratedCompanies = useRef<Set<string>>(new Set<string>());
+
+    const hydrateCompany = useCallback(async (id: string) => {
+        if (hydratedCompanies.current.has(id)) return;
+        hydratedCompanies.current.add(id);
+
+        const { data: row, error } = await apiDb({
+            table: 'companies', operation: 'select', match: { id }, single: true,
+        });
+        if (error || !row) {
+            // Allow a retry on the next open rather than caching the failure.
+            hydratedCompanies.current.delete(id);
+            return;
+        }
+        const full = mapCompany(row);
+        setCompanies(prev => prev.map(c => (c.id === id ? full : c)));
+        setSelectedCompany(prev => (prev?.id === id ? full : prev));
+    }, [apiDb]);
 
     const updateCompany = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ error: string | null }> => {
         // Capture old values for audit
@@ -1910,7 +1941,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany,
         deckEmailLinks,
-        selectedCompany, setSelectedCompany,
+        selectedCompany, setSelectedCompany, hydrateCompany,
         editingCompany, setEditingCompany,
         showNotifications, setShowNotifications,
         showRejectionFlow, setShowRejectionFlow,
@@ -1941,6 +1972,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, followOnsVersion,
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany, deckEmailLinks,
+        hydrateCompany,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,
         searchQuery, viewMode, activeFilters,
