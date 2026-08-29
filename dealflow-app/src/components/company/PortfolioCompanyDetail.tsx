@@ -187,12 +187,15 @@ export default function PortfolioCompanyDetail() {
         // is what re-derives Total Invested / ownership / MOIC / IRR here and
         // the tiles on the board. A rejected write used to be painted on
         // locally anyway, so the panel showed a value the database never took.
-        const { error } = await updateCompany(c.id, data);
+        const { error, dropped } = await updateCompany(c.id, data);
         if (error) {
             setFieldError(`Could not save ${editField}: ${error}`);
             return;
         }
-        setFieldError(null);
+        // The write succeeded, but the database had nowhere to put one of the
+        // fields. Saying so is the difference between a value that is missing
+        // and a value that looks saved and is not.
+        setFieldError(describeDroppedColumns(dropped));
         setEditField(null);
         setEditValue('');
     };

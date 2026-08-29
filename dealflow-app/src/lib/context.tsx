@@ -331,7 +331,7 @@ interface AppContextType {
 
     // Mutations
     createCompany: (data: Record<string, unknown>) => Promise<Company | null>;
-    updateCompany: (id: string, data: Record<string, unknown>) => Promise<{ error: string | null }>;
+    updateCompany: (id: string, data: Record<string, unknown>) => Promise<{ error: string | null; dropped: string[] }>;
     deleteCompany: (id: string) => Promise<void>;
     moveCompanyStage: (companyId: string, targetStageId: string) => Promise<string | null>;
     assignAnalyst: (companyId: string, analystId: string | null) => Promise<void>;
@@ -936,7 +936,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSelectedCompany(prev => (prev?.id === id ? full : prev));
     }, [apiDb]);
 
-    const updateCompany = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ error: string | null }> => {
+    const updateCompany = useCallback(async (id: string, data: Record<string, unknown>): Promise<{ error: string | null; dropped: string[] }> => {
         // Capture old values for audit
         const oldCompany = companies.find(c => c.id === id);
 
@@ -989,14 +989,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Postgrest names one column per error, so this loops: with two
         // un-applied migrations a single retry still failed, and the edit was
         // dropped on the floor.
+        const droppedColumns: string[] = [];
         for (let attempt = 0; attempt < 8 && error && isMissingColumnError({ message: error }); attempt++) {
             const missing = extractMissingColumns({ message: error }).filter(col => col in dbData);
             if (missing.length === 0) break;
             for (const col of missing) delete dbData[col];
+            droppedColumns.push(...missing);
             console.warn(`Retrying update company without missing column(s): ${missing.join(', ')}`);
             ({ data: rows, error } = await apiDb({ table: 'companies', operation: 'update', data: dbData, match: { id } }));
         }
-        if (error) { console.error('Update company error:', error); return { error }; }
+        if (error) { console.error('Update company error:', error); return { error, dropped: droppedColumns }; }
         const row = Array.isArray(rows) ? rows[0] : rows;
         if (row) {
             const updated = mapCompany(row);
@@ -1028,7 +1030,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        return { error: null };
+        return { error: null, dropped: droppedColumns };
     }, [apiDb, user, companies]);
 
     const deleteCompany = useCallback(async (id: string) => {
