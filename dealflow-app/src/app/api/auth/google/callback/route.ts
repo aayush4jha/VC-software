@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const oauth2Client = getOAuth2Client();
+        const oauth2Client = getOAuth2Client(request);
         const { tokens } = await oauth2Client.getToken(code);
 
         // Get the current Supabase user from the session cookie

@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     if (auth.response) return auth.response;
 
     try {
-        const url = getAuthUrl();
+        const url = getAuthUrl(request);
         return NextResponse.json({ url });
     } catch (error) {
         console.error('Error generating auth URL:', error);
