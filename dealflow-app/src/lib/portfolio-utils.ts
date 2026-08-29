@@ -207,6 +207,24 @@ export function computeOwnershipChain(
 }
 
 export function getCurrentOwnership(company: Company, followOns: FollowOnRound[]): number {
+    // A percentage typed into the panel is the value of record, exactly as in
+    // getLatestValuation. Deriving regardless meant the card recomputed
+    // initialInvestment ÷ post-money and painted that over the number the user
+    // had just saved — the value reached the database and was never shown
+    // again, which is indistinguishable from the save having failed.
+    //
+    // Saving or deleting a round writes the recomputed chain result back to
+    // this column, so the two stay in step and dilution still updates it.
+    if (company.currentOwnership != null && company.currentOwnership > 0) {
+        return company.currentOwnership;
+    }
+    const chain = computeOwnershipChain(company, followOns);
+    return chain[chain.length - 1].ownershipAfter;
+}
+
+// The chain result, ignoring any stored override — used when a round changes
+// and the stored column has to be brought back in line with the cap table.
+export function getDerivedCurrentOwnership(company: Company, followOns: FollowOnRound[]): number {
     const chain = computeOwnershipChain(company, followOns);
     return chain[chain.length - 1].ownershipAfter;
 }
@@ -270,7 +288,10 @@ export function getTerminalValue(company: Company, followOns: FollowOnRound[]): 
     // post-money only, which left IRR frozen when the Latest Valuation on
     // the company was bumped by hand.
     const latest = getLatestValuation(company, followOns);
-    const ownership = last.ownershipAfter;
+    // The same ownership the panel shows, so a hand-entered Current Ownership
+    // moves MOIC and IRR too. Reading the chain directly here left the card
+    // saying one percentage while the returns were computed from another.
+    const ownership = getCurrentOwnership(company, followOns);
     if (latest > 0 && ownership > 0) return (latest * ownership) / 100;
 
     return last.valueToday;
@@ -529,7 +550,9 @@ export function formatPercent(val: number): string {
 export function formatXIRR(val: number | null): string {
     if (val === null) return 'N/A';
     if (val > 10) return '>999%';
-    const pct = val * 100;
+    // A rate that rounds to zero rendered as "-0.00%" in loss-red whenever the
+    // solver landed a hair below zero. Snap it so break-even reads as zero.
+    const pct = Math.abs(val) < 0.00005 ? 0 : val * 100;
     return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
 }
 

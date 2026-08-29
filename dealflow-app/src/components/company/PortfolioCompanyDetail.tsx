@@ -9,6 +9,7 @@ import {
     getCompanyIRR, getCompanyMOIC, formatPortfolioCurrency, formatPortfolioCurrencyExact,
     formatMOIC, formatXIRR, PORTFOLIO_STAGE_COLORS,
     getPortfolioStage, getCurrentStage, describeDroppedColumns,
+    getDerivedCurrentOwnership,
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
 import { useEscapeKey } from '@/lib/useEscapeKey';
@@ -397,7 +398,20 @@ export default function PortfolioCompanyDetail() {
         if (!confirmDeleteRoundId) return;
         const { error } = await deleteFollowOn(confirmDeleteRoundId);
         setConfirmDeleteRoundId(null);
-        if (error) setSaveRoundError(`Could not delete round: ${error}`);
+        if (error) {
+            setSaveRoundError(`Could not delete round: ${error}`);
+            return;
+        }
+
+        // currentOwnership is the stored value of record and now wins over the
+        // derived chain, so removing a round has to write the recomputed figure
+        // back — otherwise the ownership from the deleted round would stand
+        // forever.
+        const remaining = followOns.filter(fo => fo.id !== confirmDeleteRoundId);
+        const derived = getDerivedCurrentOwnership(c, remaining);
+        if (Number.isFinite(derived)) {
+            await updateCompany(c.id, { currentOwnership: derived });
+        }
     };
 
     const effectiveEntryDate = c.entryDate ?? c.createdAt;
