@@ -310,8 +310,11 @@ export function getCompanyMOIC(company: Company, followOns: FollowOnRound[]): nu
     const totalInvested = getTotalInvested(company, followOns);
     if (totalInvested <= 0) return 0;
 
-    if (company.portfolioStatus === 'Written Off') return 0;
-    if (company.portfolioStatus === 'Exited') {
+    // A write-off is a closed position, not necessarily a zero one: money is
+    // sometimes recovered on winding up or in a distressed sale. Whatever came
+    // back is recorded in exitValue, exactly as for an exit, so both statuses
+    // divide it by what went in. With nothing recovered this is still 0.
+    if (company.portfolioStatus === 'Written Off' || company.portfolioStatus === 'Exited') {
         return (company.exitValue || 0) / totalInvested;
     }
     // Active
@@ -407,13 +410,17 @@ function pushCompanyOutflows(
 }
 
 export function getCompanyIRR(company: Company, followOns: FollowOnRound[]): number | null {
-    if (company.portfolioStatus === 'Written Off') return -1; // -100%
+    // Only a write-off that recovered nothing is a total loss. If money came
+    // back, it is a real liquidity event and the return is solved for like any
+    // other — a recovery on a written-off position is not -100%.
+    if (company.portfolioStatus === 'Written Off' && !company.exitValue) return -1; // -100%
 
     const cashFlows: CashFlow[] = [];
     pushCompanyOutflows(cashFlows, company, followOns);
     if (cashFlows.length === 0) return null;
 
-    if (company.portfolioStatus === 'Exited' && company.exitValue && company.exitDate) {
+    const isClosed = company.portfolioStatus === 'Exited' || company.portfolioStatus === 'Written Off';
+    if (isClosed && company.exitValue && company.exitDate) {
         cashFlows.push({ date: new Date(company.exitDate), amount: company.exitValue });
     } else {
         const terminal = getTerminalValue(company, followOns);
@@ -437,7 +444,8 @@ export function getPortfolioXIRR(
         const followOns = followOnsMap.get(c.id) || [];
         pushCompanyOutflows(allCashFlows, c, followOns);
 
-        if (c.portfolioStatus === 'Exited' && c.exitValue && c.exitDate) {
+        const closed = c.portfolioStatus === 'Exited' || c.portfolioStatus === 'Written Off';
+        if (closed && c.exitValue && c.exitDate) {
             allCashFlows.push({ date: new Date(c.exitDate), amount: c.exitValue });
         } else if (c.portfolioStatus === 'Active') {
             const terminal = getTerminalValue(c, followOns);
@@ -445,7 +453,7 @@ export function getPortfolioXIRR(
                 allCashFlows.push({ date: new Date(), amount: terminal });
             }
         }
-        // Written Off: no terminal cash flow.
+        // A write-off with nothing recovered contributes no inflow at all.
     });
 
     return calculateXIRR(allCashFlows);
@@ -498,6 +506,11 @@ export function getPortfolioMetrics(
             exitedInvestment += invested;
         } else {
             writtenOffCompanies++;
+            // Money recovered on a write-off is realised cash and belongs in
+            // DPI and realised MOIC. Leaving it out understated both, and made
+            // a partial recovery indistinguishable from a total loss.
+            totalExitValue += (c.exitValue || 0);
+            exitedInvestment += invested;
         }
     });
 
@@ -580,6 +593,10 @@ const PORTFOLIO_COLUMN_FACTS: Record<string, ColumnFact> = {
     dilution_percent: { label: 'Dilution %', migration: 'supabase/portfolio-extras.sql' },
     our_value_today_override: { label: 'Our value today', migration: 'supabase/portfolio-extras.sql' },
     entry_date: { label: 'Entry date', migration: 'supabase/entry-date.sql' },
+    investment_vehicle: { label: 'Investment vehicle', migration: 'supabase/investment-vehicle.sql' },
+    syndicate_name: { label: 'Syndicate name', migration: 'supabase/investment-vehicle.sql' },
+    investment_type: { label: 'Investment type', migration: 'supabase/investment-vehicle.sql' },
+    current_stage: { label: 'Current stage', migration: 'supabase/investment-vehicle.sql' },
     entry_total_raised: { label: 'Total raised at entry', migration: 'supabase/entry-total-raised.sql' },
     portfolio_health: { label: 'Portfolio health', migration: 'supabase/portfolio-health.sql' },
     founders: { label: 'Founders', migration: 'supabase/founders.sql' },
@@ -630,6 +647,9 @@ export function getPortfolioStage(company: Company): string {
 export function getCurrentStage(company: Company, followOns: FollowOnRound[]): string {
     if (company.portfolioStatus === 'Exited') return 'Exited';
     if (company.portfolioStatus === 'Written Off') return 'Written Off';
+    // A stage set by hand wins over the derived one, like every other field
+    // here. Clearing it restores the derivation from the latest round.
+    if (company.currentStage) return company.currentStage;
     const sorted = [...followOns].sort(
         (a, b) => new Date(a.roundDate).getTime() - new Date(b.roundDate).getTime(),
     );

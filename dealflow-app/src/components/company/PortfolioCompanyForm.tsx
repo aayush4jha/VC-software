@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
+import { INVESTMENT_VEHICLES, INVESTMENT_TYPES } from '@/types/database';
 import { formatPortfolioCurrency, formatPortfolioCurrencyExact, describeDroppedColumns } from '@/lib/portfolio-utils';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
@@ -63,6 +64,9 @@ interface LocalFollowOn {
     dilutionPercent: string;
     investorNames: string;
     ourValueTodayOverride: string;
+    investmentVehicle: string;
+    syndicateName: string;
+    investmentType: string;
 }
 
 function emptyFollowOn(): LocalFollowOn {
@@ -85,6 +89,9 @@ function emptyFollowOn(): LocalFollowOn {
         dilutionPercent: '',
         investorNames: '',
         ourValueTodayOverride: '',
+        investmentVehicle: '',
+        syndicateName: '',
+        investmentType: '',
     };
 }
 
@@ -143,6 +150,8 @@ export default function PortfolioCompanyForm() {
         current_stage: 'Seed' as CompanyRound,
         initial_investment: '',
         share_type: 'Primary' as ShareType,
+        investment_vehicle: '',
+        syndicate_name: '',
         share_price: '',
         num_shares: '',
         total_shares: '',
@@ -275,6 +284,8 @@ export default function PortfolioCompanyForm() {
                 current_stage: editingCompany.companyRound,
                 initial_investment: editingCompany.initialInvestment?.toString() || '',
                 share_type: editingCompany.shareType,
+                investment_vehicle: editingCompany.investmentVehicle || '',
+                syndicate_name: editingCompany.syndicateName || '',
                 share_price: editingCompany.sharePrice?.toString() || '',
                 num_shares: editingCompany.numShares?.toString() || '',
                 total_shares: editingCompany.totalShares?.toString() || '',
@@ -319,6 +330,9 @@ export default function PortfolioCompanyForm() {
                         dilutionPercent: r.dilutionPercent?.toString() || '',
                         investorNames: r.investorNames || '',
                         ourValueTodayOverride: r.ourValueTodayOverride?.toString() || '',
+                        investmentVehicle: r.investmentVehicle || '',
+                        syndicateName: r.syndicateName || '',
+                        investmentType: r.investmentType || '',
                     }))
                 );
             });
@@ -414,6 +428,8 @@ export default function PortfolioCompanyForm() {
             analystId: form.analyst_id || null,
             companyRound: form.entry_stage,
             shareType: form.share_type,
+            investmentVehicle: form.investment_vehicle || null,
+            syndicateName: form.investment_vehicle === 'Syndicate' ? (form.syndicate_name || null) : null,
             initialInvestment: toNum(form.initial_investment),
             sharePrice: toNum(form.share_price),
             numShares: toNum(form.num_shares),
@@ -464,6 +480,9 @@ export default function PortfolioCompanyForm() {
                 dilutionPercent: toNum(fo.dilutionPercent) ?? auto.dilution,
                 investorNames: fo.investorNames,
                 ourValueTodayOverride: toNum(fo.ourValueTodayOverride),
+                investmentVehicle: fo.investmentVehicle || null,
+                syndicateName: fo.investmentVehicle === 'Syndicate' ? (fo.syndicateName || null) : null,
+                investmentType: fo.investmentType || null,
             };
         };
 
@@ -786,11 +805,29 @@ export default function PortfolioCompanyForm() {
                             )}
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Share Type</label>
+                            <label className="form-label">Investment Type</label>
                             <select className="form-select" value={form.share_type} onChange={upd('share_type')}>
                                 {shareTypes.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
+                    </div>
+
+                    {/* Which entity the entry investment came from */}
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Investment Vehicle</label>
+                            <select className="form-select" value={form.investment_vehicle} onChange={upd('investment_vehicle')}>
+                                <option value="">Select vehicle</option>
+                                {INVESTMENT_VEHICLES.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                        </div>
+                        {form.investment_vehicle === 'Syndicate' && (
+                            <div className="form-group">
+                                <label className="form-label">Syndicate Name</label>
+                                <input className="form-input" placeholder="e.g. Dholakia Angels I"
+                                    value={form.syndicate_name} onChange={upd('syndicate_name')} />
+                            </div>
+                        )}
                     </div>
 
                     {/* Status + Portfolio Health */}
@@ -1086,6 +1123,34 @@ export default function PortfolioCompanyForm() {
                                                     )}
                                                 </div>
                                             </div>
+
+                                            {/* Which entity the money came from, and what kind of buy */}
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Investment Type</label>
+                                                    <select className="form-select" value={fo.investmentType}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'investmentType', e.target.value)}>
+                                                        <option value="">Select type</option>
+                                                        {INVESTMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Investment Vehicle</label>
+                                                    <select className="form-select" value={fo.investmentVehicle}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'investmentVehicle', e.target.value)}>
+                                                        <option value="">Select vehicle</option>
+                                                        {INVESTMENT_VEHICLES.map(v => <option key={v} value={v}>{v}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            {fo.investmentVehicle === 'Syndicate' && (
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Syndicate Name</label>
+                                                    <input className="form-input" placeholder="e.g. Dholakia Angels I"
+                                                        value={fo.syndicateName}
+                                                        onChange={e => updateFollowOnRow(originalIdx, 'syndicateName', e.target.value)} />
+                                                </div>
+                                            )}
 
                                             {/* Other investors + Our Value Today */}
                                             <div className="form-row">

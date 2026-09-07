@@ -95,6 +95,9 @@ function mapCompany(r: any): Company {
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
         dvTotalShares: r.dv_total_shares != null ? Number(r.dv_total_shares) : null,
         portfolioHealth: r.portfolio_health ?? null,
+        investmentVehicle: r.investment_vehicle ?? null,
+        syndicateName: r.syndicate_name ?? null,
+        currentStage: r.current_stage ?? null,
         entryDate: r.entry_date ?? null,
         founders: Array.isArray(r.founders)
             ? r.founders.filter((f: unknown): f is { name?: unknown; email?: unknown; phone?: unknown } => !!f && typeof f === 'object')
@@ -189,6 +192,9 @@ function mapFollowOn(r: any): FollowOnRound {
         ownershipSought: r.ownership_sought != null ? Number(r.ownership_sought) : null,
         dilutionPercent: r.dilution_percent != null ? Number(r.dilution_percent) : null,
         ourValueTodayOverride: r.our_value_today_override != null ? Number(r.our_value_today_override) : null,
+        investmentVehicle: r.investment_vehicle ?? null,
+        syndicateName: r.syndicate_name ?? null,
+        investmentType: r.investment_type ?? null,
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
         createdAt: r.created_at ?? '',
         updatedAt: r.updated_at ?? '',
@@ -842,6 +848,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.noOfShares != null ? { no_of_shares: data.noOfShares } : {}),
             ...(data.dvTotalShares != null ? { dv_total_shares: toBigint(data.dvTotalShares) } : {}),
             ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
+            ...(data.investmentVehicle ? { investment_vehicle: data.investmentVehicle } : {}),
+            ...(data.syndicateName ? { syndicate_name: data.syndicateName } : {}),
             ...(Array.isArray(data.founders) ? { founders: data.founders } : {}),
             // Dedicated business-event date for the entry round. Distinct
             // from created_at, which stays a pure audit timestamp.
@@ -967,6 +975,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             portfolioHealth: 'portfolio_health',
             founders: 'founders',
             entryDate: 'entry_date',
+            investmentVehicle: 'investment_vehicle',
+            syndicateName: 'syndicate_name',
+            currentStage: 'current_stage',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         // noOfShares is intentionally absent: it's a NUMERIC column holding
@@ -1308,6 +1319,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             dilution_percent: data.dilutionPercent ?? null,
             our_value_today_override: data.ourValueTodayOverride ?? null,
             no_of_shares: data.noOfShares ?? null,
+            investment_vehicle: data.investmentVehicle ?? null,
+            syndicate_name: data.syndicateName ?? null,
+            investment_type: data.investmentType ?? null,
         };
 
         const { data: inserted, error, dropped } = await writeWithColumnFallback(
@@ -1352,6 +1366,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.noOfShares !== undefined) dbData.no_of_shares = data.noOfShares;
         if (data.investorNames !== undefined) dbData.investor_names = data.investorNames;
         if (data.notes !== undefined) dbData.notes = data.notes;
+        if (data.investmentVehicle !== undefined) dbData.investment_vehicle = data.investmentVehicle;
+        if (data.syndicateName !== undefined) dbData.syndicate_name = data.syndicateName;
+        if (data.investmentType !== undefined) dbData.investment_type = data.investmentType;
 
         const { error, dropped } = await writeWithColumnFallback(
             payload => apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: payload, match: { id } }),

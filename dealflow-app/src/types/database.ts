@@ -184,6 +184,11 @@ export interface Company {
   noOfShares: number | null;        // Current DV Shareholding — drives latest valuation
   dvTotalShares: number | null;     // Override for derived "Total Shares Owned by DV" at company level
   portfolioHealth: PortfolioHealth | null;
+  // Vehicle the entry investment came from. The entry round's Primary /
+  // Secondary lives in shareType, which predates this.
+  investmentVehicle: InvestmentVehicle | null;
+  syndicateName: string | null;
+  currentStage: string | null;      // overrides the stage derived from the latest round
   founders: Founder[];              // Multiple founders supported; first entry mirrors founder_name / founder_email
   entryDate: string | null;         // The day DV entered the cap table; falls back to createdAt for legacy rows
 }
@@ -233,6 +238,18 @@ export interface Founder {
 
 export type PortfolioStatus = 'Active' | 'Exited' | 'Written Off';
 
+// Entity the money was invested from. 'Syndicate' carries a free-text name
+// alongside it; the fixed vehicles do not.
+export const INVESTMENT_VEHICLES = [
+  'Dravya Personal', 'DVPL', 'DVFZ LLC', 'DV DMCC', 'Syndicate',
+] as const;
+export type InvestmentVehicle = typeof INVESTMENT_VEHICLES[number];
+
+// Primary (new shares from the company) vs Secondary (bought from an existing
+// holder). Recorded on the entry round and on every follow-on.
+export const INVESTMENT_TYPES = ['Primary', 'Secondary'] as const;
+export type InvestmentType = typeof INVESTMENT_TYPES[number];
+
 export interface FollowOnRound {
   id: string;
   companyId: string;
@@ -258,6 +275,10 @@ export interface FollowOnRound {
   ownershipSought: number | null;
   dilutionPercent: number | null;
   ourValueTodayOverride: number | null;
+  // Which entity this round's money came from, and what kind of buy it was.
+  investmentVehicle: InvestmentVehicle | null;
+  syndicateName: string | null;   // only set when investmentVehicle is 'Syndicate'
+  investmentType: InvestmentType | null;
   createdAt: string;
   updatedAt: string;
 }

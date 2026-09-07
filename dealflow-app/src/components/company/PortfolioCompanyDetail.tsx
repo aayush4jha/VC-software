@@ -8,10 +8,11 @@ import {
     getTotalInvested, getLatestValuation, getCurrentOwnership,
     getCompanyIRR, getCompanyMOIC, formatPortfolioCurrency, formatPortfolioCurrencyExact,
     formatMOIC, formatXIRR, PORTFOLIO_STAGE_COLORS,
-    getPortfolioStage, getCurrentStage, describeDroppedColumns,
+    getPortfolioStage, getCurrentStage, describeDroppedColumns, PORTFOLIO_STAGES,
     getDerivedCurrentOwnership,
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
+import { INVESTMENT_VEHICLES, INVESTMENT_TYPES } from '@/types/database';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import CompanyNotesPanel from './CompanyNotesPanel';
 
@@ -71,6 +72,7 @@ export default function PortfolioCompanyDetail() {
         share_price: '', num_shares: '', total_shares: '', dv_total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
         investor_names: '', notes: '', our_value_today_override: '',
+        investment_vehicle: '', syndicate_name: '', investment_type: '',
     });
 
     const resetRoundForm = () => setRoundForm({
@@ -79,6 +81,7 @@ export default function PortfolioCompanyDetail() {
         share_price: '', num_shares: '', total_shares: '', dv_total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
         investor_names: '', notes: '', our_value_today_override: '',
+        investment_vehicle: '', syndicate_name: '', investment_type: '',
     });
 
     const FOLLOWON_ROUND_OPTIONS = [
@@ -302,6 +305,9 @@ export default function PortfolioCompanyDetail() {
             investorNames: roundForm.investor_names,
             notes: roundForm.notes,
             ourValueTodayOverride: toNum(roundForm.our_value_today_override),
+            investmentVehicle: roundForm.investment_vehicle || null,
+            syndicateName: roundForm.investment_vehicle === 'Syndicate' ? (roundForm.syndicate_name || null) : null,
+            investmentType: roundForm.investment_type || null,
         };
 
         if (editingRoundId) {
@@ -383,6 +389,9 @@ export default function PortfolioCompanyDetail() {
             investor_names: fo.investorNames || '',
             notes: fo.notes || '',
             our_value_today_override: fo.ourValueTodayOverride?.toString() || '',
+            investment_vehicle: fo.investmentVehicle || '',
+            syndicate_name: fo.syndicateName || '',
+            investment_type: fo.investmentType || '',
         });
         setShowAddRound(true);
     };
@@ -541,7 +550,7 @@ export default function PortfolioCompanyDetail() {
                             <div style={detailCardStyle}>
                                 <EditableRow label="Entry Date" value={entryDate} field="entryDate" type="date" rawValue={effectiveEntryDate?.split('T')[0] || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Entry Stage" value={c.companyRound || '--'} field="companyRound" rawValue={c.companyRound || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO']} />
-                                <DetailRow label="Current Stage" value={getCurrentStage(c, followOns) || '--'} />
+                                <EditableRow label="Current Stage" value={getCurrentStage(c, followOns) || '--'} field="currentStage" rawValue={c.currentStage || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={[...PORTFOLIO_STAGES]} />
                                 <EditableRow label="Initial Investment (Our Investment)" value={c.initialInvestment ? formatPortfolioCurrency(c.initialInvestment) : '--'} field="initialInvestment" type="number" rawValue={c.initialInvestment?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Total Money Raised in this Round" value={c.entryTotalRaised ? formatPortfolioCurrency(c.entryTotalRaised) : '--'} field="entryTotalRaised" type="number" rawValue={c.entryTotalRaised?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Number of Shares (Owned by DV)" value={c.numShares != null ? c.numShares.toLocaleString('en-IN') : '--'} field="numShares" type="number" rawValue={c.numShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
@@ -577,7 +586,11 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="Entry Ownership %" value={c.entryOwnership ? `${c.entryOwnership}%` : (c.initialInvestment && (c.entryPostMoneyValuation || c.entryValuation) ? `${((c.initialInvestment / ((c.entryPostMoneyValuation || c.entryValuation) as number)) * 100).toFixed(2)}%` : '--')} field="entryOwnership" type="number" rawValue={c.entryOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Total Ownership After Round %" value={c.noOfShares != null ? `${c.noOfShares}%` : '--'} field="noOfShares" type="number" rawValue={c.noOfShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Current Ownership %" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'} field="currentOwnership" type="number" rawValue={c.currentOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
-                                <EditableRow label="Share Type" value={c.shareType || '--'} field="shareType" rawValue={c.shareType || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Primary', 'Secondary']} />
+                                <EditableRow label="Investment Type" value={c.shareType || '--'} field="shareType" rawValue={c.shareType || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Primary', 'Secondary']} />
+                                <EditableRow label="Investment Vehicle" value={c.investmentVehicle || '--'} field="investmentVehicle" rawValue={c.investmentVehicle || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={[...INVESTMENT_VEHICLES]} />
+                                {c.investmentVehicle === 'Syndicate' && (
+                                    <EditableRow label="Syndicate Name" value={c.syndicateName || '--'} field="syndicateName" rawValue={c.syndicateName || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                )}
                                 <EditableRow label="Portfolio Health" value={c.portfolioHealth || '--'} field="portfolioHealth" rawValue={c.portfolioHealth || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Bullish', 'Base', 'Bearish']} />
                                 <DetailRow label="MOIC" value={totalInvested > 0 ? formatMOIC(moic) : '--'} />
                             </div>
@@ -600,8 +613,11 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} />
                                 <EditableRow label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'} field="latestValuation" type="number" rawValue={c.latestValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Status" value={status} field="portfolioStatus" rawValue={status} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Active', 'Exited', 'Written Off']} />
-                                {status === 'Exited' && (
-                                    <EditableRow label="Exit Value" value={c.exitValue ? formatPortfolioCurrency(c.exitValue) : '--'} field="exitValue" type="number" rawValue={c.exitValue?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                {(status === 'Exited' || status === 'Written Off') && (
+                                    <EditableRow label={status === 'Written Off' ? 'Amount Recovered' : 'Exit Value'} value={c.exitValue ? formatPortfolioCurrency(c.exitValue) : '--'} field="exitValue" type="number" rawValue={c.exitValue?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
+                                )}
+                                {(status === 'Exited' || status === 'Written Off') && (
+                                    <EditableRow label={status === 'Written Off' ? 'Recovery Date' : 'Exit Date'} value={c.exitDate ? new Date(c.exitDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '--'} field="exitDate" type="date" rawValue={c.exitDate ? c.exitDate.slice(0, 10) : ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 )}
                                 <EditableRow
                                     label="Deal Sourcer" value={sourcer || '--'} field="dealSourceNameId"
@@ -867,6 +883,34 @@ export default function PortfolioCompanyDetail() {
                                                     />
                                                 )}
                                             </div>
+
+                                            {/* Which entity the money came from, and what kind of buy */}
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label">Investment Type</label>
+                                                    <select className="form-select" value={roundForm.investment_type}
+                                                        onChange={e => setRoundForm(f => ({ ...f, investment_type: e.target.value }))}>
+                                                        <option value="">Select type</option>
+                                                        {INVESTMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label">Investment Vehicle</label>
+                                                    <select className="form-select" value={roundForm.investment_vehicle}
+                                                        onChange={e => setRoundForm(f => ({ ...f, investment_vehicle: e.target.value }))}>
+                                                        <option value="">Select vehicle</option>
+                                                        {INVESTMENT_VEHICLES.map(v => <option key={v} value={v}>{v}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            {roundForm.investment_vehicle === 'Syndicate' && (
+                                                <div className="form-group">
+                                                    <label className="form-label">Syndicate Name</label>
+                                                    <input className="form-input" placeholder="e.g. Dholakia Angels I"
+                                                        value={roundForm.syndicate_name}
+                                                        onChange={e => setRoundForm(f => ({ ...f, syndicate_name: e.target.value }))} />
+                                                </div>
+                                            )}
 
                                             {/* Other investors + Our Value Today (editable, auto fallback) */}
                                             <div className="form-group">
@@ -1141,6 +1185,20 @@ export default function PortfolioCompanyDetail() {
                                                 label={`Dilution in round ${n}`}
                                                 value={fo.dilutionPercent != null ? `${fo.dilutionPercent}%` : '--'}
                                             />
+                                            {fo.didWeInvest && (
+                                                <>
+                                                    <FollowOnStat
+                                                        label="Investment type"
+                                                        value={fo.investmentType || '--'}
+                                                    />
+                                                    <FollowOnStat
+                                                        label="Vehicle"
+                                                        value={fo.investmentVehicle === 'Syndicate' && fo.syndicateName
+                                                            ? `Syndicate — ${fo.syndicateName}`
+                                                            : fo.investmentVehicle || '--'}
+                                                    />
+                                                </>
+                                            )}
                                             <div style={{ gridColumn: 'span 2' }}>
                                                 <FollowOnStat
                                                     label="Other investors"
