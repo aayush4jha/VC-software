@@ -368,6 +368,7 @@ interface AppContextType {
     deletePipelineStage: (id: string) => Promise<void>;
     investmentVehicles: { id: string; name: string }[];
     addInvestmentVehicle: (name: string) => Promise<string | null>;
+    deleteInvestmentVehicle: (id: string) => Promise<string | null>;
     addIndustry: (name: string) => Promise<Industry | null>;
     updateIndustry: (id: string, name: string) => Promise<void>;
     deleteIndustry: (id: string) => Promise<void>;
@@ -1717,6 +1718,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return data.name as string;
     }, [apiDb, investmentVehicles]);
 
+    // Removes the vehicle from the dropdown only. Investments store the name,
+    // not a reference, so anything already recorded against it keeps reading
+    // correctly — this cannot delete investment data.
+    const deleteInvestmentVehicle = useCallback(async (id: string): Promise<string | null> => {
+        const { error } = await apiDb({
+            table: 'investment_vehicles', operation: 'delete', match: { id },
+        });
+        if (error) { console.error('deleteInvestmentVehicle error:', error); return error; }
+        setInvestmentVehicles(prev => prev.filter(v => v.id !== id));
+        return null;
+    }, [apiDb]);
+
     const addIndustry = useCallback(async (name: string): Promise<Industry | null> => {
         const { data, error } = await apiDb({
             table: 'industries', operation: 'insert',
@@ -1988,7 +2001,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany,
         deckEmailLinks,
-        investmentVehicles, addInvestmentVehicle,
+        investmentVehicles, addInvestmentVehicle, deleteInvestmentVehicle,
         selectedCompany, setSelectedCompany, hydrateCompany,
         editingCompany, setEditingCompany,
         showNotifications, setShowNotifications,
@@ -2020,7 +2033,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, followOnsVersion,
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany, deckEmailLinks,
-        hydrateCompany, investmentVehicles, addInvestmentVehicle,
+        hydrateCompany, investmentVehicles, addInvestmentVehicle, deleteInvestmentVehicle,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,
         searchQuery, viewMode, activeFilters,
