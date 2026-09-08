@@ -34,6 +34,7 @@ export default function VehicleSelect({
     const [confirmId, setConfirmId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
+    const popoverRef = useRef<HTMLDivElement>(null);
 
     // Close on an outside click, so the list behaves like the native control
     // it replaces.
@@ -50,6 +51,12 @@ export default function VehicleSelect({
         document.addEventListener('mousedown', onDown);
         return () => document.removeEventListener('mousedown', onDown);
     }, [open]);
+
+    // The detail panel scrolls (.pd-col-main is overflow-y:auto), so a list
+    // opened low in the panel would otherwise be clipped by the column.
+    useEffect(() => {
+        if (open) popoverRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [open, adding]);
 
     // Falls back to the built-in names when the registry table does not exist
     // yet, so the list is never empty. Those have no id and cannot be deleted.
@@ -105,7 +112,7 @@ export default function VehicleSelect({
             </button>
 
             {open && (
-                <div style={{
+                <div ref={popoverRef} style={{
                     position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60, marginTop: 4,
                     background: 'var(--bg-elevated, #fff)', border: '1px solid var(--border)',
                     borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',

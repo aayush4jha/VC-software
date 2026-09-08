@@ -12,7 +12,7 @@ import {
     getDerivedCurrentOwnership,
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
-import { INVESTMENT_VEHICLES, INVESTMENT_TYPES } from '@/types/database';
+import { INVESTMENT_TYPES } from '@/types/database';
 import VehicleSelect from './VehicleSelect';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import CompanyNotesPanel from './CompanyNotesPanel';
@@ -47,7 +47,7 @@ export default function PortfolioCompanyDetail() {
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, updateCompany, deleteCompany,
         followOnsVersion, fetchCompanyNotes,
         setEditingCompany, setShowCompanyForm, setCompanyFormPortfolioMode,
-        dealSourceNames, users, investmentVehicles, addInvestmentVehicle,
+        dealSourceNames, users,
     } = useAppContext();
 
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
@@ -89,11 +89,6 @@ export default function PortfolioCompanyDetail() {
         'Pre-Seed', 'Seed', 'Pre-Series A', 'Series A',
         'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO',
     ] as const;
-
-    // Registry names, falling back to the built-ins before the table exists.
-    const vehicleNames = investmentVehicles.length > 0
-        ? investmentVehicles.map(v => v.name)
-        : [...INVESTMENT_VEHICLES];
 
     const c = selectedCompany;
 
@@ -196,11 +191,6 @@ export default function PortfolioCompanyDetail() {
         // is what re-derives Total Invested / ownership / MOIC / IRR here and
         // the tiles on the board. A rejected write used to be painted on
         // locally anyway, so the panel showed a value the database never took.
-        // A vehicle typed here joins the shared list, so it is offered on the
-        // next round instead of having to be retyped.
-        if (editField === 'investmentVehicle' && editValue.trim()) {
-            await addInvestmentVehicle(editValue.trim());
-        }
         const { error, dropped } = await updateCompany(c.id, data);
         if (error) {
             setFieldError(`Could not save ${editField}: ${error}`);
@@ -598,7 +588,19 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="Total Ownership After Round %" value={c.noOfShares != null ? `${c.noOfShares}%` : '--'} field="noOfShares" type="number" rawValue={c.noOfShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Current Ownership %" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'} field="currentOwnership" type="number" rawValue={c.currentOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Investment Type" value={c.shareType || '--'} field="shareType" rawValue={c.shareType || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Primary', 'Secondary']} />
-                                <EditableRow label="Investment Vehicle" value={c.investmentVehicle || '--'} field="investmentVehicle" rawValue={c.investmentVehicle || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={vehicleNames} />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0 }}>
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flex: 1, minWidth: 0 }}>Investment Vehicle</span>
+                                    <div style={{ width: 190, flexShrink: 0 }}>
+                                        <VehicleSelect
+                                            value={c.investmentVehicle || ''}
+                                            labelFontSize={13}
+                                            onChange={async v => {
+                                                const { error } = await updateCompany(c.id, { investmentVehicle: v || null });
+                                                if (error) setFieldError(`Could not save investment vehicle: ${error}`);
+                                            }}
+                                        />
+                                    </div>
+                                </div>
                                 {c.investmentVehicle === 'Syndicate' && (
                                     <EditableRow label="Syndicate Name" value={c.syndicateName || '--'} field="syndicateName" rawValue={c.syndicateName || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 )}
@@ -621,7 +623,7 @@ export default function PortfolioCompanyDetail() {
                                         if (error) setFieldError(`Could not save founders: ${error}`);
                                     }}
                                 />
-                                <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} />
+                                <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} placeholder="Pick a state or type a city/country" />
                                 <EditableRow label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'} field="latestValuation" type="number" rawValue={c.latestValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Status" value={status} field="portfolioStatus" rawValue={status} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Active', 'Exited', 'Written Off']} />
                                 {(status === 'Exited' || status === 'Written Off') && (
@@ -1575,13 +1577,15 @@ interface EditableRowProps {
     selectLabels?: Record<string, string>;
     /** Free-text input that also offers these as <datalist> suggestions. */
     datalistOptions?: string[];
+    /** Placeholder for the free-text input; the datalist branch had HQ's hardcoded. */
+    placeholder?: string;
     onStart: (field: string, val: string) => void;
     onChange: (val: string) => void;
     onSave: () => void;
     onCancel: () => void;
 }
 
-function EditableRow({ label, value, field, rawValue, editField, editValue, type, selectOptions, selectLabels, datalistOptions, onStart, onChange, onSave, onCancel }: EditableRowProps) {
+function EditableRow({ label, value, field, rawValue, editField, editValue, type, selectOptions, selectLabels, datalistOptions, placeholder, onStart, onChange, onSave, onCancel }: EditableRowProps) {
     const isEditing = editField === field;
     const datalistId = datalistOptions ? `editable-row-list-${field}` : undefined;
     return (
@@ -1612,7 +1616,7 @@ function EditableRow({ label, value, field, rawValue, editField, editValue, type
                                 onChange={e => onChange(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
                                 autoFocus
-                                placeholder="Pick a state or type a city/country"
+                                placeholder={placeholder}
                                 style={{ fontSize: 12, padding: '3px 6px', height: 28, flex: 1, minWidth: 80, maxWidth: 200 }}
                             />
                             <datalist id={datalistId}>
