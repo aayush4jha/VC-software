@@ -13,6 +13,7 @@ import {
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
 import { INVESTMENT_VEHICLES, INVESTMENT_TYPES } from '@/types/database';
+import VehicleSelect from './VehicleSelect';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import CompanyNotesPanel from './CompanyNotesPanel';
 
@@ -46,7 +47,7 @@ export default function PortfolioCompanyDetail() {
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, updateCompany, deleteCompany,
         followOnsVersion, fetchCompanyNotes,
         setEditingCompany, setShowCompanyForm, setCompanyFormPortfolioMode,
-        dealSourceNames, users,
+        dealSourceNames, users, investmentVehicles, addInvestmentVehicle,
     } = useAppContext();
 
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
@@ -88,6 +89,11 @@ export default function PortfolioCompanyDetail() {
         'Pre-Seed', 'Seed', 'Pre-Series A', 'Series A',
         'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO',
     ] as const;
+
+    // Registry names, falling back to the built-ins before the table exists.
+    const vehicleNames = investmentVehicles.length > 0
+        ? investmentVehicles.map(v => v.name)
+        : [...INVESTMENT_VEHICLES];
 
     const c = selectedCompany;
 
@@ -190,6 +196,11 @@ export default function PortfolioCompanyDetail() {
         // is what re-derives Total Invested / ownership / MOIC / IRR here and
         // the tiles on the board. A rejected write used to be painted on
         // locally anyway, so the panel showed a value the database never took.
+        // A vehicle typed here joins the shared list, so it is offered on the
+        // next round instead of having to be retyped.
+        if (editField === 'investmentVehicle' && editValue.trim()) {
+            await addInvestmentVehicle(editValue.trim());
+        }
         const { error, dropped } = await updateCompany(c.id, data);
         if (error) {
             setFieldError(`Could not save ${editField}: ${error}`);
@@ -587,7 +598,7 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="Total Ownership After Round %" value={c.noOfShares != null ? `${c.noOfShares}%` : '--'} field="noOfShares" type="number" rawValue={c.noOfShares?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Current Ownership %" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'} field="currentOwnership" type="number" rawValue={c.currentOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Investment Type" value={c.shareType || '--'} field="shareType" rawValue={c.shareType || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Primary', 'Secondary']} />
-                                <EditableRow label="Investment Vehicle" value={c.investmentVehicle || '--'} field="investmentVehicle" rawValue={c.investmentVehicle || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={[...INVESTMENT_VEHICLES]} />
+                                <EditableRow label="Investment Vehicle" value={c.investmentVehicle || '--'} field="investmentVehicle" rawValue={c.investmentVehicle || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={vehicleNames} />
                                 {c.investmentVehicle === 'Syndicate' && (
                                     <EditableRow label="Syndicate Name" value={c.syndicateName || '--'} field="syndicateName" rawValue={c.syndicateName || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 )}
@@ -896,11 +907,10 @@ export default function PortfolioCompanyDetail() {
                                                 </div>
                                                 <div className="form-group">
                                                     <label className="form-label">Investment Vehicle</label>
-                                                    <select className="form-select" value={roundForm.investment_vehicle}
-                                                        onChange={e => setRoundForm(f => ({ ...f, investment_vehicle: e.target.value }))}>
-                                                        <option value="">Select vehicle</option>
-                                                        {INVESTMENT_VEHICLES.map(v => <option key={v} value={v}>{v}</option>)}
-                                                    </select>
+                                                    <VehicleSelect
+                                                        value={roundForm.investment_vehicle}
+                                                        onChange={v => setRoundForm(f => ({ ...f, investment_vehicle: v }))}
+                                                    />
                                                 </div>
                                             </div>
                                             {roundForm.investment_vehicle === 'Syndicate' && (

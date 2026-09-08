@@ -366,6 +366,8 @@ interface AppContextType {
     addPipelineStage: (name: string, color: string, description: string) => Promise<void>;
     updatePipelineStage: (id: string, data: { name?: string; color?: string; description?: string }) => Promise<void>;
     deletePipelineStage: (id: string) => Promise<void>;
+    investmentVehicles: { id: string; name: string }[];
+    addInvestmentVehicle: (name: string) => Promise<string | null>;
     addIndustry: (name: string) => Promise<Industry | null>;
     updateIndustry: (id: string, name: string) => Promise<void>;
     deleteIndustry: (id: string) => Promise<void>;
@@ -463,6 +465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [deckEmailLinks, setDeckEmailLinks] = useState<Record<string, string>>({});
 
     // UI state
+    const [investmentVehicles, setInvestmentVehicles] = useState<{ id: string; name: string }[]>([]);
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
     const [editingCompany, setEditingCompany] = useState<Company | null>(null);
     const [showNotifications, setShowNotifications] = useState(false);
@@ -517,6 +520,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setDealSourceNames((json.sources || []).map((r: any) => ({ id: r.id, name: r.name })));
             setNotifications((json.notifications || []).map(mapNotification));
             setUsers((json.profiles || []).map(mapUser));
+            setInvestmentVehicles(
+                (json.investmentVehicles || []).map((r: any) => ({ id: r.id, name: r.name })),
+            );
             setSavedViews((json.savedViews || []).map((r: any): SavedView => ({
                 id: r.id, name: r.name, filters: r.filters ?? {}, createdAt: r.created_at,
             })));
@@ -1689,6 +1695,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setPipelineStages(prev => prev.filter(s => s.id !== id));
     }, [apiDb]);
 
+    // The vehicle is stored on the investment as a name, so this registry only
+    // feeds the dropdown — adding one never has to touch existing rows.
+    const addInvestmentVehicle = useCallback(async (name: string): Promise<string | null> => {
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+        const existing = investmentVehicles.find(v => v.name.toLowerCase() === trimmed.toLowerCase());
+        if (existing) return existing.name;
+
+        const { data, error } = await apiDb({
+            table: 'investment_vehicles', operation: 'insert',
+            data: { organization_id: ORGANIZATION_ID, name: trimmed },
+        });
+        if (error || !data) {
+            console.error('addInvestmentVehicle error:', error);
+            // Still usable on this investment even if the registry write failed.
+            return trimmed;
+        }
+        setInvestmentVehicles(prev =>
+            [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+        return data.name as string;
+    }, [apiDb, investmentVehicles]);
+
     const addIndustry = useCallback(async (name: string): Promise<Industry | null> => {
         const { data, error } = await apiDb({
             table: 'industries', operation: 'insert',
@@ -1960,6 +1988,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany,
         deckEmailLinks,
+        investmentVehicles, addInvestmentVehicle,
         selectedCompany, setSelectedCompany, hydrateCompany,
         editingCompany, setEditingCompany,
         showNotifications, setShowNotifications,
@@ -1991,7 +2020,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchFollowOns, fetchAllFollowOns, addFollowOn, updateFollowOn, deleteFollowOn, followOnsVersion,
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany, deckEmailLinks,
-        hydrateCompany,
+        hydrateCompany, investmentVehicles, addInvestmentVehicle,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,
         searchQuery, viewMode, activeFilters,

@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
-import { INVESTMENT_VEHICLES, INVESTMENT_TYPES } from '@/types/database';
+import { INVESTMENT_TYPES } from '@/types/database';
+import VehicleSelect from './VehicleSelect';
 import { formatPortfolioCurrency, formatPortfolioCurrencyExact, describeDroppedColumns } from '@/lib/portfolio-utils';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
@@ -816,10 +817,10 @@ export default function PortfolioCompanyForm() {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Investment Vehicle</label>
-                            <select className="form-select" value={form.investment_vehicle} onChange={upd('investment_vehicle')}>
-                                <option value="">Select vehicle</option>
-                                {INVESTMENT_VEHICLES.map(v => <option key={v} value={v}>{v}</option>)}
-                            </select>
+                            <VehicleSelect
+                                value={form.investment_vehicle}
+                                onChange={v => setForm(f => ({ ...f, investment_vehicle: v }))}
+                            />
                         </div>
                         {form.investment_vehicle === 'Syndicate' && (
                             <div className="form-group">
@@ -1136,11 +1137,11 @@ export default function PortfolioCompanyForm() {
                                                 </div>
                                                 <div className="form-group">
                                                     <label className="form-label" style={{ fontSize: 12 }}>Investment Vehicle</label>
-                                                    <select className="form-select" value={fo.investmentVehicle}
-                                                        onChange={e => updateFollowOnRow(originalIdx, 'investmentVehicle', e.target.value)}>
-                                                        <option value="">Select vehicle</option>
-                                                        {INVESTMENT_VEHICLES.map(v => <option key={v} value={v}>{v}</option>)}
-                                                    </select>
+                                                    <VehicleSelect
+                                                        value={fo.investmentVehicle}
+                                                        onChange={v => updateFollowOnRow(originalIdx, 'investmentVehicle', v)}
+                                                        labelFontSize={12}
+                                                    />
                                                 </div>
                                             </div>
                                             {fo.investmentVehicle === 'Syndicate' && (
