@@ -122,7 +122,7 @@ Extract the following fields. Return ONLY valid JSON with these exact keys. Use 
   "subIndustry": "More specific sub-industry if mentioned",
   "dealSourceType": "One of: Founder Network, Investment Banker, Friends & Family, VC & PE",
   "priorityLevel": "One of: Low, Medium, High - based on the quality/urgency of the opportunity",
-  "shareType": "One of: Primary, Secondary",
+  "shareType": "One of: Primary, Secondary, Debt",
   "summary": "A 1-2 sentence summary of what this email is about and why it's relevant for the VC firm"
 }
 

@@ -10,13 +10,14 @@ import {
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import type { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
+import { INVESTMENT_TYPES } from '@/types/database';
 import { downloadAsDocx, downloadAsPdf } from '@/lib/report-download';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
 const priorities: PriorityLevel[] = ['Low', 'Medium', 'High'];
 const dealSourceTypes: DealSourceType[] = ['Founder Network', 'Investment Banker', 'Friends & Family', 'VC & PE'];
-const shareTypes: ShareType[] = ['Primary', 'Secondary'];
+const shareTypes: ShareType[] = [...INVESTMENT_TYPES];
 
 // Always-editable inline input. Declared at module scope so it has a stable
 // component identity across parent renders — otherwise React would remount on

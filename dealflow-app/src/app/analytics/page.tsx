@@ -27,6 +27,7 @@ import {
     PORTFOLIO_STAGE_COLORS,
 } from '@/lib/portfolio-utils';
 import type { FollowOnRound } from '@/types/database';
+import { INVESTMENT_TYPES } from '@/types/database';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart as RechartsPieChart, Pie, Cell, Legend,
@@ -41,7 +42,7 @@ function AnalyticsContent() {
     const {
         companies, industries, users, dealSourceNames,
         getIndustryById, getDealSourceNameById, getUserById,
-        fetchFollowOns, followOnsVersion,
+        fetchFollowOns, followOnsVersion, investmentVehicles,
     } = useAppContext();
 
     // ─── Follow-on data ──────────────────────────
@@ -85,6 +86,9 @@ function AnalyticsContent() {
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterMinInvestment, setFilterMinInvestment] = useState('');
     const [filterMaxInvestment, setFilterMaxInvestment] = useState('');
+    const [filterInvestmentType, setFilterInvestmentType] = useState('all');
+    const [filterVehicle, setFilterVehicle] = useState('all');
+    const [filterHealth, setFilterHealth] = useState('all');
 
     // Unique values for filter dropdowns
     const uniqueStages = useMemo(() => [...new Set(portfolioCompanies.map(c => c.companyRound))].sort(), [portfolioCompanies]);
@@ -98,6 +102,46 @@ function AnalyticsContent() {
     const uniqueGeographies = useMemo(() => [...new Set(portfolioCompanies.map(c => c.hqLocation).filter(Boolean))].sort(), [portfolioCompanies]);
     const uniqueEntryYears = useMemo(() => [...new Set(portfolioCompanies.map(c => new Date(c.createdAt).getFullYear()))].sort((a, b) => b - a), [portfolioCompanies]);
 
+    // Vehicle and investment type are recorded per investment, not per company:
+    // the entry sits on the company (investmentVehicle / shareType) and every
+    // follow-on carries its own. A company therefore matches a vehicle or type
+    // filter when *any* of its investments used it. Rounds we passed on moved no
+    // money, so they contribute nothing.
+    const investmentLegs = useCallback((c: typeof portfolioCompanies[number]) => {
+        const fos = followOnsMap.get(c.id) || [];
+        const legs = [{
+            amount: c.initialInvestment || 0,
+            vehicle: c.investmentVehicle || null,
+            syndicateName: c.syndicateName || null,
+            type: (c.shareType as string) || null,
+        }];
+        for (const fo of fos) {
+            if (!fo.didWeInvest) continue;
+            legs.push({
+                amount: fo.ourInvestment || 0,
+                vehicle: fo.investmentVehicle || null,
+                syndicateName: fo.syndicateName || null,
+                type: fo.investmentType || null,
+            });
+        }
+        return legs;
+    }, [followOnsMap]);
+
+    // Registry entries first (so the dropdown is stable even before anything is
+    // tagged), then any vehicle an investment records that the registry lost.
+    const uniqueVehicles = useMemo(() => {
+        const inUse = new Set<string>();
+        portfolioCompanies.forEach(c => investmentLegs(c).forEach(l => { if (l.vehicle) inUse.add(l.vehicle); }));
+        const registry = investmentVehicles.map(v => v.name);
+        return [...registry, ...[...inUse].filter(v => !registry.includes(v)).sort()];
+    }, [portfolioCompanies, investmentLegs, investmentVehicles]);
+
+    const uniqueInvestmentTypes = useMemo(() => {
+        const inUse = new Set<string>();
+        portfolioCompanies.forEach(c => investmentLegs(c).forEach(l => { if (l.type) inUse.add(l.type); }));
+        return [...INVESTMENT_TYPES, ...[...inUse].filter(t => !INVESTMENT_TYPES.includes(t as never)).sort()];
+    }, [portfolioCompanies, investmentLegs]);
+
     // Apply filters
     const filtered = useMemo(() => {
         return portfolioCompanies.filter(c => {
@@ -109,9 +153,15 @@ function AnalyticsContent() {
             const invested = getTotalInvested(c, followOnsMap.get(c.id) || []);
             if (filterMinInvestment && invested < Number(filterMinInvestment)) return false;
             if (filterMaxInvestment && invested > Number(filterMaxInvestment)) return false;
+            if (filterHealth !== 'all' && (c.portfolioHealth || '') !== filterHealth) return false;
+            if (filterInvestmentType !== 'all' || filterVehicle !== 'all') {
+                const legs = investmentLegs(c);
+                if (filterInvestmentType !== 'all' && !legs.some(l => l.type === filterInvestmentType)) return false;
+                if (filterVehicle !== 'all' && !legs.some(l => l.vehicle === filterVehicle)) return false;
+            }
             return true;
         });
-    }, [portfolioCompanies, filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterMinInvestment, filterMaxInvestment, followOnsMap]);
+    }, [portfolioCompanies, filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterMinInvestment, filterMaxInvestment, filterInvestmentType, filterVehicle, filterHealth, followOnsMap, investmentLegs]);
 
     const resetFilters = () => {
         setFilterStage('all');
@@ -121,6 +171,9 @@ function AnalyticsContent() {
         setFilterStatus('all');
         setFilterMinInvestment('');
         setFilterMaxInvestment('');
+        setFilterInvestmentType('all');
+        setFilterVehicle('all');
+        setFilterHealth('all');
     };
 
     // ─── Metrics ─────────────────────────────────
@@ -253,6 +306,34 @@ function AnalyticsContent() {
         });
         return [...map.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
     }, [filtered]);
+
+    // ─── Vehicle / Investment Type Allocation ────
+    // Capital is attributed per investment leg, not per company: an entry from
+    // DVPL followed by a syndicate follow-on lands in both buckets with the
+    // right amount in each. Deal counts are distinct companies per bucket.
+    const allocationBy = useCallback((key: 'vehicle' | 'type') => {
+        const map = new Map<string, { invested: number; companies: Set<string> }>();
+        filtered.forEach(c => {
+            investmentLegs(c).forEach(l => {
+                const raw = key === 'vehicle' ? l.vehicle : l.type;
+                const name = !raw
+                    ? 'Unassigned'
+                    : key === 'vehicle' && raw === 'Syndicate' && l.syndicateName
+                        ? `Syndicate — ${l.syndicateName}`
+                        : raw;
+                const entry = map.get(name) || { invested: 0, companies: new Set<string>() };
+                entry.invested += l.amount;
+                entry.companies.add(c.id);
+                map.set(name, entry);
+            });
+        });
+        return [...map.entries()]
+            .map(([name, d]) => ({ name, invested: d.invested, deals: d.companies.size }))
+            .sort((a, b) => b.invested - a.invested);
+    }, [filtered, investmentLegs]);
+
+    const vehicleAllocation = useMemo(() => allocationBy('vehicle'), [allocationBy]);
+    const investmentTypeAllocation = useMemo(() => allocationBy('type'), [allocationBy]);
 
     // ─── Geographic Distribution ─────────────────
     const geoDistribution = useMemo(() => {
@@ -412,6 +493,29 @@ function AnalyticsContent() {
                                 <option value="Active">Active</option>
                                 <option value="Exited">Exited</option>
                                 <option value="Written Off">Written Off</option>
+                            </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Investment Type</label>
+                            <select className="btn btn-sm" value={filterInvestmentType} onChange={e => setFilterInvestmentType(e.target.value)} style={{ minWidth: 120 }}>
+                                <option value="all">All Types</option>
+                                {uniqueInvestmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Investment Vehicle</label>
+                            <select className="btn btn-sm" value={filterVehicle} onChange={e => setFilterVehicle(e.target.value)} style={{ minWidth: 140 }}>
+                                <option value="all">All Vehicles</option>
+                                {uniqueVehicles.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Portfolio Health</label>
+                            <select className="btn btn-sm" value={filterHealth} onChange={e => setFilterHealth(e.target.value)} style={{ minWidth: 110 }}>
+                                <option value="all">All Health</option>
+                                <option value="Bullish">Bullish</option>
+                                <option value="Base">Base</option>
+                                <option value="Bearish">Bearish</option>
                             </select>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -771,6 +875,88 @@ function AnalyticsContent() {
                                 ) : null}
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* ═══ Vehicle + Investment Type Allocation ═══ */}
+                <div className="portfolio-two-col" style={{ marginBottom: 24 }}>
+                    <div className="portfolio-section-card">
+                        <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Capital by Investment Vehicle</div>
+                        {vehicleAllocation.length > 0 ? (
+                            <>
+                                <ResponsiveContainer width="100%" height={260}>
+                                    <BarChart data={vehicleAllocation} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                                        <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} tickFormatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                        <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} width={130} />
+                                        <Tooltip formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                        <Bar dataKey="invested" name="Deployed" radius={[0, 4, 4, 0]}>
+                                            {vehicleAllocation.map((_, i) => (
+                                                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                                <div className="table-container" style={{ marginTop: 12 }}>
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr><th>Vehicle</th><th>Companies</th><th>Deployed</th><th>Share</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {vehicleAllocation.map(v => {
+                                                const total = vehicleAllocation.reduce((sum, x) => sum + x.invested, 0);
+                                                return (
+                                                    <tr key={v.name}>
+                                                        <td>{v.name}</td>
+                                                        <td>{v.deals}</td>
+                                                        <td>{formatPortfolioCurrency(v.invested)}</td>
+                                                        <td>{total > 0 ? `${((v.invested / total) * 100).toFixed(1)}%` : '--'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        ) : <div className="portfolio-empty-chart">No vehicle data</div>}
+                    </div>
+                    <div className="portfolio-section-card">
+                        <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Capital by Investment Type</div>
+                        {investmentTypeAllocation.length > 0 ? (
+                            <>
+                                <ResponsiveContainer width="100%" height={260}>
+                                    <RechartsPieChart>
+                                        <Pie data={investmentTypeAllocation} dataKey="invested" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={100} paddingAngle={2}>
+                                            {investmentTypeAllocation.map((_, i) => (
+                                                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                        <Legend />
+                                    </RechartsPieChart>
+                                </ResponsiveContainer>
+                                <div className="table-container" style={{ marginTop: 12 }}>
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr><th>Type</th><th>Companies</th><th>Deployed</th><th>Share</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {investmentTypeAllocation.map(t => {
+                                                const total = investmentTypeAllocation.reduce((sum, x) => sum + x.invested, 0);
+                                                return (
+                                                    <tr key={t.name}>
+                                                        <td>{t.name}</td>
+                                                        <td>{t.deals}</td>
+                                                        <td>{formatPortfolioCurrency(t.invested)}</td>
+                                                        <td>{total > 0 ? `${((t.invested / total) * 100).toFixed(1)}%` : '--'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        ) : <div className="portfolio-empty-chart">No investment type data</div>}
                     </div>
                 </div>
 

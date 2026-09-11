@@ -26,7 +26,7 @@ function roundOptions(current: string): string[] {
     }
     return rounds;
 }
-const shareTypes: ShareType[] = ['Primary', 'Secondary'];
+const shareTypes: ShareType[] = [...INVESTMENT_TYPES];
 const portfolioStatuses: PortfolioStatus[] = ['Active', 'Exited', 'Written Off'];
 const portfolioHealthOptions: PortfolioHealth[] = ['Bullish', 'Base', 'Bearish'];
 

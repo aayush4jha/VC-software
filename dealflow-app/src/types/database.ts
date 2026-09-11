@@ -62,7 +62,10 @@ export type DealSourceType =
   | 'Friends & Family'
   | 'VC & PE';
 
-export type ShareType = 'Primary' | 'Secondary';
+// The entry round's investment type. Named share_type in the database, which
+// predates Debt — it is the same vocabulary as INVESTMENT_TYPES below, so the
+// two can never drift apart.
+export type ShareType = InvestmentType;
 
 export type CommunicationMethod =
   | 'Email'
@@ -245,9 +248,10 @@ export const INVESTMENT_VEHICLES = [
 ] as const;
 export type InvestmentVehicle = typeof INVESTMENT_VEHICLES[number];
 
-// Primary (new shares from the company) vs Secondary (bought from an existing
-// holder). Recorded on the entry round and on every follow-on.
-export const INVESTMENT_TYPES = ['Primary', 'Secondary'] as const;
+// Primary (new shares from the company), Secondary (bought from an existing
+// holder) or Debt (a loan / convertible rather than an equity purchase).
+// Recorded on the entry round and on every follow-on.
+export const INVESTMENT_TYPES = ['Primary', 'Secondary', 'Debt'] as const;
 export type InvestmentType = typeof INVESTMENT_TYPES[number];
 
 export interface FollowOnRound {

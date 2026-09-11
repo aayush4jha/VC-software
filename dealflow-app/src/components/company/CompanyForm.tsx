@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, Search } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
+import { CompanyRound, PriorityLevel, DealSourceType, ShareType, INVESTMENT_TYPES } from '@/types/database';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
@@ -18,7 +18,7 @@ function roundOptions(current: string): string[] {
 }
 const priorities: PriorityLevel[] = ['Low', 'Medium', 'High'];
 const dealSourceTypes: DealSourceType[] = ['Founder Network', 'Investment Banker', 'Friends & Family', 'VC & PE'];
-const shareTypes: ShareType[] = ['Primary', 'Secondary'];
+const shareTypes: ShareType[] = [...INVESTMENT_TYPES];
 
 export default function CompanyForm() {
     const {

@@ -214,7 +214,7 @@ create table public.companies (
     deal_source_name_id uuid references public.deal_source_names(id) on delete set null,
     industry_id uuid references public.industries(id) on delete set null,
     sub_industry text default '',
-    share_type text not null default 'Primary' check (share_type in ('Primary', 'Secondary')),
+    share_type text not null default 'Primary' check (share_type in ('Primary', 'Secondary', 'Debt')),
     total_fund_raise bigint,
     valuation bigint,
     google_drive_link text default '',
