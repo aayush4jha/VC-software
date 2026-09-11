@@ -190,6 +190,7 @@ export interface Company {
   // Vehicle the entry investment came from. The entry round's Primary /
   // Secondary lives in shareType, which predates this.
   investmentVehicle: InvestmentVehicle | null;
+  investmentInstrument: string | null;  // CCPS / CCD / Debt / Common Equity, or anything added to the registry
   syndicateName: string | null;
   currentStage: string | null;      // overrides the stage derived from the latest round
   founders: Founder[];              // Multiple founders supported; first entry mirrors founder_name / founder_email
@@ -254,6 +255,13 @@ export type InvestmentVehicle = typeof INVESTMENT_VEHICLES[number];
 export const INVESTMENT_TYPES = ['Primary', 'Secondary', 'Debt'] as const;
 export type InvestmentType = typeof INVESTMENT_TYPES[number];
 
+// The instrument the money actually bought. Distinct from investment type,
+// which says how the stake was acquired: a Primary investment can be issued as
+// CCPS or as Common Equity. Seeds the editable investment_instruments registry;
+// stored on the investment as a name, so the list can change freely.
+export const INVESTMENT_INSTRUMENTS = ['CCPS', 'CCD', 'Debt', 'Common Equity'] as const;
+export type InvestmentInstrument = typeof INVESTMENT_INSTRUMENTS[number];
+
 export interface FollowOnRound {
   id: string;
   companyId: string;
@@ -283,6 +291,7 @@ export interface FollowOnRound {
   investmentVehicle: InvestmentVehicle | null;
   syndicateName: string | null;   // only set when investmentVehicle is 'Syndicate'
   investmentType: InvestmentType | null;
+  investmentInstrument: string | null;
   createdAt: string;
   updatedAt: string;
 }

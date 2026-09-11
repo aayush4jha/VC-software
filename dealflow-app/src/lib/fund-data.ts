@@ -50,11 +50,17 @@ export function createDefaultFundRecord(): FundRecord {
     return {
         asOfDate: today,
         updatedAt: now,
+        // Named from INVESTMENT_VEHICLES, the same registry Portfolio and Legal
+        // pick from, so an entity is called one thing across the whole app.
+        // 'Syndicate' is deliberately absent: it is a way to invest, not an
+        // entity holding a bank balance. Records saved before this seeded
+        // DVLLP / DRAVYA / RAK / NBF and keep those names until renamed from
+        // the entity card, which now picks from the registry too.
         entities: [
-            { id: 'dvllp',  name: 'DVLLP',     currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
-            { id: 'dravya', name: 'DRAVYA',    currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
-            { id: 'rak',    name: 'RAK',       currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
-            { id: 'nbf',    name: 'NBF',       currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
+            { id: 'dravya-personal', name: 'Dravya Personal', currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
+            { id: 'dvpl',            name: 'DVPL',            currency: 'INR', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
+            { id: 'dvfz-llc',        name: 'DVFZ LLC',        currency: 'AED', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
+            { id: 'dv-dmcc',         name: 'DV DMCC',         currency: 'AED', bankBalance: 0, paymentDue: 0, pendingFund: 0 },
         ],
         expenses: [],
         statements: [],

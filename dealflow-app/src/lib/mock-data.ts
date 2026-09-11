@@ -166,7 +166,7 @@ export const companies: Company[] = [
         filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c2', companyName: 'GreenGrid AI', founderName: 'Kavitha Rao', founderEmail: 'kavitha@greengrid.ai',
@@ -180,7 +180,7 @@ export const companies: Company[] = [
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c3', companyName: 'LegalEase', founderName: 'Vikrant Joshi', founderEmail: 'vikrant@legalease.in',
@@ -193,7 +193,7 @@ export const companies: Company[] = [
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c4', companyName: 'ShieldNet', founderName: 'Ravi Kumar', founderEmail: 'ravi@shieldnet.io',
@@ -209,7 +209,7 @@ export const companies: Company[] = [
         icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c5', companyName: 'CropSense', founderName: 'Deepa Agarwal', founderEmail: 'deepa@cropsense.co',
@@ -222,7 +222,7 @@ export const companies: Company[] = [
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c6', companyName: 'UrbanShift', founderName: 'Sanjay Mehta', founderEmail: 'sanjay@urbanshift.in',
@@ -236,7 +236,7 @@ export const companies: Company[] = [
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c7', companyName: 'MedTrack Pro', founderName: 'Dr. Anita Singh', founderEmail: 'anita@medtrackpro.com',
@@ -252,7 +252,7 @@ export const companies: Company[] = [
         icMemo: '# Investment Committee Memo\n## MedTrack Pro — Pre-Series A\n\n### Company Overview\nMedTrack Pro is a B2B SaaS platform digitizing hospital operations...\n\n### Investment Thesis\n1. Large addressable market (₹45,000Cr+)\n2. Strong founder-market fit\n3. Proven product with 12 hospital deployments\n\n### Risks\n1. Long enterprise sales cycles\n2. Regulatory complexity\n\n### Recommendation\n**Proceed to Due Diligence** with focus on unit economics validation.',
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c8', companyName: 'DevForge', founderName: 'Karthik Nair', founderEmail: 'karthik@devforge.dev',
@@ -266,7 +266,7 @@ export const companies: Company[] = [
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c9', companyName: 'PayrollStack', founderName: 'Meera Desai', founderEmail: 'meera@payrollstack.in',
@@ -282,7 +282,7 @@ export const companies: Company[] = [
         icMemo: '# IC Memo: PayrollStack\n\nRecommendation: Invest ₹25Cr at ₹100Cr pre-money valuation...',
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c10', companyName: 'DataLens', founderName: 'Akash Trivedi', founderEmail: 'akash@datalens.ai',
@@ -295,7 +295,7 @@ export const companies: Company[] = [
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c11', companyName: 'CloudArmor', founderName: 'Bharat Patel', founderEmail: 'bharat@cloudarmor.io',
@@ -308,7 +308,7 @@ export const companies: Company[] = [
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c12', companyName: 'FleetPulse', founderName: 'Nikhil Yadav', founderEmail: 'nikhil@fleetpulse.in',
@@ -321,7 +321,7 @@ export const companies: Company[] = [
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c13', companyName: 'TokenBridge', founderName: 'Arun Christy', founderEmail: 'arun@tokenbridge.xyz',
@@ -335,7 +335,7 @@ export const companies: Company[] = [
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c14', companyName: 'DefenseOS', founderName: 'Col. Rajesh Verma (Retd.)', founderEmail: 'rajesh@defenseos.in',
@@ -351,7 +351,7 @@ export const companies: Company[] = [
         icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c15', companyName: 'QuickServe', founderName: 'Tanvi Shah', founderEmail: 'tanvi@quickserve.app',
@@ -364,7 +364,7 @@ export const companies: Company[] = [
         quickSummary: null, deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c16', companyName: 'SalesForge AI', founderName: 'Gaurav Reddy', founderEmail: 'gaurav@salesforge.ai',
@@ -378,7 +378,7 @@ export const companies: Company[] = [
         deckAnalysis: null, kpiData: null, callTranscript: null, filterBrief: null, icMemo: null,
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c17', companyName: 'TaskFlow', founderName: 'Ishaan Bose', founderEmail: 'ishaan@taskflow.co',
@@ -394,7 +394,7 @@ export const companies: Company[] = [
         icMemo: '# IC Memo: TaskFlow\n\nRecommendation: Proceed with caution. Strong product, competitive market.',
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
     {
         id: 'c18', companyName: 'SecurID', founderName: 'Ananya Kapoor', founderEmail: 'ananya@securid.io',
@@ -410,7 +410,7 @@ export const companies: Company[] = [
         icMemo: '# IC Memo: SecurID\n\nStrong buy recommendation. Market-leading accuracy in identity verification.',
         needsReview: false, ingestionSource: null,
         initialInvestment: null, entryValuation: null, entryOwnership: null, currentOwnership: null,
-        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
+        latestValuation: null, portfolioStatus: 'Active' as const, exitValue: null, exitDate: null, hqLocation: '', notes: '', deckEmailLink: null, stageDeadlines: {}, meetEventTitle: null, meetEventDate: null, sharePrice: null, numShares: null, totalShares: null, entryPreMoneyValuation: null, entryPostMoneyValuation: null, entryTotalRaised: null, noOfShares: null, dvTotalShares: null, portfolioHealth: null, investmentVehicle: null, investmentInstrument: null, syndicateName: null, currentStage: null, founders: [], entryDate: null,
     },
 ];
 

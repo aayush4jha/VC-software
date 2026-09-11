@@ -96,6 +96,7 @@ function mapCompany(r: any): Company {
         dvTotalShares: r.dv_total_shares != null ? Number(r.dv_total_shares) : null,
         portfolioHealth: r.portfolio_health ?? null,
         investmentVehicle: r.investment_vehicle ?? null,
+        investmentInstrument: r.investment_instrument ?? null,
         syndicateName: r.syndicate_name ?? null,
         currentStage: r.current_stage ?? null,
         entryDate: r.entry_date ?? null,
@@ -195,6 +196,7 @@ function mapFollowOn(r: any): FollowOnRound {
         investmentVehicle: r.investment_vehicle ?? null,
         syndicateName: r.syndicate_name ?? null,
         investmentType: r.investment_type ?? null,
+        investmentInstrument: r.investment_instrument ?? null,
         noOfShares: r.no_of_shares != null ? Number(r.no_of_shares) : null,
         createdAt: r.created_at ?? '',
         updatedAt: r.updated_at ?? '',
@@ -369,6 +371,9 @@ interface AppContextType {
     investmentVehicles: { id: string; name: string }[];
     addInvestmentVehicle: (name: string) => Promise<string | null>;
     deleteInvestmentVehicle: (id: string) => Promise<string | null>;
+    investmentInstruments: { id: string; name: string }[];
+    addInvestmentInstrument: (name: string) => Promise<string | null>;
+    deleteInvestmentInstrument: (id: string) => Promise<string | null>;
     addIndustry: (name: string) => Promise<Industry | null>;
     updateIndustry: (id: string, name: string) => Promise<void>;
     deleteIndustry: (id: string) => Promise<void>;
@@ -467,6 +472,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // UI state
     const [investmentVehicles, setInvestmentVehicles] = useState<{ id: string; name: string }[]>([]);
+    const [investmentInstruments, setInvestmentInstruments] = useState<{ id: string; name: string }[]>([]);
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
     const [editingCompany, setEditingCompany] = useState<Company | null>(null);
     const [showNotifications, setShowNotifications] = useState(false);
@@ -523,6 +529,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setUsers((json.profiles || []).map(mapUser));
             setInvestmentVehicles(
                 (json.investmentVehicles || []).map((r: any) => ({ id: r.id, name: r.name })),
+            );
+            setInvestmentInstruments(
+                (json.investmentInstruments || []).map((r: any) => ({ id: r.id, name: r.name })),
             );
             setSavedViews((json.savedViews || []).map((r: any): SavedView => ({
                 id: r.id, name: r.name, filters: r.filters ?? {}, createdAt: r.created_at,
@@ -856,6 +865,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.dvTotalShares != null ? { dv_total_shares: toBigint(data.dvTotalShares) } : {}),
             ...(data.portfolioHealth ? { portfolio_health: data.portfolioHealth } : {}),
             ...(data.investmentVehicle ? { investment_vehicle: data.investmentVehicle } : {}),
+            ...(data.investmentInstrument ? { investment_instrument: data.investmentInstrument } : {}),
             ...(data.syndicateName ? { syndicate_name: data.syndicateName } : {}),
             ...(Array.isArray(data.founders) ? { founders: data.founders } : {}),
             // Dedicated business-event date for the entry round. Distinct
@@ -983,6 +993,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             founders: 'founders',
             entryDate: 'entry_date',
             investmentVehicle: 'investment_vehicle',
+            investmentInstrument: 'investment_instrument',
             syndicateName: 'syndicate_name',
             currentStage: 'current_stage',
         };
@@ -1329,6 +1340,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             investment_vehicle: data.investmentVehicle ?? null,
             syndicate_name: data.syndicateName ?? null,
             investment_type: data.investmentType ?? null,
+            investment_instrument: data.investmentInstrument ?? null,
         };
 
         const { data: inserted, error, dropped } = await writeWithColumnFallback(
@@ -1376,6 +1388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.investmentVehicle !== undefined) dbData.investment_vehicle = data.investmentVehicle;
         if (data.syndicateName !== undefined) dbData.syndicate_name = data.syndicateName;
         if (data.investmentType !== undefined) dbData.investment_type = data.investmentType;
+        if (data.investmentInstrument !== undefined) dbData.investment_instrument = data.investmentInstrument;
 
         const { error, dropped } = await writeWithColumnFallback(
             payload => apiDb({ table: 'portfolio_follow_ons', operation: 'update', data: payload, match: { id } }),
@@ -1730,6 +1743,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return null;
     }, [apiDb]);
 
+    // Same contract as the vehicle registry above: the instrument is stored on
+    // the investment as a name, so the registry only fills the dropdown.
+    const addInvestmentInstrument = useCallback(async (name: string): Promise<string | null> => {
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+        const existing = investmentInstruments.find(v => v.name.toLowerCase() === trimmed.toLowerCase());
+        if (existing) return existing.name;
+
+        const { data, error } = await apiDb({
+            table: 'investment_instruments', operation: 'insert',
+            data: { organization_id: ORGANIZATION_ID, name: trimmed },
+        });
+        if (error || !data) {
+            console.error('addInvestmentInstrument error:', error);
+            return trimmed;
+        }
+        setInvestmentInstruments(prev =>
+            [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+        return data.name as string;
+    }, [apiDb, investmentInstruments]);
+
+    const deleteInvestmentInstrument = useCallback(async (id: string): Promise<string | null> => {
+        const { error } = await apiDb({
+            table: 'investment_instruments', operation: 'delete', match: { id },
+        });
+        if (error) { console.error('deleteInvestmentInstrument error:', error); return error; }
+        setInvestmentInstruments(prev => prev.filter(v => v.id !== id));
+        return null;
+    }, [apiDb]);
+
     const addIndustry = useCallback(async (name: string): Promise<Industry | null> => {
         const { data, error } = await apiDb({
             table: 'industries', operation: 'insert',
@@ -2002,6 +2045,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         syncEmails, approveCompany,
         deckEmailLinks,
         investmentVehicles, addInvestmentVehicle, deleteInvestmentVehicle,
+        investmentInstruments, addInvestmentInstrument, deleteInvestmentInstrument,
         selectedCompany, setSelectedCompany, hydrateCompany,
         editingCompany, setEditingCompany,
         showNotifications, setShowNotifications,
@@ -2034,6 +2078,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchCompanyNotes, addCompanyNote, updateCompanyNote, deleteCompanyNote,
         syncEmails, approveCompany, deckEmailLinks,
         hydrateCompany, investmentVehicles, addInvestmentVehicle, deleteInvestmentVehicle,
+        investmentInstruments, addInvestmentInstrument, deleteInvestmentInstrument,
         selectedCompany, editingCompany,
         showNotifications, showRejectionFlow, showEmailCompose, showCalendarInvite, showCompanyForm, companyFormPortfolioMode,
         searchQuery, viewMode, activeFilters,

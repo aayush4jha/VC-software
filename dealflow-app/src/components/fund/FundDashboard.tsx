@@ -17,6 +17,7 @@ import {
     saveFundRecord,
     yearMonthKey,
 } from '@/lib/fund-data';
+import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import BankStatementUpload from './BankStatementUpload';
 
 const CURRENCY_TONE: Record<Currency, string> = { INR: 'inr', AED: 'aed', USD: 'usd' };
@@ -301,11 +302,13 @@ function EntityEditForm({ entity, onSave, onCancel, onRemove }: EntityEditFormPr
     return (
         <div className="fund-entity-card fund-entity-editing">
             <div className="fund-entity-head">
-                <input
-                    className="fund-entity-name-input"
-                    value={draft.name}
-                    onChange={e => setDraft({ ...draft, name: e.target.value })}
-                />
+                <div className="fund-entity-name-input" style={{ flex: 1, minWidth: 0, padding: 0, border: 'none' }}>
+                    <InvestmentEntitySelect
+                        value={draft.name}
+                        onChange={v => setDraft({ ...draft, name: v })}
+                        labelFontSize={13}
+                    />
+                </div>
                 <select
                     className="inline-input fund-entity-cur-select"
                     value={draft.currency}
@@ -544,7 +547,7 @@ function AddEntityModal({ onCancel, onAdd }: { onCancel: () => void; onAdd: (e: 
                 </div>
                 <div className="fund-upload-body">
                     <label className="fund-field"><span>Name</span>
-                        <input className="inline-input" autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="DVLLP, Dravya, ..." />
+                        <InvestmentEntitySelect value={name} onChange={setName} labelFontSize={13} />
                     </label>
                     <label className="fund-field"><span>Currency</span>
                         <select className="inline-input" value={currency} onChange={e => setCurrency(e.target.value as Currency)}>

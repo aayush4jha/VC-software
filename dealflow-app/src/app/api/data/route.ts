@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
         { data: savedViews, error: e9 },
         { data: rejectionRecords, error: e10 },
         { data: investmentVehicles, error: e11 },
+        { data: investmentInstruments, error: e12 },
     ] = await Promise.all([
         db.from('companies').select('*').eq('organization_id', ORGANIZATION_ID).order('created_at', { ascending: false }),
         db.from('pipeline_stages').select('*').eq('organization_id', ORGANIZATION_ID).order('order'),
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
         db.from('saved_views').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
         db.from('rejection_records').select('*').order('created_at', { ascending: false }),
         db.from('investment_vehicles').select('*').eq('organization_id', ORGANIZATION_ID).order('name'),
+        db.from('investment_instruments').select('*').eq('organization_id', ORGANIZATION_ID).order('name'),
     ]);
 
     const errors: Record<string, unknown> = {};
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
     if (e9) errors.savedViews = e9.message;
     if (e10) errors.rejectionRecords = e10.message;
     if (e11) errors.investmentVehicles = e11.message;
+    if (e12) errors.investmentInstruments = e12.message;
 
     if (Object.keys(errors).length > 0) {
         console.error('[/api/data] errors:', errors);
@@ -101,5 +104,6 @@ export async function GET(request: NextRequest) {
         savedViews: savedViews || [],
         rejectionRecords: rejectionRecords || [],
         investmentVehicles: investmentVehicles || [],
+        investmentInstruments: investmentInstruments || [],
     });
 }

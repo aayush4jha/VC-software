@@ -21,6 +21,7 @@ import {
     getCurrentOwnership,
     getHoldingPeriodMonths,
     getPortfolioXIRR,
+    getCurrentStage,
     formatPortfolioCurrency,
     formatXIRR,
     formatMOIC,
@@ -31,18 +32,183 @@ import { INVESTMENT_TYPES } from '@/types/database';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart as RechartsPieChart, Pie, Cell, Legend,
-    AreaChart, Area,
+    AreaChart, Area, LabelList,
 } from 'recharts';
 
 // ─── Color Palette ───────────────────────────────
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4'];
+
+// Magnitude charts (capital by industry / entity / instrument) rank one measure,
+// so they use a single hue stepped light → dark: a bar's darkness means "more
+// capital", not "which category". Cycling ten hues by position did the opposite
+// — it implied the colors meant something and repainted every bar whenever a
+// filter changed the ordering.
+const SEQ_RAMP = ['#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe'];
+function seqColor(rank: number, total: number): string {
+    if (total <= 1) return SEQ_RAMP[3];
+    const span = Math.min(total, SEQ_RAMP.length) - 1;
+    return SEQ_RAMP[Math.round((rank / Math.max(total - 1, 1)) * span)];
+}
+
+// Investment type is an identity, not a rank, so each type keeps its own hue
+// wherever it appears — filtering the set must never repaint the survivors.
+const INVESTMENT_TYPE_COLORS: Record<string, string> = {
+    Primary: '#2a78d6',
+    Secondary: '#eb6834',
+    Debt: '#1baf7a',
+    Unassigned: '#94a3b8',
+};
+function typeColor(name: string, i: number): string {
+    return INVESTMENT_TYPE_COLORS[name] || CHART_COLORS[i % CHART_COLORS.length];
+}
+
+// Ranked magnitude lists get long tails. Past the eighth entry the bars are
+// unreadable and the colors blur, so the tail folds into one "Other" row
+// instead of growing the chart.
+const MAX_RANKED_BARS = 8;
+function foldTail<T extends { name: string; value: number }>(rows: T[]): { name: string; value: number; tail?: number }[] {
+    if (rows.length <= MAX_RANKED_BARS) return rows;
+    const head = rows.slice(0, MAX_RANKED_BARS - 1);
+    const tail = rows.slice(MAX_RANKED_BARS - 1);
+    return [...head, {
+        name: `Other (${tail.length})`,
+        value: tail.reduce((sum, r) => sum + r.value, 0),
+        tail: tail.length,
+    }];
+}
+
+// ─── Filter controls ─────────────────────────────
+// One label+control pair, so fifteen filters stay on one grid instead of
+// fifteen hand-written flex stacks that drift apart as filters are added.
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</label>
+            {children}
+        </div>
+    );
+}
+
+function FilterSelect({ label, value, onChange, options, allLabel, width }: {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    options: { value: string; label: string }[];
+    allLabel: string;
+    width: number;
+}) {
+    return (
+        <FilterField label={label}>
+            <select
+                className="btn btn-sm"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                style={{ minWidth: width, fontWeight: value === 'all' ? 400 : 600 }}
+            >
+                <option value="all">{allLabel}</option>
+                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+        </FilterField>
+    );
+}
+
+// ─── Watch List ──────────────────────────────────
+// Both portfolio-health lists used to print every company, so a book with
+// thirty companies needing attention pushed the rest of the page off screen and
+// buried the ones that mattered most. Five rows are in view — worst first —
+// and the tail scrolls inside the card, which keeps the two cards the same
+// height however lopsided the two lists are.
+const WATCH_ROW_HEIGHT = 38;
+const WATCH_ROWS_VISIBLE = 5;
+
+function WatchList({ title, subtitle, tone, items, emptyText }: {
+    title: string;
+    subtitle: string;
+    tone: string;
+    emptyText: string;
+    items: { id: string; name: string; metrics: { label: string; strong?: boolean }[] }[];
+}) {
+    const hidden = Math.max(0, items.length - WATCH_ROWS_VISIBLE);
+    return (
+        <div className="portfolio-section-card" style={{ background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>
+                <div className="portfolio-section-title" style={{ fontSize: 14, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 999, background: tone, flexShrink: 0 }} />
+                    {title}
+                </div>
+                <span style={{
+                    fontSize: 11, fontWeight: 600, color: tone, background: `${tone}1a`,
+                    borderRadius: 999, padding: '2px 8px', flexShrink: 0,
+                }}>
+                    {items.length}
+                </span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 10 }}>{subtitle}</div>
+
+            {items.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '10px 0' }}>{emptyText}</div>
+            ) : (
+                <>
+                    <div style={{
+                        maxHeight: WATCH_ROW_HEIGHT * WATCH_ROWS_VISIBLE,
+                        overflowY: items.length > WATCH_ROWS_VISIBLE ? 'auto' : 'visible',
+                        margin: '0 -4px',
+                    }}>
+                        {items.map((item, i) => (
+                            <div
+                                key={item.id}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    height: WATCH_ROW_HEIGHT, padding: '0 4px',
+                                    borderBottom: i === items.length - 1 ? 'none' : '1px solid var(--border-light)',
+                                }}
+                            >
+                                <span style={{
+                                    fontSize: 11, color: 'var(--text-tertiary)', width: 16,
+                                    textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums',
+                                }}>
+                                    {i + 1}
+                                </span>
+                                <span style={{
+                                    flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-primary)',
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }} title={item.name}>
+                                    {item.name}
+                                </span>
+                                {item.metrics.map((m, mi) => (
+                                    <span
+                                        key={mi}
+                                        style={{
+                                            fontSize: 11, flexShrink: 0, borderRadius: 6, padding: '2px 7px',
+                                            fontVariantNumeric: 'tabular-nums',
+                                            color: m.strong ? tone : 'var(--text-secondary)',
+                                            background: m.strong ? `${tone}14` : 'var(--bg-tertiary, rgba(148,163,184,0.12))',
+                                            fontWeight: m.strong ? 600 : 400,
+                                        }}
+                                    >
+                                        {m.label}
+                                    </span>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                    {hidden > 0 && (
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', paddingTop: 8 }}>
+                            Scroll for {hidden} more
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
 
 // ─── Analytics Content ───────────────────────────
 function AnalyticsContent() {
     const {
         companies, industries, users, dealSourceNames,
         getIndustryById, getDealSourceNameById, getUserById,
-        fetchFollowOns, followOnsVersion, investmentVehicles,
+        fetchFollowOns, followOnsVersion, investmentVehicles, investmentInstruments,
     } = useAppContext();
 
     // ─── Follow-on data ──────────────────────────
@@ -88,7 +254,15 @@ function AnalyticsContent() {
     const [filterMaxInvestment, setFilterMaxInvestment] = useState('');
     const [filterInvestmentType, setFilterInvestmentType] = useState('all');
     const [filterVehicle, setFilterVehicle] = useState('all');
+    const [filterInstrument, setFilterInstrument] = useState('all');
     const [filterHealth, setFilterHealth] = useState('all');
+    const [filterCurrentStage, setFilterCurrentStage] = useState('all');
+    const [filterAnalyst, setFilterAnalyst] = useState('all');
+    const [filterSourcer, setFilterSourcer] = useState('all');
+    const [filterSourceType, setFilterSourceType] = useState('all');
+    const [filterPriority, setFilterPriority] = useState('all');
+    const [filterSearch, setFilterSearch] = useState('');
+    const [showAllFilters, setShowAllFilters] = useState(false);
 
     // Unique values for filter dropdowns
     const uniqueStages = useMemo(() => [...new Set(portfolioCompanies.map(c => c.companyRound))].sort(), [portfolioCompanies]);
@@ -114,6 +288,7 @@ function AnalyticsContent() {
             vehicle: c.investmentVehicle || null,
             syndicateName: c.syndicateName || null,
             type: (c.shareType as string) || null,
+            instrument: c.investmentInstrument || null,
         }];
         for (const fo of fos) {
             if (!fo.didWeInvest) continue;
@@ -122,6 +297,7 @@ function AnalyticsContent() {
                 vehicle: fo.investmentVehicle || null,
                 syndicateName: fo.syndicateName || null,
                 type: fo.investmentType || null,
+                instrument: fo.investmentInstrument || null,
             });
         }
         return legs;
@@ -142,6 +318,37 @@ function AnalyticsContent() {
         return [...INVESTMENT_TYPES, ...[...inUse].filter(t => !INVESTMENT_TYPES.includes(t as never)).sort()];
     }, [portfolioCompanies, investmentLegs]);
 
+    const uniqueInstruments = useMemo(() => {
+        const inUse = new Set<string>();
+        portfolioCompanies.forEach(c => investmentLegs(c).forEach(l => { if (l.instrument) inUse.add(l.instrument); }));
+        const registry = investmentInstruments.map(v => v.name);
+        return [...registry, ...[...inUse].filter(v => !registry.includes(v)).sort()];
+    }, [portfolioCompanies, investmentLegs, investmentInstruments]);
+
+    // Current stage is the derived one (latest round, or the manual override),
+    // which is what the portfolio list shows — the Stage filter above is the
+    // round we entered at, and the two answer different questions.
+    const uniqueCurrentStages = useMemo(() => {
+        const set = new Set<string>();
+        portfolioCompanies.forEach(c => set.add(getCurrentStage(c, followOnsMap.get(c.id) || [])));
+        return [...set].sort();
+    }, [portfolioCompanies, followOnsMap]);
+
+    const uniqueAnalysts = useMemo(() => {
+        const ids = [...new Set(portfolioCompanies.map(c => c.analystId).filter(Boolean))] as string[];
+        return ids.map(id => ({ id, name: getUserById(id)?.name || 'Unknown' })).sort((a, b) => a.name.localeCompare(b.name));
+    }, [portfolioCompanies, getUserById]);
+
+    const uniqueSourcers = useMemo(() => {
+        const ids = [...new Set(portfolioCompanies.map(c => c.dealSourceNameId).filter(Boolean))] as string[];
+        return ids.map(id => ({ id, name: getDealSourceNameById(id)?.name || 'Unknown' })).sort((a, b) => a.name.localeCompare(b.name));
+    }, [portfolioCompanies, getDealSourceNameById]);
+
+    const uniqueSourceTypes = useMemo(
+        () => [...new Set(portfolioCompanies.map(c => c.dealSourceType).filter(Boolean))].sort(),
+        [portfolioCompanies],
+    );
+
     // Apply filters
     const filtered = useMemo(() => {
         return portfolioCompanies.filter(c => {
@@ -154,14 +361,34 @@ function AnalyticsContent() {
             if (filterMinInvestment && invested < Number(filterMinInvestment)) return false;
             if (filterMaxInvestment && invested > Number(filterMaxInvestment)) return false;
             if (filterHealth !== 'all' && (c.portfolioHealth || '') !== filterHealth) return false;
-            if (filterInvestmentType !== 'all' || filterVehicle !== 'all') {
+            if (filterCurrentStage !== 'all' && getCurrentStage(c, followOnsMap.get(c.id) || []) !== filterCurrentStage) return false;
+            if (filterAnalyst !== 'all' && c.analystId !== filterAnalyst) return false;
+            if (filterSourcer !== 'all' && c.dealSourceNameId !== filterSourcer) return false;
+            if (filterSourceType !== 'all' && c.dealSourceType !== filterSourceType) return false;
+            if (filterPriority !== 'all' && c.priorityLevel !== filterPriority) return false;
+            if (filterSearch.trim() && !c.companyName.toLowerCase().includes(filterSearch.trim().toLowerCase())) return false;
+            if (filterInvestmentType !== 'all' || filterVehicle !== 'all' || filterInstrument !== 'all') {
                 const legs = investmentLegs(c);
                 if (filterInvestmentType !== 'all' && !legs.some(l => l.type === filterInvestmentType)) return false;
                 if (filterVehicle !== 'all' && !legs.some(l => l.vehicle === filterVehicle)) return false;
+                if (filterInstrument !== 'all' && !legs.some(l => l.instrument === filterInstrument)) return false;
             }
             return true;
         });
-    }, [portfolioCompanies, filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterMinInvestment, filterMaxInvestment, filterInvestmentType, filterVehicle, filterHealth, followOnsMap, investmentLegs]);
+    }, [portfolioCompanies, filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterMinInvestment, filterMaxInvestment, filterInvestmentType, filterVehicle, filterInstrument, filterHealth, filterCurrentStage, filterAnalyst, filterSourcer, filterSourceType, filterPriority, filterSearch, followOnsMap, investmentLegs]);
+
+    // Drives the "N active" badge and whether Reset does anything.
+    const activeFilterCount = useMemo(() => [
+        filterStage, filterSector, filterGeography, filterEntryYear, filterStatus,
+        filterInvestmentType, filterVehicle, filterInstrument, filterHealth,
+        filterCurrentStage, filterAnalyst, filterSourcer, filterSourceType, filterPriority,
+    ].filter(v => v !== 'all').length
+        + (filterMinInvestment ? 1 : 0)
+        + (filterMaxInvestment ? 1 : 0)
+        + (filterSearch.trim() ? 1 : 0),
+    [filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterInvestmentType,
+     filterVehicle, filterInstrument, filterHealth, filterCurrentStage, filterAnalyst, filterSourcer,
+     filterSourceType, filterPriority, filterMinInvestment, filterMaxInvestment, filterSearch]);
 
     const resetFilters = () => {
         setFilterStage('all');
@@ -173,7 +400,14 @@ function AnalyticsContent() {
         setFilterMaxInvestment('');
         setFilterInvestmentType('all');
         setFilterVehicle('all');
+        setFilterInstrument('all');
         setFilterHealth('all');
+        setFilterCurrentStage('all');
+        setFilterAnalyst('all');
+        setFilterSourcer('all');
+        setFilterSourceType('all');
+        setFilterPriority('all');
+        setFilterSearch('');
     };
 
     // ─── Metrics ─────────────────────────────────
@@ -223,8 +457,15 @@ function AnalyticsContent() {
         const highOwnership = filtered.filter(c => getCurrentOwnership(c, followOnsMap.get(c.id) || []) >= 10).length;
         const needAttention = filtered.filter(c => c.portfolioStatus === 'Active' && getHoldingPeriodMonths(c) >= 18 && getCompanyMOIC(c, followOnsMap.get(c.id) || []) < 1.5).length;
         const capitalAtRisk = filtered.filter(c => c.portfolioStatus === 'Active' && getCompanyMOIC(c, followOnsMap.get(c.id) || []) < 1).length;
-        const needAttentionCompanies = filtered.filter(c => c.portfolioStatus === 'Active' && getHoldingPeriodMonths(c) >= 18 && getCompanyMOIC(c, followOnsMap.get(c.id) || []) < 1.5);
-        const atRiskCompanies = filtered.filter(c => c.portfolioStatus === 'Active' && getCompanyMOIC(c, followOnsMap.get(c.id) || []) < 1);
+        // Worst first, so the five rows in view are the five that matter: the
+        // weakest multiple among the long-held, and the largest cheque among
+        // those marked below cost.
+        const needAttentionCompanies = filtered
+            .filter(c => c.portfolioStatus === 'Active' && getHoldingPeriodMonths(c) >= 18 && getCompanyMOIC(c, followOnsMap.get(c.id) || []) < 1.5)
+            .sort((a, b) => getCompanyMOIC(a, followOnsMap.get(a.id) || []) - getCompanyMOIC(b, followOnsMap.get(b.id) || []));
+        const atRiskCompanies = filtered
+            .filter(c => c.portfolioStatus === 'Active' && getCompanyMOIC(c, followOnsMap.get(c.id) || []) < 1)
+            .sort((a, b) => getTotalInvested(b, followOnsMap.get(b.id) || []) - getTotalInvested(a, followOnsMap.get(a.id) || []));
         return { avgHolding, highOwnership, needAttention, capitalAtRisk, needAttentionCompanies, atRiskCompanies };
     }, [filtered, followOnsMap]);
 
@@ -288,14 +529,25 @@ function AnalyticsContent() {
 
     // ─── Industry Distribution ───────────────────
     const industryDistribution = useMemo(() => {
-        const map = new Map<string, number>();
+        const map = new Map<string, { value: number; deals: number }>();
         filtered.forEach(c => {
             const ind = getIndustryById(c.industryId);
             const name = ind?.name || 'Unknown';
-            map.set(name, (map.get(name) || 0) + getTotalInvested(c, followOnsMap.get(c.id) || []));
+            const entry = map.get(name) || { value: 0, deals: 0 };
+            entry.value += getTotalInvested(c, followOnsMap.get(c.id) || []);
+            entry.deals += 1;
+            map.set(name, entry);
         });
-        return [...map.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+        return [...map.entries()]
+            .map(([name, d]) => ({ name, value: d.value, deals: d.deals }))
+            .sort((a, b) => b.value - a.value);
     }, [filtered, followOnsMap, getIndustryById]);
+
+    const industryTotal = useMemo(
+        () => industryDistribution.reduce((sum, r) => sum + r.value, 0),
+        [industryDistribution],
+    );
+    const industryRanked = useMemo(() => foldTail(industryDistribution), [industryDistribution]);
 
     // ─── Stage Distribution ──────────────────────
     const stageDistribution = useMemo(() => {
@@ -311,11 +563,11 @@ function AnalyticsContent() {
     // Capital is attributed per investment leg, not per company: an entry from
     // DVPL followed by a syndicate follow-on lands in both buckets with the
     // right amount in each. Deal counts are distinct companies per bucket.
-    const allocationBy = useCallback((key: 'vehicle' | 'type') => {
+    const allocationBy = useCallback((key: 'vehicle' | 'type' | 'instrument') => {
         const map = new Map<string, { invested: number; companies: Set<string> }>();
         filtered.forEach(c => {
             investmentLegs(c).forEach(l => {
-                const raw = key === 'vehicle' ? l.vehicle : l.type;
+                const raw = key === 'vehicle' ? l.vehicle : key === 'type' ? l.type : l.instrument;
                 const name = !raw
                     ? 'Unassigned'
                     : key === 'vehicle' && raw === 'Syndicate' && l.syndicateName
@@ -334,6 +586,7 @@ function AnalyticsContent() {
 
     const vehicleAllocation = useMemo(() => allocationBy('vehicle'), [allocationBy]);
     const investmentTypeAllocation = useMemo(() => allocationBy('type'), [allocationBy]);
+    const instrumentAllocation = useMemo(() => allocationBy('instrument'), [allocationBy]);
 
     // ─── Geographic Distribution ─────────────────
     const geoDistribution = useMemo(() => {
@@ -456,95 +709,104 @@ function AnalyticsContent() {
 
                 {/* ═══ Filter Analytics ═══ */}
                 <div className="portfolio-section-card" style={{ marginBottom: 24 }}>
-                    <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Filter Analytics</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Stage</label>
-                            <select className="btn btn-sm" value={filterStage} onChange={e => setFilterStage(e.target.value)} style={{ minWidth: 120 }}>
-                                <option value="all">All Stages</option>
-                                {uniqueStages.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                        <div className="portfolio-section-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            Filter Analytics
+                            {activeFilterCount > 0 && (
+                                <span style={{
+                                    fontSize: 11, fontWeight: 600, color: '#6366f1',
+                                    background: 'rgba(99,102,241,0.12)', borderRadius: 999, padding: '2px 8px',
+                                }}>
+                                    {activeFilterCount} active
+                                </span>
+                            )}
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Sector</label>
-                            <select className="btn btn-sm" value={filterSector} onChange={e => setFilterSector(e.target.value)} style={{ minWidth: 120 }}>
-                                <option value="all">All Sectors</option>
-                                {uniqueSectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Geography (HQ Location)</label>
-                            <select className="btn btn-sm" value={filterGeography} onChange={e => setFilterGeography(e.target.value)} style={{ minWidth: 140 }}>
-                                <option value="all">All Locations</option>
-                                {uniqueGeographies.map(g => <option key={g} value={g}>{g}</option>)}
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Entry Year</label>
-                            <select className="btn btn-sm" value={filterEntryYear} onChange={e => setFilterEntryYear(e.target.value)} style={{ minWidth: 100 }}>
-                                <option value="all">All Years</option>
-                                {uniqueEntryYears.map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Status</label>
-                            <select className="btn btn-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ minWidth: 110 }}>
-                                <option value="all">All Status</option>
-                                <option value="Active">Active</option>
-                                <option value="Exited">Exited</option>
-                                <option value="Written Off">Written Off</option>
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Investment Type</label>
-                            <select className="btn btn-sm" value={filterInvestmentType} onChange={e => setFilterInvestmentType(e.target.value)} style={{ minWidth: 120 }}>
-                                <option value="all">All Types</option>
-                                {uniqueInvestmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Investment Vehicle</label>
-                            <select className="btn btn-sm" value={filterVehicle} onChange={e => setFilterVehicle(e.target.value)} style={{ minWidth: 140 }}>
-                                <option value="all">All Vehicles</option>
-                                {uniqueVehicles.map(v => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Portfolio Health</label>
-                            <select className="btn btn-sm" value={filterHealth} onChange={e => setFilterHealth(e.target.value)} style={{ minWidth: 110 }}>
-                                <option value="all">All Health</option>
-                                <option value="Bullish">Bullish</option>
-                                <option value="Base">Base</option>
-                                <option value="Bearish">Bearish</option>
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Investment Range</label>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                <input
-                                    type="number"
-                                    placeholder="Min"
-                                    value={filterMinInvestment}
-                                    onChange={e => setFilterMinInvestment(e.target.value)}
-                                    className="btn btn-sm"
-                                    style={{ width: 90, textAlign: 'center' }}
-                                />
-                                <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>to</span>
-                                <input
-                                    type="number"
-                                    placeholder="Max"
-                                    value={filterMaxInvestment}
-                                    onChange={e => setFilterMaxInvestment(e.target.value)}
-                                    className="btn btn-sm"
-                                    style={{ width: 90, textAlign: 'center' }}
-                                />
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-                            <button className="btn btn-sm" style={{ fontSize: 12 }}>Save as Default</button>
-                            <button className="btn btn-sm" style={{ fontSize: 12 }} onClick={resetFilters}>Reset Filters</button>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                {filtered.length} of {portfolioCompanies.length} companies
+                            </span>
+                            <button className="btn btn-sm" style={{ fontSize: 12 }} onClick={() => setShowAllFilters(v => !v)}>
+                                {showAllFilters ? 'Fewer filters' : 'More filters'}
+                            </button>
+                            <button
+                                className="btn btn-sm"
+                                style={{ fontSize: 12 }}
+                                onClick={resetFilters}
+                                disabled={activeFilterCount === 0}
+                            >
+                                Reset
+                            </button>
                         </div>
                     </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+                        <FilterField label="Company">
+                            <input
+                                className="btn btn-sm"
+                                placeholder="Search name"
+                                value={filterSearch}
+                                onChange={e => setFilterSearch(e.target.value)}
+                                style={{ minWidth: 150 }}
+                            />
+                        </FilterField>
+                        <FilterSelect label="Entry Stage" value={filterStage} onChange={setFilterStage} allLabel="All Stages" width={130}
+                            options={uniqueStages.map(x => ({ value: x, label: x }))} />
+                        <FilterSelect label="Sector" value={filterSector} onChange={setFilterSector} allLabel="All Sectors" width={130}
+                            options={uniqueSectors.map(x => ({ value: x.id, label: x.name }))} />
+                        <FilterSelect label="Status" value={filterStatus} onChange={setFilterStatus} allLabel="All Status" width={120}
+                            options={[{ value: 'Active', label: 'Active' }, { value: 'Exited', label: 'Exited' }, { value: 'Written Off', label: 'Written Off' }]} />
+                        <FilterSelect label="Investment Type" value={filterInvestmentType} onChange={setFilterInvestmentType} allLabel="All Types" width={130}
+                            options={uniqueInvestmentTypes.map(x => ({ value: x, label: x }))} />
+                        <FilterSelect label="Investment Entity" value={filterVehicle} onChange={setFilterVehicle} allLabel="All Entities" width={150}
+                            options={uniqueVehicles.map(x => ({ value: x, label: x }))} />
+                        <FilterSelect label="Instrument" value={filterInstrument} onChange={setFilterInstrument} allLabel="All Instruments" width={140}
+                            options={uniqueInstruments.map(x => ({ value: x, label: x }))} />
+                    </div>
+
+                    {showAllFilters && (
+                        <div style={{
+                            display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end',
+                            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-light)',
+                        }}>
+                            <FilterSelect label="Current Stage" value={filterCurrentStage} onChange={setFilterCurrentStage} allLabel="All Stages" width={140}
+                                options={uniqueCurrentStages.map(x => ({ value: x, label: x }))} />
+                            <FilterSelect label="Portfolio Health" value={filterHealth} onChange={setFilterHealth} allLabel="All Health" width={120}
+                                options={[{ value: 'Bullish', label: 'Bullish' }, { value: 'Base', label: 'Base' }, { value: 'Bearish', label: 'Bearish' }]} />
+                            <FilterSelect label="Geography (HQ)" value={filterGeography} onChange={setFilterGeography} allLabel="All Locations" width={150}
+                                options={uniqueGeographies.map(x => ({ value: x, label: x }))} />
+                            <FilterSelect label="Entry Year" value={filterEntryYear} onChange={setFilterEntryYear} allLabel="All Years" width={110}
+                                options={uniqueEntryYears.map(y => ({ value: String(y), label: String(y) }))} />
+                            <FilterSelect label="Analyst" value={filterAnalyst} onChange={setFilterAnalyst} allLabel="All Analysts" width={140}
+                                options={uniqueAnalysts.map(x => ({ value: x.id, label: x.name }))} />
+                            <FilterSelect label="Deal Sourcer" value={filterSourcer} onChange={setFilterSourcer} allLabel="All Sourcers" width={150}
+                                options={uniqueSourcers.map(x => ({ value: x.id, label: x.name }))} />
+                            <FilterSelect label="Source Type" value={filterSourceType} onChange={setFilterSourceType} allLabel="All Sources" width={150}
+                                options={uniqueSourceTypes.map(x => ({ value: x, label: x }))} />
+                            <FilterSelect label="Priority" value={filterPriority} onChange={setFilterPriority} allLabel="All Priorities" width={110}
+                                options={[{ value: 'High', label: 'High' }, { value: 'Medium', label: 'Medium' }, { value: 'Low', label: 'Low' }]} />
+                            <FilterField label="Investment Range">
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                    <input
+                                        type="number"
+                                        placeholder="Min"
+                                        value={filterMinInvestment}
+                                        onChange={e => setFilterMinInvestment(e.target.value)}
+                                        className="btn btn-sm"
+                                        style={{ width: 90, textAlign: 'center' }}
+                                    />
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>to</span>
+                                    <input
+                                        type="number"
+                                        placeholder="Max"
+                                        value={filterMaxInvestment}
+                                        onChange={e => setFilterMaxInvestment(e.target.value)}
+                                        className="btn btn-sm"
+                                        style={{ width: 90, textAlign: 'center' }}
+                                    />
+                                </div>
+                            </FilterField>
+                        </div>
+                    )}
                 </div>
 
                 {/* ═══ Summary Cards ═══ */}
@@ -730,30 +992,34 @@ function AnalyticsContent() {
                         </div>
                     </div>
                     <div className="portfolio-two-col" style={{ marginTop: 16 }}>
-                        <div className="portfolio-section-card" style={{ background: 'var(--bg-secondary)' }}>
-                            <div className="portfolio-section-title" style={{ fontSize: 14, marginBottom: 12 }}>Companies Needing Attention</div>
-                            {healthIndicators.needAttentionCompanies.length > 0 ? (
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                                    {healthIndicators.needAttentionCompanies.map(c => (
-                                        <li key={c.id} style={{ padding: '6px 0', fontSize: 13, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-primary)' }}>
-                                            {c.companyName} — {getHoldingPeriodMonths(c).toFixed(0)}mo, {formatMOIC(getCompanyMOIC(c, followOnsMap.get(c.id) || []))}
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No companies need attention</div>}
-                        </div>
-                        <div className="portfolio-section-card" style={{ background: 'var(--bg-secondary)' }}>
-                            <div className="portfolio-section-title" style={{ fontSize: 14, marginBottom: 12 }}>Investments at Risk</div>
-                            {healthIndicators.atRiskCompanies.length > 0 ? (
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                                    {healthIndicators.atRiskCompanies.map(c => (
-                                        <li key={c.id} style={{ padding: '6px 0', fontSize: 13, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-primary)' }}>
-                                            {c.companyName} — {formatMOIC(getCompanyMOIC(c, followOnsMap.get(c.id) || []))} MOIC, {formatPortfolioCurrency(getTotalInvested(c, followOnsMap.get(c.id) || []))} invested
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No investments at risk</div>}
-                        </div>
+                        <WatchList
+                            title="Companies Needing Attention"
+                            subtitle="Held 18 months or more, still under 1.5x"
+                            tone="#f59e0b"
+                            emptyText="No companies need attention"
+                            items={healthIndicators.needAttentionCompanies.map(c => ({
+                                id: c.id,
+                                name: c.companyName,
+                                metrics: [
+                                    { label: `${getHoldingPeriodMonths(c).toFixed(0)}mo held` },
+                                    { label: formatMOIC(getCompanyMOIC(c, followOnsMap.get(c.id) || [])), strong: true },
+                                ],
+                            }))}
+                        />
+                        <WatchList
+                            title="Investments at Risk"
+                            subtitle="Marked below cost — largest exposure first"
+                            tone="#ef4444"
+                            emptyText="No investments at risk"
+                            items={healthIndicators.atRiskCompanies.map(c => ({
+                                id: c.id,
+                                name: c.companyName,
+                                metrics: [
+                                    { label: formatPortfolioCurrency(getTotalInvested(c, followOnsMap.get(c.id) || [])) },
+                                    { label: `${formatMOIC(getCompanyMOIC(c, followOnsMap.get(c.id) || []))} MOIC`, strong: true },
+                                ],
+                            }))}
+                        />
                     </div>
                 </div>
 
@@ -824,19 +1090,60 @@ function AnalyticsContent() {
                 {/* ═══ Industry + Stage Distribution ═══ */}
                 <div className="portfolio-two-col" style={{ marginBottom: 24 }}>
                     <div className="portfolio-section-card">
-                        <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Investment by Industry</div>
-                        {industryDistribution.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={300}>
-                                <RechartsPieChart>
-                                    <Pie data={industryDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={110} paddingAngle={2} label={({ name, percent, midAngle, outerRadius: or, cx: cxVal, cy: cyVal }: any) => { if (percent < 0.01) return null; const RADIAN = Math.PI / 180; const radius = (or || 110) + 30; const x = cxVal + radius * Math.cos(-midAngle * RADIAN); const y = cyVal + radius * Math.sin(-midAngle * RADIAN); return <text x={x} y={y} textAnchor={x > cxVal ? 'start' : 'end'} dominantBaseline="central" style={{ fontSize: 12, fill: 'var(--text-secondary)' }}>{`${name} ${(percent * 100).toFixed(0)}%`}</text>; }} labelLine={false}>
-                                        {industryDistribution.map((_, i) => (
-                                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
-                                    <Legend />
-                                </RechartsPieChart>
-                            </ResponsiveContainer>
+                        <div className="portfolio-section-title" style={{ marginBottom: 4 }}>Investment by Industry</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                            Capital deployed, largest first{industryRanked.length > 0 && ` · ${industryTotal > 0 ? formatPortfolioCurrency(industryTotal) : '--'} across ${industryDistribution.length} ${industryDistribution.length === 1 ? 'industry' : 'industries'}`}
+                        </div>
+                        {industryRanked.length > 0 ? (
+                            <>
+                                <ResponsiveContainer width="100%" height={Math.max(180, industryRanked.length * 34 + 30)}>
+                                    <BarChart data={industryRanked} layout="vertical" margin={{ left: 4, right: 64, top: 4, bottom: 4 }} barCategoryGap={6}>
+                                        <XAxis type="number" hide domain={[0, (max: number) => max * 1.02]} />
+                                        <YAxis
+                                            dataKey="name"
+                                            type="category"
+                                            width={132}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tick={{ fontSize: 12, fill: 'var(--text-secondary)' }}
+                                        />
+                                        <Tooltip
+                                            cursor={{ fill: 'rgba(99,102,241,0.06)' }}
+                                            formatter={(v: any) => [formatPortfolioCurrency(Number(v)), 'Invested']}
+                                        />
+                                        <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                                            {industryRanked.map((_, i) => (
+                                                <Cell key={i} fill={seqColor(i, industryRanked.length)} />
+                                            ))}
+                                            <LabelList
+                                                dataKey="value"
+                                                position="right"
+                                                style={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+                                                formatter={(v: any) => formatPortfolioCurrency(Number(v))}
+                                            />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                                {/* Past ~7 categories the bars alone stop answering "how much of
+                                    the book is this?", so the exact split lives in a table. */}
+                                <div className="table-container" style={{ marginTop: 12, maxHeight: 220, overflowY: 'auto' }}>
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr><th>Industry</th><th>Companies</th><th>Invested</th><th>Share</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {industryDistribution.map(r => (
+                                                <tr key={r.name}>
+                                                    <td>{r.name}</td>
+                                                    <td>{r.deals}</td>
+                                                    <td>{formatPortfolioCurrency(r.value)}</td>
+                                                    <td>{industryTotal > 0 ? `${((r.value / industryTotal) * 100).toFixed(1)}%` : '--'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
                         ) : <div className="portfolio-empty-chart">No industry data</div>}
                     </div>
                     <div className="portfolio-section-card">
@@ -881,7 +1188,7 @@ function AnalyticsContent() {
                 {/* ═══ Vehicle + Investment Type Allocation ═══ */}
                 <div className="portfolio-two-col" style={{ marginBottom: 24 }}>
                     <div className="portfolio-section-card">
-                        <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Capital by Investment Vehicle</div>
+                        <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Capital by Investment Entity</div>
                         {vehicleAllocation.length > 0 ? (
                             <>
                                 <ResponsiveContainer width="100%" height={260}>
@@ -890,9 +1197,9 @@ function AnalyticsContent() {
                                         <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} tickFormatter={(v: any) => formatPortfolioCurrency(Number(v))} />
                                         <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} width={130} />
                                         <Tooltip formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
-                                        <Bar dataKey="invested" name="Deployed" radius={[0, 4, 4, 0]}>
+                                        <Bar dataKey="invested" name="Deployed" radius={[0, 4, 4, 0]} barSize={18}>
                                             {vehicleAllocation.map((_, i) => (
-                                                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                                                <Cell key={i} fill={seqColor(i, vehicleAllocation.length)} />
                                             ))}
                                         </Bar>
                                     </BarChart>
@@ -900,7 +1207,7 @@ function AnalyticsContent() {
                                 <div className="table-container" style={{ marginTop: 12 }}>
                                     <table className="data-table">
                                         <thead>
-                                            <tr><th>Vehicle</th><th>Companies</th><th>Deployed</th><th>Share</th></tr>
+                                            <tr><th>Entity</th><th>Companies</th><th>Deployed</th><th>Share</th></tr>
                                         </thead>
                                         <tbody>
                                             {vehicleAllocation.map(v => {
@@ -918,7 +1225,7 @@ function AnalyticsContent() {
                                     </table>
                                 </div>
                             </>
-                        ) : <div className="portfolio-empty-chart">No vehicle data</div>}
+                        ) : <div className="portfolio-empty-chart">No entity data</div>}
                     </div>
                     <div className="portfolio-section-card">
                         <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Capital by Investment Type</div>
@@ -927,8 +1234,8 @@ function AnalyticsContent() {
                                 <ResponsiveContainer width="100%" height={260}>
                                     <RechartsPieChart>
                                         <Pie data={investmentTypeAllocation} dataKey="invested" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={100} paddingAngle={2}>
-                                            {investmentTypeAllocation.map((_, i) => (
-                                                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                                            {investmentTypeAllocation.map((t, i) => (
+                                                <Cell key={i} fill={typeColor(t.name, i)} />
                                             ))}
                                         </Pie>
                                         <Tooltip formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
@@ -958,6 +1265,55 @@ function AnalyticsContent() {
                             </>
                         ) : <div className="portfolio-empty-chart">No investment type data</div>}
                     </div>
+                </div>
+
+                {/* ═══ Instrument Allocation ═══ */}
+                <div className="portfolio-section-card" style={{ marginBottom: 24 }}>
+                    <div className="portfolio-section-title" style={{ marginBottom: 4 }}>Capital by Instrument</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                        What the money bought — CCPS, CCD, Debt or Common Equity — attributed per investment
+                    </div>
+                    {instrumentAllocation.length > 0 ? (
+                        <div className="portfolio-two-col">
+                            <ResponsiveContainer width="100%" height={Math.max(150, instrumentAllocation.length * 34 + 30)}>
+                                <BarChart data={instrumentAllocation} layout="vertical" margin={{ left: 4, right: 64, top: 4, bottom: 4 }} barCategoryGap={6}>
+                                    <XAxis type="number" hide domain={[0, (max: number) => max * 1.02]} />
+                                    <YAxis dataKey="name" type="category" width={120} tickLine={false} axisLine={false}
+                                        tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
+                                    <Tooltip cursor={{ fill: 'rgba(99,102,241,0.06)' }}
+                                        formatter={(v: any) => [formatPortfolioCurrency(Number(v)), 'Deployed']} />
+                                    <Bar dataKey="invested" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                                        {instrumentAllocation.map((_, i) => (
+                                            <Cell key={i} fill={seqColor(i, instrumentAllocation.length)} />
+                                        ))}
+                                        <LabelList dataKey="invested" position="right"
+                                            style={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+                                            formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                            <div className="table-container">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr><th>Instrument</th><th>Companies</th><th>Deployed</th><th>Share</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {instrumentAllocation.map(r => {
+                                            const total = instrumentAllocation.reduce((sum, x) => sum + x.invested, 0);
+                                            return (
+                                                <tr key={r.name}>
+                                                    <td>{r.name}</td>
+                                                    <td>{r.deals}</td>
+                                                    <td>{formatPortfolioCurrency(r.invested)}</td>
+                                                    <td>{total > 0 ? `${((r.invested / total) * 100).toFixed(1)}%` : '--'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : <div className="portfolio-empty-chart">No instrument data</div>}
                 </div>
 
                 {/* ═══ Geographic Distribution ═══ */}

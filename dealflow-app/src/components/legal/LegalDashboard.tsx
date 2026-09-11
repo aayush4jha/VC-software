@@ -7,6 +7,7 @@ import {
     Building2, MapPin, User as UserIcon, Briefcase, BarChart3, Activity, Target,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
+import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import {
     type LegalRecord,
     type InvestorTier,
@@ -15,7 +16,6 @@ import {
     presenceForVersion,
     inferPresenceFromText,
 } from '@/lib/legal-data';
-import { loadFundRecord } from '@/lib/fund-data';
 import {
     formatPortfolioCurrency, formatMOIC, formatXIRR,
     getTotalInvested, getInitialOwnership, getCurrentOwnership,
@@ -60,19 +60,6 @@ export default function LegalDashboard({ company, record, onUpdate }: Props) {
     const { fetchFollowOns, followOnsVersion, getIndustryById, getDealSourceNameById, getUserById } = useAppContext();
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
     const [loading, setLoading] = useState(true);
-    const [entityOptions, setEntityOptions] = useState<string[]>([]);
-
-    useEffect(() => {
-        const refresh = () => {
-            const r = loadFundRecord();
-            setEntityOptions(Array.from(new Set(r.entities.map(e => e.name))));
-        };
-        refresh();
-        const handler = () => refresh();
-        window.addEventListener('fund-record-updated', handler);
-        return () => window.removeEventListener('fund-record-updated', handler);
-    }, []);
-
     const setInvestmentEntity = (value: string) => {
         onUpdate(r => ({ ...r, sopData: { ...r.sopData, investmentEntity: value } }));
     };
@@ -216,7 +203,6 @@ export default function LegalDashboard({ company, record, onUpdate }: Props) {
                 <div className="legal-dash-metrics">
                     <EntityPicker
                         value={record.sopData.investmentEntity}
-                        options={entityOptions}
                         onChange={setInvestmentEntity}
                     />
                     <Metric icon={<Calendar size={12} />} label="Investment Date" value={fmtDate(investmentDate)} />
@@ -345,59 +331,19 @@ function HeroStat({ label, value, sub, subColor, accent }: { label: string; valu
     );
 }
 
-function EntityPicker({ value, options, onChange }: {
+// The entity list is the shared registry, so Legal names an entity exactly as
+// Portfolio and Fund do — this used to read the Fund page's own list, which is
+// how the same entity ended up called DVPL here and DVLLP there.
+function EntityPicker({ value, onChange }: {
     value: string;
-    options: string[];
     onChange: (value: string) => void;
 }) {
-    const knownValue = value && options.includes(value);
-    const [mode, setMode] = useState<'select' | 'custom'>(
-        value && !knownValue ? 'custom' : 'select',
-    );
-
     return (
         <div className="legal-dash-metric">
             <div className="legal-dash-metric-label"><Building2 size={12} /> Investment Entity</div>
-            {mode === 'select' ? (
-                <select
-                    className="inline-input"
-                    value={knownValue ? value : ''}
-                    onChange={e => {
-                        const v = e.target.value;
-                        if (v === '__other__') {
-                            setMode('custom');
-                            return;
-                        }
-                        onChange(v);
-                    }}
-                    style={{ marginTop: 4 }}
-                >
-                    <option value="">— Select entity —</option>
-                    {options.map(name => (
-                        <option key={name} value={name}>{name}</option>
-                    ))}
-                    <option value="__other__">Other…</option>
-                </select>
-            ) : (
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                    <input
-                        className="inline-input"
-                        autoFocus
-                        placeholder="Entity name"
-                        value={value}
-                        onChange={e => onChange(e.target.value)}
-                        style={{ flex: 1 }}
-                    />
-                    <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        onClick={() => { onChange(''); setMode('select'); }}
-                        title="Back to list"
-                    >
-                        ↶
-                    </button>
-                </div>
-            )}
+            <div style={{ marginTop: 4 }}>
+                <InvestmentEntitySelect value={value} onChange={onChange} labelFontSize={13} />
+            </div>
         </div>
     );
 }

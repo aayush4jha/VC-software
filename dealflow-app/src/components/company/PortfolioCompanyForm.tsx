@@ -5,7 +5,8 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
 import { INVESTMENT_TYPES } from '@/types/database';
-import VehicleSelect from './VehicleSelect';
+import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
+import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
 import { formatPortfolioCurrency, formatPortfolioCurrencyExact, describeDroppedColumns } from '@/lib/portfolio-utils';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
@@ -68,6 +69,7 @@ interface LocalFollowOn {
     investmentVehicle: string;
     syndicateName: string;
     investmentType: string;
+    investmentInstrument: string;
 }
 
 function emptyFollowOn(): LocalFollowOn {
@@ -93,6 +95,7 @@ function emptyFollowOn(): LocalFollowOn {
         investmentVehicle: '',
         syndicateName: '',
         investmentType: '',
+        investmentInstrument: '',
     };
 }
 
@@ -152,6 +155,7 @@ export default function PortfolioCompanyForm() {
         initial_investment: '',
         share_type: 'Primary' as ShareType,
         investment_vehicle: '',
+        investment_instrument: '',
         syndicate_name: '',
         share_price: '',
         num_shares: '',
@@ -286,6 +290,7 @@ export default function PortfolioCompanyForm() {
                 initial_investment: editingCompany.initialInvestment?.toString() || '',
                 share_type: editingCompany.shareType,
                 investment_vehicle: editingCompany.investmentVehicle || '',
+                investment_instrument: editingCompany.investmentInstrument || '',
                 syndicate_name: editingCompany.syndicateName || '',
                 share_price: editingCompany.sharePrice?.toString() || '',
                 num_shares: editingCompany.numShares?.toString() || '',
@@ -334,6 +339,7 @@ export default function PortfolioCompanyForm() {
                         investmentVehicle: r.investmentVehicle || '',
                         syndicateName: r.syndicateName || '',
                         investmentType: r.investmentType || '',
+                        investmentInstrument: r.investmentInstrument || '',
                     }))
                 );
             });
@@ -430,6 +436,7 @@ export default function PortfolioCompanyForm() {
             companyRound: form.entry_stage,
             shareType: form.share_type,
             investmentVehicle: form.investment_vehicle || null,
+            investmentInstrument: form.investment_instrument || null,
             syndicateName: form.investment_vehicle === 'Syndicate' ? (form.syndicate_name || null) : null,
             initialInvestment: toNum(form.initial_investment),
             sharePrice: toNum(form.share_price),
@@ -484,6 +491,7 @@ export default function PortfolioCompanyForm() {
                 investmentVehicle: fo.investmentVehicle || null,
                 syndicateName: fo.investmentVehicle === 'Syndicate' ? (fo.syndicateName || null) : null,
                 investmentType: fo.investmentType || null,
+                investmentInstrument: fo.investmentInstrument || null,
             };
         };
 
@@ -816,10 +824,17 @@ export default function PortfolioCompanyForm() {
                     {/* Which entity the entry investment came from */}
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">Investment Vehicle</label>
-                            <VehicleSelect
+                            <label className="form-label">Investment Entity</label>
+                            <InvestmentEntitySelect
                                 value={form.investment_vehicle}
                                 onChange={v => setForm(f => ({ ...f, investment_vehicle: v }))}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Investment Instrument</label>
+                            <InvestmentInstrumentSelect
+                                value={form.investment_instrument}
+                                onChange={v => setForm(f => ({ ...f, investment_instrument: v }))}
                             />
                         </div>
                         {form.investment_vehicle === 'Syndicate' && (
@@ -1136,10 +1151,18 @@ export default function PortfolioCompanyForm() {
                                                     </select>
                                                 </div>
                                                 <div className="form-group">
-                                                    <label className="form-label" style={{ fontSize: 12 }}>Investment Vehicle</label>
-                                                    <VehicleSelect
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Investment Entity</label>
+                                                    <InvestmentEntitySelect
                                                         value={fo.investmentVehicle}
                                                         onChange={v => updateFollowOnRow(originalIdx, 'investmentVehicle', v)}
+                                                        labelFontSize={12}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label" style={{ fontSize: 12 }}>Investment Instrument</label>
+                                                    <InvestmentInstrumentSelect
+                                                        value={fo.investmentInstrument}
+                                                        onChange={v => updateFollowOnRow(originalIdx, 'investmentInstrument', v)}
                                                         labelFontSize={12}
                                                     />
                                                 </div>

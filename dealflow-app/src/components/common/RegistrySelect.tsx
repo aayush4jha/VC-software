@@ -2,31 +2,41 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, X, ChevronDown, Plus } from 'lucide-react';
-import { useAppContext } from '@/lib/context';
-import { INVESTMENT_VEHICLES } from '@/types/database';
 
 /**
- * Investment-vehicle picker with an inline "add new" and a per-row delete —
- * the same control on the entry round, every follow-on and the add-round form,
- * so a vehicle added in one place is immediately offered in the others.
+ * A picker over an editable registry: choose a name, add one inline, or remove
+ * one with the cross beside it.
  *
- * A native <select> cannot carry a button per option, so this is a custom
- * listbox. The vehicle is stored on the investment as a name rather than a
- * reference, which means two things worth stating: a name that predates the
+ * Registries behave the same way wherever they appear — the value is stored on
+ * the record as a NAME rather than a reference, so a name that predates the
  * registry still shows as the current value instead of reading blank, and
- * deleting an entry only removes it from this list — investments already
- * recorded against it keep their value.
+ * deleting an entry only takes it out of this list: anything already recorded
+ * against it keeps its value. One control means a registry added to a second
+ * page cannot drift into looking or behaving differently there.
+ *
+ * A native <select> cannot carry a button per option, hence the custom listbox.
  */
-export default function VehicleSelect({
+export default function RegistrySelect({
     value,
     onChange,
+    rows,
+    onAdd,
+    onDelete,
+    placeholder,
+    addLabel,
+    namePlaceholder,
     labelFontSize,
 }: {
     value: string;
     onChange: (name: string) => void;
+    rows: { id: string; name: string }[];
+    onAdd: (name: string) => Promise<string | null>;
+    onDelete: (id: string) => Promise<string | null>;
+    placeholder: string;
+    addLabel: string;
+    namePlaceholder: string;
     labelFontSize?: number;
 }) {
-    const { investmentVehicles, addInvestmentVehicle, deleteInvestmentVehicle } = useAppContext();
     const [open, setOpen] = useState(false);
     const [adding, setAdding] = useState(false);
     const [draft, setDraft] = useState('');
@@ -58,21 +68,17 @@ export default function VehicleSelect({
         if (open) popoverRef.current?.scrollIntoView({ block: 'nearest' });
     }, [open, adding]);
 
-    // Falls back to the built-in names when the registry table does not exist
-    // yet, so the list is never empty. Those have no id and cannot be deleted.
-    const registry = investmentVehicles.length > 0
-        ? investmentVehicles
-        : INVESTMENT_VEHICLES.map(name => ({ id: '', name }));
-
-    const rows = value && !registry.some(v => v.name === value)
-        ? [{ id: '', name: value }, ...registry]
-        : registry;
+    // A value the registry no longer offers still shows as the current choice,
+    // with no cross since there is no registry row to remove.
+    const options = value && !rows.some(v => v.name === value)
+        ? [{ id: '', name: value }, ...rows]
+        : rows;
 
     const commitNew = async () => {
         const trimmed = draft.trim();
         if (!trimmed) { setAdding(false); setDraft(''); return; }
         setBusy(true);
-        const saved = await addInvestmentVehicle(trimmed);
+        const saved = await onAdd(trimmed);
         setBusy(false);
         if (saved) { onChange(saved); setOpen(false); }
         setAdding(false);
@@ -81,7 +87,7 @@ export default function VehicleSelect({
 
     const remove = async (id: string, name: string) => {
         setBusy(true);
-        const err = await deleteInvestmentVehicle(id);
+        const err = await onDelete(id);
         setBusy(false);
         setConfirmId(null);
         if (err) { setError(`Could not remove "${name}": ${err}`); return; }
@@ -106,7 +112,7 @@ export default function VehicleSelect({
                 }}
             >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {value || 'Select vehicle'}
+                    {value || placeholder}
                 </span>
                 <ChevronDown size={14} style={{ flexShrink: 0, opacity: 0.6 }} />
             </button>
@@ -118,7 +124,7 @@ export default function VehicleSelect({
                     borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                     maxHeight: 260, overflowY: 'auto', padding: 4,
                 }}>
-                    {rows.map(v => (
+                    {options.map(v => (
                         <div
                             key={v.id || v.name}
                             style={{
@@ -180,7 +186,7 @@ export default function VehicleSelect({
                             <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: 2 }}>
                                 <input
                                     className="form-input"
-                                    placeholder="Vehicle name"
+                                    placeholder={namePlaceholder}
                                     value={draft}
                                     autoFocus
                                     disabled={busy}
@@ -208,7 +214,7 @@ export default function VehicleSelect({
                                     padding: '6px 8px', fontSize: fs, color: 'var(--primary)',
                                 }}
                             >
-                                <Plus size={13} /> Add new vehicle
+                                <Plus size={13} /> {addLabel}
                             </button>
                         )}
                     </div>

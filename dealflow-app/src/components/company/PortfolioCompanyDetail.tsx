@@ -13,7 +13,8 @@ import {
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
 import { INVESTMENT_TYPES } from '@/types/database';
-import VehicleSelect from './VehicleSelect';
+import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
+import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import CompanyNotesPanel from './CompanyNotesPanel';
 
@@ -73,7 +74,7 @@ export default function PortfolioCompanyDetail() {
         share_price: '', num_shares: '', total_shares: '', dv_total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
         investor_names: '', notes: '', our_value_today_override: '',
-        investment_vehicle: '', syndicate_name: '', investment_type: '',
+        investment_vehicle: '', syndicate_name: '', investment_type: '', investment_instrument: '',
     });
 
     const resetRoundForm = () => setRoundForm({
@@ -82,7 +83,7 @@ export default function PortfolioCompanyDetail() {
         share_price: '', num_shares: '', total_shares: '', dv_total_shares: '',
         ownership_sought: '', ownership_after: '', dilution_percent: '',
         investor_names: '', notes: '', our_value_today_override: '',
-        investment_vehicle: '', syndicate_name: '', investment_type: '',
+        investment_vehicle: '', syndicate_name: '', investment_type: '', investment_instrument: '',
     });
 
     const FOLLOWON_ROUND_OPTIONS = [
@@ -309,6 +310,7 @@ export default function PortfolioCompanyDetail() {
             investmentVehicle: roundForm.investment_vehicle || null,
             syndicateName: roundForm.investment_vehicle === 'Syndicate' ? (roundForm.syndicate_name || null) : null,
             investmentType: roundForm.investment_type || null,
+            investmentInstrument: roundForm.investment_instrument || null,
         };
 
         if (editingRoundId) {
@@ -393,6 +395,7 @@ export default function PortfolioCompanyDetail() {
             investment_vehicle: fo.investmentVehicle || '',
             syndicate_name: fo.syndicateName || '',
             investment_type: fo.investmentType || '',
+            investment_instrument: fo.investmentInstrument || '',
         });
         setShowAddRound(true);
     };
@@ -589,14 +592,14 @@ export default function PortfolioCompanyDetail() {
                                 <EditableRow label="Current Ownership %" value={ownership > 0 ? `${ownership.toFixed(2)}%` : '--'} field="currentOwnership" type="number" rawValue={c.currentOwnership?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Investment Type" value={c.shareType || '--'} field="shareType" rawValue={c.shareType || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={[...INVESTMENT_TYPES]} />
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0 }}>
-                                    <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flex: 1, minWidth: 0 }}>Investment Vehicle</span>
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flex: 1, minWidth: 0 }}>Investment Entity</span>
                                     <div style={{ width: 190, flexShrink: 0 }}>
-                                        <VehicleSelect
+                                        <InvestmentEntitySelect
                                             value={c.investmentVehicle || ''}
                                             labelFontSize={13}
                                             onChange={async v => {
                                                 const { error } = await updateCompany(c.id, { investmentVehicle: v || null });
-                                                if (error) setFieldError(`Could not save investment vehicle: ${error}`);
+                                                if (error) setFieldError(`Could not save investment entity: ${error}`);
                                             }}
                                         />
                                     </div>
@@ -604,6 +607,19 @@ export default function PortfolioCompanyDetail() {
                                 {c.investmentVehicle === 'Syndicate' && (
                                     <EditableRow label="Syndicate Name" value={c.syndicateName || '--'} field="syndicateName" rawValue={c.syndicateName || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border-light)', gap: 8, minWidth: 0 }}>
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: 13, flex: 1, minWidth: 0 }}>Investment Instrument</span>
+                                    <div style={{ width: 190, flexShrink: 0 }}>
+                                        <InvestmentInstrumentSelect
+                                            value={c.investmentInstrument || ''}
+                                            labelFontSize={13}
+                                            onChange={async v => {
+                                                const { error } = await updateCompany(c.id, { investmentInstrument: v || null });
+                                                if (error) setFieldError(`Could not save investment instrument: ${error}`);
+                                            }}
+                                        />
+                                    </div>
+                                </div>
                                 <EditableRow label="Portfolio Health" value={c.portfolioHealth || '--'} field="portfolioHealth" rawValue={c.portfolioHealth || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Bullish', 'Base', 'Bearish']} />
                                 <DetailRow label="MOIC" value={totalInvested > 0 ? formatMOIC(moic) : '--'} />
                             </div>
@@ -908,10 +924,17 @@ export default function PortfolioCompanyDetail() {
                                                     </select>
                                                 </div>
                                                 <div className="form-group">
-                                                    <label className="form-label">Investment Vehicle</label>
-                                                    <VehicleSelect
+                                                    <label className="form-label">Investment Entity</label>
+                                                    <InvestmentEntitySelect
                                                         value={roundForm.investment_vehicle}
                                                         onChange={v => setRoundForm(f => ({ ...f, investment_vehicle: v }))}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label">Investment Instrument</label>
+                                                    <InvestmentInstrumentSelect
+                                                        value={roundForm.investment_instrument}
+                                                        onChange={v => setRoundForm(f => ({ ...f, investment_instrument: v }))}
                                                     />
                                                 </div>
                                             </div>
@@ -1204,10 +1227,14 @@ export default function PortfolioCompanyDetail() {
                                                         value={fo.investmentType || '--'}
                                                     />
                                                     <FollowOnStat
-                                                        label="Vehicle"
+                                                        label="Entity"
                                                         value={fo.investmentVehicle === 'Syndicate' && fo.syndicateName
                                                             ? `Syndicate — ${fo.syndicateName}`
                                                             : fo.investmentVehicle || '--'}
+                                                    />
+                                                    <FollowOnStat
+                                                        label="Instrument"
+                                                        value={fo.investmentInstrument || '--'}
                                                     />
                                                 </>
                                             )}
