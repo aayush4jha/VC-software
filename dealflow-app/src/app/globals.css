@@ -2403,8 +2403,19 @@ html, body {
 /* Two Column Layout */
 .portfolio-two-col {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, 1fr), not 1fr: a plain 1fr track cannot shrink below its
+     content's min-content width, so one card holding a wide table or chart
+     grew its own column past half and pushed the other one off screen. The
+     zero minimum lets each column stay at half and the content inside scroll
+     (tables) or resize (charts) instead. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
+}
+
+/* Grid and flex children default to min-width:auto, which is the same trap one
+   level down — this lets the cards' own inner layouts shrink too. */
+.portfolio-two-col > * {
+  min-width: 0;
 }
 
 /* Portfolio List (recent investments, top performers) */
@@ -2814,7 +2825,7 @@ html, body {
 /* Tablet — max 1024px */
 @media (max-width: 1024px) {
   .portfolio-two-col {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .portfolio-kpi-grid {

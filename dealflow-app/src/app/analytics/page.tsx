@@ -62,10 +62,13 @@ function typeColor(name: string, i: number): string {
     return INVESTMENT_TYPE_COLORS[name] || CHART_COLORS[i % CHART_COLORS.length];
 }
 
-// Ranked magnitude lists get long tails. Past the eighth entry the bars are
-// unreadable and the colors blur, so the tail folds into one "Other" row
-// instead of growing the chart.
-const MAX_RANKED_BARS = 8;
+// Ranked magnitude lists get long tails, so the tail folds into one "Other" row
+// rather than growing the chart without limit. Twelve, not eight: these bars are
+// one hue stepped by rank rather than twelve distinct colours to tell apart, so
+// the ~7 limit on colour classes does not apply — and with 39 industries in the
+// book, folding at eight put a quarter of the capital into "Other", which buries
+// exactly what the chart is for. The table underneath still lists every row.
+const MAX_RANKED_BARS = 12;
 function foldTail<T extends { name: string; value: number }>(rows: T[]): { name: string; value: number; tail?: number }[] {
     if (rows.length <= MAX_RANKED_BARS) return rows;
     const head = rows.slice(0, MAX_RANKED_BARS - 1);
@@ -1160,41 +1163,39 @@ function AnalyticsContent() {
                         ) : <div className="portfolio-empty-chart">No industry data</div>}
                     </div>
                     <div className="portfolio-section-card">
-                        <div className="portfolio-section-title" style={{ marginBottom: 16 }}>Portfolio by Stage</div>
-                        <div style={{ display: 'flex', gap: 16 }}>
-                            <div style={{ flex: 1 }}>
-                                {stageDistribution.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={stageDistribution} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
-                                            <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
-                                            <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} width={100} />
-                                            <Tooltip />
-                                            <Bar dataKey="value" name="Companies" radius={[0, 4, 4, 0]}>
-                                                {stageDistribution.map((entry, i) => (
-                                                    <Cell key={i} fill={PORTFOLIO_STAGE_COLORS[entry.name] || CHART_COLORS[i % CHART_COLORS.length]} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : <div className="portfolio-empty-chart">No stage data</div>}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                {stageDistribution.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <RechartsPieChart>
-                                            <Pie data={stageDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={100} paddingAngle={2}>
-                                                {stageDistribution.map((entry, i) => (
-                                                    <Cell key={i} fill={PORTFOLIO_STAGE_COLORS[entry.name] || CHART_COLORS[i % CHART_COLORS.length]} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip />
-                                            <Legend />
-                                        </RechartsPieChart>
-                                    </ResponsiveContainer>
-                                ) : null}
-                            </div>
+                        <div className="portfolio-section-title" style={{ marginBottom: 4 }}>Portfolio by Stage</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                            Companies by entry stage{stageDistribution.length > 0 && ` · ${filtered.length} in total`}
                         </div>
+                        {/* One chart, not a bar and a pie of the same numbers. The pie
+                            drew nine stage names into half a card, and its legend spilled
+                            over the card and off the page. */}
+                        {stageDistribution.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={Math.max(180, stageDistribution.length * 34 + 30)}>
+                                <BarChart data={stageDistribution} layout="vertical" margin={{ left: 4, right: 44, top: 4, bottom: 4 }} barCategoryGap={6}>
+                                    <XAxis type="number" hide domain={[0, (max: number) => max * 1.02]} />
+                                    <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        width={110}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        tick={{ fontSize: 12, fill: 'var(--text-secondary)' }}
+                                    />
+                                    <Tooltip cursor={{ fill: 'rgba(99,102,241,0.06)' }} formatter={(v: unknown) => [String(v), 'Companies']} />
+                                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                                        {stageDistribution.map((entry, i) => (
+                                            <Cell key={i} fill={PORTFOLIO_STAGE_COLORS[entry.name] || seqColor(i, stageDistribution.length)} />
+                                        ))}
+                                        <LabelList
+                                            dataKey="value"
+                                            position="right"
+                                            style={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+                                        />
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : <div className="portfolio-empty-chart">No stage data</div>}
                     </div>
                 </div>
 
