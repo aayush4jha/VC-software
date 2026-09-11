@@ -12,13 +12,18 @@ const FREE_EMAIL_DOMAINS = new Set([
     'yandex.com', 'gmx.com', 'fastmail.com',
 ]);
 
-// Legal and descriptive suffixes that differ between how a founder signs an
-// email and how the company is already recorded.
+// LEGAL suffixes only — the part that differs between how a founder signs an
+// email and how the company is recorded, without changing which company is meant.
+//
+// Descriptive words (Technologies, Labs, Ventures, India, Group...) are
+// deliberately NOT stripped. Stripping them collapses "Acme Labs" and "Acme
+// Technologies" onto the same key, and this key decides whether two emails are
+// merged into one company. Failing to match is recoverable — a duplicate a
+// human merges — whereas merging two real companies is not, so the key stays
+// conservative.
 const NAME_NOISE = [
     'private limited', 'pvt ltd', 'pvt. ltd.', 'pvt limited', 'p ltd',
     'limited', 'ltd', 'llp', 'llc', 'inc', 'incorporated', 'corp', 'corporation',
-    'co', 'company', 'technologies', 'technology', 'tech', 'labs', 'lab',
-    'solutions', 'systems', 'ventures', 'holdings', 'group', 'india', 'global',
 ];
 
 export function emailDomain(email: string): string {
@@ -31,9 +36,9 @@ export function isFreeEmailDomain(email: string): boolean {
 
 /**
  * A comparison key for company names: lowercase, punctuation and legal suffixes
- * removed. "Acme Technologies Pvt Ltd", "ACME Tech" and "acme" all reduce to
- * "acme", so the same company arriving from a second address is recognised
- * rather than created again.
+ * removed. "Acme Technologies Pvt Ltd", "Acme Technologies" and "acme
+ * technologies," all reduce to "acme technologies", so the same company
+ * arriving from a second address is recognised rather than created again.
  */
 export function normalizeCompanyName(name: string): string {
     let out = name
@@ -41,7 +46,7 @@ export function normalizeCompanyName(name: string): string {
         .replace(/[.,'"`()|\-_/\\]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-    // Strip trailing noise words repeatedly: "acme technologies pvt ltd" -> "acme"
+    // Repeatedly, so "acme technologies pvt ltd" -> "acme technologies"
     let changed = true;
     while (changed) {
         changed = false;

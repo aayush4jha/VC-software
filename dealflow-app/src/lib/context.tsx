@@ -532,7 +532,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 (json.investmentVehicles || []).map((r: any) => ({ id: r.id, name: r.name })),
             );
             setInvestmentInstruments(
-                (json.investmentInstruments || []).map((r: any) => ({ id: r.id, name: r.name })),
+                (json.investmentInstruments || []).map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })),
             );
             setSavedViews((json.savedViews || []).map((r: any): SavedView => ({
                 id: r.id, name: r.name, filters: r.filters ?? {}, createdAt: r.created_at,

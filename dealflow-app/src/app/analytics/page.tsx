@@ -77,6 +77,11 @@ function foldTail<T extends { name: string; value: number }>(rows: T[]): { name:
     }];
 }
 
+// Recharts types a formatter's value loosely (number | string | array). These
+// narrow it in one place so each chart does not restate it as `any`.
+const asMoney = (v: unknown): string => formatPortfolioCurrency(Number(v));
+const asMoic = (v: unknown): string => formatMOIC(Number(v));
+
 // ─── Filter controls ─────────────────────────────
 // One label+control pair, so fifteen filters stay on one grid instead of
 // fifteen hand-written flex stacks that drift apart as filters are added.
@@ -911,7 +916,7 @@ function AnalyticsContent() {
                                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
                                     <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
                                     <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} width={60} />
-                                    <Tooltip formatter={(v: any) => formatMOIC(Number(v))} />
+                                    <Tooltip formatter={asMoic} />
                                     <Bar dataKey="moic" fill="#6366f1" radius={[0, 4, 4, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -925,7 +930,7 @@ function AnalyticsContent() {
                                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
                                     <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
                                     <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} width={100} />
-                                    <Tooltip formatter={(v: any) => formatMOIC(Number(v))} />
+                                    <Tooltip formatter={asMoic} />
                                     <Bar dataKey="moic" fill="#10b981" radius={[0, 4, 4, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -1117,7 +1122,7 @@ function AnalyticsContent() {
                                         />
                                         <Tooltip
                                             cursor={{ fill: 'rgba(99,102,241,0.06)' }}
-                                            formatter={(v: any) => [formatPortfolioCurrency(Number(v)), 'Invested']}
+                                            formatter={(v: unknown) => [asMoney(v), 'Invested']}
                                         />
                                         <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
                                             {industryRanked.map((_, i) => (
@@ -1127,7 +1132,7 @@ function AnalyticsContent() {
                                                 dataKey="value"
                                                 position="right"
                                                 style={{ fontSize: 11, fill: 'var(--text-secondary)' }}
-                                                formatter={(v: any) => formatPortfolioCurrency(Number(v))}
+                                                formatter={asMoney}
                                             />
                                         </Bar>
                                     </BarChart>
@@ -1202,9 +1207,9 @@ function AnalyticsContent() {
                                 <ResponsiveContainer width="100%" height={260}>
                                     <BarChart data={vehicleAllocation} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
-                                        <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} tickFormatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                        <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} tickFormatter={asMoney} />
                                         <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} width={130} />
-                                        <Tooltip formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                        <Tooltip formatter={asMoney} />
                                         <Bar dataKey="invested" name="Deployed" radius={[0, 4, 4, 0]} barSize={18}>
                                             {vehicleAllocation.map((_, i) => (
                                                 <Cell key={i} fill={seqColor(i, vehicleAllocation.length)} />
@@ -1246,7 +1251,7 @@ function AnalyticsContent() {
                                                 <Cell key={i} fill={typeColor(t.name, i)} />
                                             ))}
                                         </Pie>
-                                        <Tooltip formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                        <Tooltip formatter={asMoney} />
                                         <Legend />
                                     </RechartsPieChart>
                                 </ResponsiveContainer>
@@ -1289,14 +1294,14 @@ function AnalyticsContent() {
                                     <YAxis dataKey="name" type="category" width={120} tickLine={false} axisLine={false}
                                         tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
                                     <Tooltip cursor={{ fill: 'rgba(99,102,241,0.06)' }}
-                                        formatter={(v: any) => [formatPortfolioCurrency(Number(v)), 'Deployed']} />
+                                        formatter={(v: unknown) => [asMoney(v), 'Deployed']} />
                                     <Bar dataKey="invested" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
                                         {instrumentAllocation.map((_, i) => (
                                             <Cell key={i} fill={seqColor(i, instrumentAllocation.length)} />
                                         ))}
                                         <LabelList dataKey="invested" position="right"
                                             style={{ fontSize: 11, fill: 'var(--text-secondary)' }}
-                                            formatter={(v: any) => formatPortfolioCurrency(Number(v))} />
+                                            formatter={asMoney} />
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
