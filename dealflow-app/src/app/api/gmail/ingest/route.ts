@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 const TARGET_EMAIL = 'pipeline@dholakiaventures.com';
@@ -49,6 +50,36 @@ function isPitchDeckAttachment(filename: string): boolean {
     return PITCH_DECK_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
+export interface AttachmentPart {
+    filename?: string | null;
+    mimeType?: string | null;
+    body?: { attachmentId?: string | null; size?: number | null } | null;
+    parts?: AttachmentPart[] | null;
+}
+
+// Walks the whole MIME tree. Only the top level was read before, which missed
+// every deck sent as multipart/mixed inside multipart/related — the common
+// shape from Outlook and most mail clients that inline a signature image.
+export function collectAttachments(payload: AttachmentPart | null | undefined): {
+    filename: string; mimeType: string; attachmentId: string; size: number;
+}[] {
+    const out: { filename: string; mimeType: string; attachmentId: string; size: number }[] = [];
+    const walk = (part: AttachmentPart | null | undefined) => {
+        if (!part) return;
+        if (part.filename && part.body?.attachmentId) {
+            out.push({
+                filename: part.filename,
+                mimeType: part.mimeType || 'application/octet-stream',
+                attachmentId: part.body.attachmentId,
+                size: part.body.size || 0,
+            });
+        }
+        (part.parts || []).forEach(walk);
+    };
+    walk(payload);
+    return out;
+}
+
 function decodeBase64Url(data: string): string {
     return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
 }
@@ -77,6 +108,43 @@ function extractBodyText(payload: { mimeType?: string; body?: { data?: string };
         }
     }
     return '';
+}
+
+/**
+ * Files an email's attachments against a company so they can be opened from the
+ * company page later. The bytes stay in Gmail — this records where they are and
+ * what they are; /api/gmail/attachment streams them on demand.
+ *
+ * Best-effort by design: a failed insert must never cost us the company the
+ * email created, so errors are logged and swallowed.
+ */
+async function saveDocuments(
+    db: SupabaseClient,
+    companyId: string,
+    attachments: { filename: string; mimeType: string; attachmentId: string; size: number }[],
+    meta: { messageId: string; senderEmail: string; subject: string; receivedAt: string | null },
+): Promise<void> {
+    if (attachments.length === 0) return;
+    const rows = attachments.map(a => ({
+        organization_id: ORGANIZATION_ID,
+        company_id: companyId,
+        file_name: a.filename,
+        mime_type: a.mimeType,
+        size_bytes: a.size,
+        is_pitch_deck: isPitchDeckAttachment(a.filename),
+        source: 'email',
+        gmail_message_id: meta.messageId,
+        gmail_attachment_id: a.attachmentId,
+        received_at: meta.receivedAt,
+        sender_email: meta.senderEmail,
+        subject: meta.subject,
+    }));
+    // onConflict matches the table's (company_id, gmail_message_id, file_name)
+    // key, so re-ingesting a thread does not stack up duplicate rows.
+    const { error } = await db
+        .from('company_documents')
+        .upsert(rows, { onConflict: 'company_id,gmail_message_id,file_name', ignoreDuplicates: true });
+    if (error) console.error('[gmail/ingest] saveDocuments:', error.message);
 }
 
 interface ExtractedData {
@@ -117,7 +185,7 @@ ${truncatedBody}
 Extract the following fields. Return ONLY valid JSON with these exact keys. Use null for any field you cannot determine:
 
 {
-  "companyName": "The startup/company name (NOT the sender's personal name, extract the actual company name)",
+  "companyName": "The STARTUP's name. Read the body and the signature for it — the subject line is usually the topic ('Pitch Deck', 'Investment Opportunity', 'Following up'), NOT a name, so never copy the subject here. Never the sender's personal name, and never a generic word like Pitch/Deck/Startup. If the sender writes from a company domain, that domain is a strong hint. Return null if the email genuinely does not name a company rather than guessing.",
   "founderName": "The founder's full name",
   "companyRound": "One of: Pre-Seed, Seed, Pre-Series A, Series A, Pre-Series B, Series B, Growth Stage, Pre-IPO, IPO",
   "totalFundRaise": "Amount being raised in INR crores as a number (e.g. 1.2 for ₹1.2Cr). Convert from USD/other currencies if needed (1 USD ≈ 83 INR). null if not mentioned",
@@ -252,8 +320,19 @@ export async function POST(request: NextRequest) {
             .select('id, name')
             .eq('organization_id', ORGANIZATION_ID);
 
+        // Every company, for the dedup match below. Held in memory and appended
+        // to as companies are created, so two emails about the same new startup
+        // in one run club together rather than racing each other.
+        const { data: companyRows } = await db
+            .from('companies')
+            .select('id, company_name, founder_email')
+            .eq('organization_id', ORGANIZATION_ID);
+        const existingCompanies: { id: string; company_name: string; founder_email: string | null }[] =
+            companyRows || [];
+
         let processed = 0;
         let skipped = 0;
+        let attached = 0;
         const created: Array<{ companyName: string; companyId: string }> = [];
         const errors: string[] = [];
 
@@ -282,11 +361,10 @@ export async function POST(request: NextRequest) {
 
                 const { name: senderName, email: senderEmail } = extractSenderInfo(fromHeader);
 
-                // Check for attachments
-                const parts = fullMsg.data.payload?.parts || [];
-                const attachmentNames = parts
-                    .filter(p => p.filename && p.filename.length > 0)
-                    .map(p => p.filename as string);
+                // Collect attachments, including ones nested inside multipart
+                // parts — a deck sent from Outlook usually is.
+                const attachments = collectAttachments(fullMsg.data.payload as AttachmentPart);
+                const attachmentNames = attachments.map(a => a.filename);
                 const hasPitchDeck = attachmentNames.some(isPitchDeckAttachment);
                 const hasAttachments = attachmentNames.length > 0;
 
@@ -315,24 +393,23 @@ export async function POST(request: NextRequest) {
                 const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
                 const ai = await analyzeEmailWithAI(subject, senderName, senderEmail, bodyText, snippet);
 
-                // Use AI-extracted company name, or fall back to subject
-                let companyName = ai.companyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim();
-                if (!companyName || companyName === '(No Subject)') {
-                    const domain = senderEmail.split('@')[1]?.split('.')[0] || 'Unknown';
-                    companyName = domain.charAt(0).toUpperCase() + domain.slice(1);
-                }
+                const companyName = deriveCompanyName({
+                    aiName: ai.companyName,
+                    senderName,
+                    senderEmail,
+                    subject,
+                });
 
                 const founderName = ai.founderName || senderName;
 
-                // Check if a company with this founder email already exists
-                const { data: existingCompany } = await db
-                    .from('companies')
-                    .select('id, company_name')
-                    .eq('organization_id', ORGANIZATION_ID)
-                    .eq('founder_email', senderEmail)
-                    .limit(1);
+                // Does this email belong to a company we already have? Matched on
+                // the exact address, then a shared work domain, then the
+                // normalised name — so a second mail about the same startup, from
+                // a co-founder or a personal address, joins that record instead
+                // of creating a near-duplicate beside it.
+                const match = matchCompany(existingCompanies, { companyName, senderEmail });
 
-                if (existingCompany && existingCompany.length > 0) {
+                if (match) {
                     await db.from('ingested_emails').insert({
                         organization_id: ORGANIZATION_ID,
                         gmail_message_id: msg.id,
@@ -343,12 +420,31 @@ export async function POST(request: NextRequest) {
                         received_at: dateHeader ? new Date(dateHeader).toISOString() : null,
                         has_attachments: hasAttachments,
                         attachment_names: attachmentNames,
-                        company_id: existingCompany[0].id,
-                        status: 'skipped',
-                        error_message: `Company already exists: ${existingCompany[0].company_name}`,
+                        company_id: match.id,
+                        // 'processed', not 'skipped': the email was filed against a
+                        // company, which is the outcome we wanted.
+                        status: 'processed',
+                        error_message: `Filed under existing company "${match.company_name}" (matched on ${match.matchedBy})`,
                         relevance_label: relevanceLabel,
                     });
-                    skipped++;
+
+                    // Its attachments belong on that company too — a follow-up
+                    // carrying the updated deck is exactly the case this serves.
+                    await saveDocuments(db, match.id, attachments, {
+                        messageId: msg.id,
+                        senderEmail,
+                        subject,
+                        receivedAt: dateHeader ? new Date(dateHeader).toISOString() : null,
+                    });
+
+                    await db.from('activity_logs').insert({
+                        company_id: match.id,
+                        user_id: userId,
+                        action: 'email_received',
+                        details: `Email from ${senderEmail}: "${subject}"${hasAttachments ? ` (${attachmentNames.length} attachment${attachmentNames.length === 1 ? '' : 's'})` : ''}`,
+                    });
+
+                    attached++;
                     continue;
                 }
 
@@ -417,6 +513,19 @@ export async function POST(request: NextRequest) {
                     continue;
                 }
 
+                existingCompanies.push({
+                    id: newCompany.id,
+                    company_name: companyName,
+                    founder_email: senderEmail,
+                });
+
+                await saveDocuments(db, newCompany.id, attachments, {
+                    messageId: msg.id,
+                    senderEmail,
+                    subject,
+                    receivedAt: dateHeader ? new Date(dateHeader).toISOString() : null,
+                });
+
                 // Record in ingested_emails
                 await db.from('ingested_emails').insert({
                     organization_id: ORGANIZATION_ID,
@@ -478,7 +587,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, processed, skipped, created, errors: errors.length > 0 ? errors : undefined });
+        return NextResponse.json({ success: true, processed, skipped, attached, created, errors: errors.length > 0 ? errors : undefined });
     } catch (error: unknown) {
         const err = error as { code?: number; message?: string };
         console.error('[gmail/ingest] error:', error);

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
+import { formatLocation } from '@/lib/india-locations';
 import {
     type LegalRecord,
     type InvestorTier,
@@ -162,7 +163,7 @@ export default function LegalDashboard({ company, record, onUpdate }: Props) {
                         <h2>{company.companyName}</h2>
                         <div className="legal-dash-hero-meta">
                             {industry && <span><Building2 size={12} /> {industry}</span>}
-                            {company.hqLocation && <span><MapPin size={12} /> {company.hqLocation}</span>}
+                            {formatLocation(company.hqCity, company.hqLocation) && <span><MapPin size={12} /> {formatLocation(company.hqCity, company.hqLocation)}</span>}
                             {company.founderName && <span><UserIcon size={12} /> {company.founderName}</span>}
                         </div>
                         <div className="legal-dash-hero-badges">

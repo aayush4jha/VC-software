@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, Search } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { CompanyRound, PriorityLevel, DealSourceType, ShareType, INVESTMENT_TYPES } from '@/types/database';
+import { stateOptions } from '@/lib/india-locations';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
@@ -39,6 +40,8 @@ export default function CompanyForm() {
         priority_level: 'Medium' as PriorityLevel,
         industry_id: '',
         sub_industry: '',
+        hq_location: '',
+        hq_city: '',
         share_type: 'Primary' as ShareType,
         deal_source_type: 'Founder Network' as DealSourceType,
         deal_source_name_id: '',
@@ -93,6 +96,8 @@ export default function CompanyForm() {
                 priority_level: editingCompany.priorityLevel,
                 industry_id: editingCompany.industryId,
                 sub_industry: editingCompany.subIndustry,
+                hq_location: editingCompany.hqLocation || '',
+                hq_city: editingCompany.hqCity || '',
                 share_type: editingCompany.shareType,
                 deal_source_type: editingCompany.dealSourceType,
                 deal_source_name_id: editingCompany.dealSourceNameId,
@@ -140,6 +145,8 @@ export default function CompanyForm() {
             industryId: form.industry_id,
             subIndustry: form.sub_industry,
             shareType: form.share_type,
+            hqLocation: form.hq_location,
+            hqCity: form.hq_city,
             dealSourceType: form.deal_source_type,
             dealSourceNameId: form.deal_source_name_id,
             totalFundRaise: form.total_fund_raise ? parseFloat(form.total_fund_raise) : null,
@@ -247,6 +254,24 @@ export default function CompanyForm() {
                             <select className="form-select" value={form.share_type} onChange={upd('share_type')}>
                                 {shareTypes.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
+                        </div>
+                    </div>
+
+                    {/* HQ — state from the fixed list, city typed. Same pair as the
+                        portfolio form, so a company keeps its location when it moves. */}
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">State / UT</label>
+                            <select className="form-select" value={form.hq_location} onChange={upd('hq_location')}>
+                                <option value="">Select state or UT</option>
+                                {stateOptions(form.hq_location).map(loc => (
+                                    <option key={loc} value={loc}>{loc}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">City</label>
+                            <input className="form-input" placeholder="e.g. Bengaluru" value={form.hq_city} onChange={upd('hq_city')} />
                         </div>
                     </div>
 

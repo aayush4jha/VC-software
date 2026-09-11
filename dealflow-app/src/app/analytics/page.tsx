@@ -261,6 +261,7 @@ function AnalyticsContent() {
     const [filterSourcer, setFilterSourcer] = useState('all');
     const [filterSourceType, setFilterSourceType] = useState('all');
     const [filterPriority, setFilterPriority] = useState('all');
+    const [filterCity, setFilterCity] = useState('all');
     const [filterSearch, setFilterSearch] = useState('');
     const [showAllFilters, setShowAllFilters] = useState(false);
 
@@ -274,6 +275,7 @@ function AnalyticsContent() {
         }).filter(Boolean) as { id: string; name: string }[];
     }, [portfolioCompanies, getIndustryById]);
     const uniqueGeographies = useMemo(() => [...new Set(portfolioCompanies.map(c => c.hqLocation).filter(Boolean))].sort(), [portfolioCompanies]);
+    const uniqueCities = useMemo(() => [...new Set(portfolioCompanies.map(c => c.hqCity).filter(Boolean))].sort(), [portfolioCompanies]);
     const uniqueEntryYears = useMemo(() => [...new Set(portfolioCompanies.map(c => new Date(c.createdAt).getFullYear()))].sort((a, b) => b - a), [portfolioCompanies]);
 
     // Vehicle and investment type are recorded per investment, not per company:
@@ -355,6 +357,7 @@ function AnalyticsContent() {
             if (filterStage !== 'all' && c.companyRound !== filterStage) return false;
             if (filterSector !== 'all' && c.industryId !== filterSector) return false;
             if (filterGeography !== 'all' && c.hqLocation !== filterGeography) return false;
+            if (filterCity !== 'all' && c.hqCity !== filterCity) return false;
             if (filterEntryYear !== 'all' && new Date(c.createdAt).getFullYear() !== Number(filterEntryYear)) return false;
             if (filterStatus !== 'all' && c.portfolioStatus !== filterStatus) return false;
             const invested = getTotalInvested(c, followOnsMap.get(c.id) || []);
@@ -375,20 +378,20 @@ function AnalyticsContent() {
             }
             return true;
         });
-    }, [portfolioCompanies, filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterMinInvestment, filterMaxInvestment, filterInvestmentType, filterVehicle, filterInstrument, filterHealth, filterCurrentStage, filterAnalyst, filterSourcer, filterSourceType, filterPriority, filterSearch, followOnsMap, investmentLegs]);
+    }, [portfolioCompanies, filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterMinInvestment, filterMaxInvestment, filterInvestmentType, filterVehicle, filterInstrument, filterHealth, filterCurrentStage, filterAnalyst, filterSourcer, filterSourceType, filterPriority, filterCity, filterSearch, followOnsMap, investmentLegs]);
 
     // Drives the "N active" badge and whether Reset does anything.
     const activeFilterCount = useMemo(() => [
         filterStage, filterSector, filterGeography, filterEntryYear, filterStatus,
         filterInvestmentType, filterVehicle, filterInstrument, filterHealth,
-        filterCurrentStage, filterAnalyst, filterSourcer, filterSourceType, filterPriority,
+        filterCurrentStage, filterAnalyst, filterSourcer, filterSourceType, filterPriority, filterCity,
     ].filter(v => v !== 'all').length
         + (filterMinInvestment ? 1 : 0)
         + (filterMaxInvestment ? 1 : 0)
         + (filterSearch.trim() ? 1 : 0),
     [filterStage, filterSector, filterGeography, filterEntryYear, filterStatus, filterInvestmentType,
      filterVehicle, filterInstrument, filterHealth, filterCurrentStage, filterAnalyst, filterSourcer,
-     filterSourceType, filterPriority, filterMinInvestment, filterMaxInvestment, filterSearch]);
+     filterSourceType, filterPriority, filterCity, filterMinInvestment, filterMaxInvestment, filterSearch]);
 
     const resetFilters = () => {
         setFilterStage('all');
@@ -407,6 +410,7 @@ function AnalyticsContent() {
         setFilterSourcer('all');
         setFilterSourceType('all');
         setFilterPriority('all');
+        setFilterCity('all');
         setFilterSearch('');
     };
 
@@ -601,7 +605,9 @@ function AnalyticsContent() {
 
         const cityMap = new Map<string, number>();
         filtered.forEach(c => {
-            const city = c.hqLocation || 'Unknown';
+            // Falls back to the state when no city is recorded, so a company
+            // still appears somewhere rather than piling into "Unknown".
+            const city = c.hqCity || c.hqLocation || 'Unknown';
             cityMap.set(city, (cityMap.get(city) || 0) + 1);
         });
         const byCities = [...cityMap.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
@@ -772,8 +778,10 @@ function AnalyticsContent() {
                                 options={uniqueCurrentStages.map(x => ({ value: x, label: x }))} />
                             <FilterSelect label="Portfolio Health" value={filterHealth} onChange={setFilterHealth} allLabel="All Health" width={120}
                                 options={[{ value: 'Bullish', label: 'Bullish' }, { value: 'Base', label: 'Base' }, { value: 'Bearish', label: 'Bearish' }]} />
-                            <FilterSelect label="Geography (HQ)" value={filterGeography} onChange={setFilterGeography} allLabel="All Locations" width={150}
+                            <FilterSelect label="State / UT" value={filterGeography} onChange={setFilterGeography} allLabel="All States" width={150}
                                 options={uniqueGeographies.map(x => ({ value: x, label: x }))} />
+                            <FilterSelect label="City" value={filterCity} onChange={setFilterCity} allLabel="All Cities" width={140}
+                                options={uniqueCities.map(x => ({ value: x, label: x }))} />
                             <FilterSelect label="Entry Year" value={filterEntryYear} onChange={setFilterEntryYear} allLabel="All Years" width={110}
                                 options={uniqueEntryYears.map(y => ({ value: String(y), label: String(y) }))} />
                             <FilterSelect label="Analyst" value={filterAnalyst} onChange={setFilterAnalyst} allLabel="All Analysts" width={140}

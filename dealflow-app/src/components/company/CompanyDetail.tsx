@@ -11,6 +11,7 @@ import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import type { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
 import { INVESTMENT_TYPES } from '@/types/database';
+import CompanyDocuments from '@/components/common/CompanyDocuments';
 import { downloadAsDocx, downloadAsPdf } from '@/lib/report-download';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
@@ -614,6 +615,12 @@ export default function CompanyDetail() {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Documents — the decks and files that came in by email */}
+                            <div className="form-group" style={{ marginTop: 16 }}>
+                                <label className="form-label">Documents</label>
+                                <CompanyDocuments companyId={c.id} />
                             </div>
 
                             {/* Tags */}

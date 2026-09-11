@@ -175,7 +175,8 @@ export interface Company {
   portfolioStatus: PortfolioStatus;
   exitValue: number | null;
   exitDate: string | null;
-  hqLocation: string;
+  hqLocation: string;   // the state / UT, picked from INDIAN_STATES_AND_UTS
+  hqCity: string;       // free text — no fixed list of cities is worth maintaining
   notes: string;
   // Entry round detail (Portfolio)
   sharePrice: number | null;

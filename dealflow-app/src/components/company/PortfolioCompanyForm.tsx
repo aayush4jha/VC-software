@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
+import { stateOptions } from '@/lib/india-locations';
 import { INVESTMENT_TYPES } from '@/types/database';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
@@ -30,21 +31,6 @@ function roundOptions(current: string): string[] {
 const shareTypes: ShareType[] = [...INVESTMENT_TYPES];
 const portfolioStatuses: PortfolioStatus[] = ['Active', 'Exited', 'Written Off'];
 const portfolioHealthOptions: PortfolioHealth[] = ['Bullish', 'Base', 'Bearish'];
-
-// Indian states + Union Territories. Datalist suggestions — users can still type any custom location.
-const HQ_LOCATION_SUGGESTIONS: string[] = [
-    // States
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    // Union Territories
-    'Andaman and Nicobar Islands', 'Chandigarh',
-    'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
-];
 
 interface LocalFollowOn {
     _tempId?: string;
@@ -147,6 +133,7 @@ export default function PortfolioCompanyForm() {
         company_name: '',
         industry_id: '',
         hq_location: '',
+        hq_city: '',
         deal_source_name_id: '',
         analyst_id: '',
         entry_date: '',
@@ -282,6 +269,7 @@ export default function PortfolioCompanyForm() {
                 company_name: editingCompany.companyName,
                 industry_id: editingCompany.industryId,
                 hq_location: editingCompany.hqLocation || '',
+                hq_city: editingCompany.hqCity || '',
                 deal_source_name_id: editingCompany.dealSourceNameId,
                 analyst_id: editingCompany.analystId || '',
                 entry_date: (editingCompany.entryDate ?? editingCompany.createdAt)?.slice(0, 10) || '',
@@ -392,7 +380,7 @@ export default function PortfolioCompanyForm() {
         const missing: string[] = [];
         if (!form.company_name.trim()) missing.push('Company Name');
         if (!form.industry_id) missing.push('Industry');
-        if (!form.hq_location.trim()) missing.push('HQ Location');
+        if (!form.hq_location.trim()) missing.push('State / UT');
         if (!form.deal_source_name_id) missing.push('Deal Sourcer');
         if (!form.analyst_id) missing.push('Analyst');
         if (!form.entry_date) missing.push('Entry Date');
@@ -431,6 +419,7 @@ export default function PortfolioCompanyForm() {
             founders: cleanedFounders,
             industryId: form.industry_id,
             hqLocation: form.hq_location,
+            hqCity: form.hq_city,
             dealSourceNameId: form.deal_source_name_id,
             analystId: form.analyst_id || null,
             companyRound: form.entry_stage,
@@ -637,19 +626,22 @@ export default function PortfolioCompanyForm() {
                     {/* HQ + Sourcer */}
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">HQ Location *</label>
+                            <label className="form-label">State / UT *</label>
+                            <select className="form-select" value={form.hq_location} onChange={upd('hq_location')}>
+                                <option value="">Select state or UT</option>
+                                {stateOptions(form.hq_location).map(loc => (
+                                    <option key={loc} value={loc}>{loc}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">City</label>
                             <input
                                 className="form-input"
-                                list="hq-location-options"
-                                placeholder="Pick a state or type a city/country"
-                                value={form.hq_location}
-                                onChange={upd('hq_location')}
+                                placeholder="e.g. Bengaluru"
+                                value={form.hq_city}
+                                onChange={upd('hq_city')}
                             />
-                            <datalist id="hq-location-options">
-                                {HQ_LOCATION_SUGGESTIONS.map(loc => (
-                                    <option key={loc} value={loc} />
-                                ))}
-                            </datalist>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Deal Sourcer *</label>

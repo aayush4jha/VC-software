@@ -8,6 +8,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import EmailCompose from '@/components/integrations/EmailCompose';
 import CalendarInvite from '@/components/integrations/CalendarInvite';
+import BulkEmailModal from '@/components/common/BulkEmailModal';
 import { useAppContext } from '@/lib/context';
 import type { Company, Founder } from '@/types/database';
 
@@ -139,6 +140,47 @@ function ContactsContent() {
         });
     };
 
+    // Bulk email selection. Keyed by contact id (company id + founder index),
+    // so the same person at two companies is two rows here and one send — the
+    // modal dedups by address.
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [showBulkEmail, setShowBulkEmail] = useState(false);
+
+    const selectableIds = useMemo(
+        () => filtered.filter(f => f.email.includes('@')).map(f => f.id),
+        [filtered],
+    );
+    const allSelected = selectableIds.length > 0 && selectableIds.every(id => selected.has(id));
+
+    const toggleSelected = (id: string) => setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+
+    // Select-all applies to what the filters currently show, so "email every
+    // portfolio founder" is a category chip plus one click.
+    const toggleSelectAll = () => setSelected(prev => {
+        if (selectableIds.every(id => prev.has(id))) {
+            const next = new Set(prev);
+            selectableIds.forEach(id => next.delete(id));
+            return next;
+        }
+        return new Set([...prev, ...selectableIds]);
+    });
+
+    const bulkRecipients = useMemo(
+        () => founders
+            .filter(f => selected.has(f.id) && f.email.includes('@'))
+            .map(f => ({
+                email: f.email,
+                founderName: f.name,
+                companyName: f.company,
+                companyId: f.companyId,
+            })),
+        [founders, selected],
+    );
+
     const handleEmailClick = (c: FounderContact) => {
         setSelectedCompany(c._companyRef);
         setShowEmailCompose(true);
@@ -251,6 +293,20 @@ function ContactsContent() {
                         </span>
                     </div>
                     <div className="toolbar-right">
+                        {selected.size > 0 && (
+                            <>
+                                <button
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => setShowBulkEmail(true)}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    <Mail size={14} /> Email {selected.size} selected
+                                </button>
+                                <button className="btn btn-sm" onClick={() => setSelected(new Set())}>
+                                    Clear
+                                </button>
+                            </>
+                        )}
                         <div style={{ position: 'relative' }}>
                             <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
                             <input
@@ -283,6 +339,7 @@ function ContactsContent() {
                     <div className="table-container">
                         <table className="data-table contacts-table">
                             <colgroup>
+                                <col style={{ width: '3%' }} />
                                 <col style={{ width: '20%' }} />
                                 <col style={{ width: '20%' }} />
                                 <col style={{ width: '15%' }} />
@@ -294,6 +351,15 @@ function ContactsContent() {
                             </colgroup>
                             <thead>
                                 <tr>
+                                    <th>
+                                        <input
+                                            type="checkbox"
+                                            checked={allSelected}
+                                            onChange={toggleSelectAll}
+                                            title="Select every contact the filters are showing"
+                                            style={{ cursor: 'pointer' }}
+                                        />
+                                    </th>
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>Phone</th>
@@ -307,6 +373,16 @@ function ContactsContent() {
                             <tbody>
                                 {filtered.map(c => (
                                     <tr key={c.id}>
+                                        <td>
+                                            <input
+                                                type="checkbox"
+                                                checked={selected.has(c.id)}
+                                                disabled={!c.email.includes('@')}
+                                                onChange={() => toggleSelected(c.id)}
+                                                title={c.email.includes('@') ? 'Select for bulk email' : 'No email address on this contact'}
+                                                style={{ cursor: c.email.includes('@') ? 'pointer' : 'not-allowed' }}
+                                            />
+                                        </td>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                                 <div className="kanban-card-avatar" style={{ width: 28, height: 28, fontSize: 11, flexShrink: 0 }}>
@@ -389,6 +465,13 @@ function ContactsContent() {
                     </div>
                 )}
             </div>
+
+            {showBulkEmail && (
+                <BulkEmailModal
+                    recipients={bulkRecipients}
+                    onClose={() => { setShowBulkEmail(false); }}
+                />
+            )}
         </>
     );
 }

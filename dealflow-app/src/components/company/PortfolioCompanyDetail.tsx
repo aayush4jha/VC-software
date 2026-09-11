@@ -13,25 +13,14 @@ import {
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound, Founder } from '@/types/database';
 import { INVESTMENT_TYPES } from '@/types/database';
+import { stateOptions, formatLocation } from '@/lib/india-locations';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
+import CompanyDocuments from '@/components/common/CompanyDocuments';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import CompanyNotesPanel from './CompanyNotesPanel';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
-
-// Indian states + UTs — datalist suggestions; user can still type any custom value.
-const HQ_LOCATION_SUGGESTIONS: string[] = [
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh',
-    'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
-];
 
 const AVATAR_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 function avatarColor(name: string) {
@@ -470,7 +459,7 @@ export default function PortfolioCompanyDetail() {
                         <div>
                             <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{c.companyName}</div>
                             <div style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>
-                                {industry}{industry && c.hqLocation ? ' \u2022 ' : ''}{c.hqLocation || ''}
+                                {industry}{industry && formatLocation(c.hqCity, c.hqLocation) ? ' \u2022 ' : ''}{formatLocation(c.hqCity, c.hqLocation)}
                             </div>
                         </div>
                     </div>
@@ -625,6 +614,12 @@ export default function PortfolioCompanyDetail() {
                             </div>
                         </div>
                         <div>
+                            <h3 style={sectionTitleStyle}>Documents</h3>
+                            <div style={detailCardStyle}>
+                                <CompanyDocuments companyId={c.id} />
+                            </div>
+                        </div>
+                        <div>
                             <h3 style={sectionTitleStyle}>Team & Info</h3>
                             <div style={detailCardStyle}>
                                 <FoundersEditor
@@ -639,7 +634,8 @@ export default function PortfolioCompanyDetail() {
                                         if (error) setFieldError(`Could not save founders: ${error}`);
                                     }}
                                 />
-                                <EditableRow label="HQ Location" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} datalistOptions={HQ_LOCATION_SUGGESTIONS} placeholder="Pick a state or type a city/country" />
+                                <EditableRow label="State / UT" value={c.hqLocation || '--'} field="hqLocation" rawValue={c.hqLocation || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={stateOptions(c.hqLocation)} />
+                                <EditableRow label="City" value={c.hqCity || '--'} field="hqCity" rawValue={c.hqCity || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} placeholder="e.g. Bengaluru" />
                                 <EditableRow label="Latest Valuation" value={latestVal > 0 ? formatPortfolioCurrency(latestVal) : '--'} field="latestValuation" type="number" rawValue={c.latestValuation?.toString() || ''} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} />
                                 <EditableRow label="Status" value={status} field="portfolioStatus" rawValue={status} editField={editField} editValue={editValue} onStart={startEdit} onChange={setEditValue} onSave={saveField} onCancel={cancelEdit} selectOptions={['Active', 'Exited', 'Written Off']} />
                                 {(status === 'Exited' || status === 'Written Off') && (

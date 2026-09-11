@@ -23,6 +23,7 @@ import {
 } from '@/lib/portfolio-utils';
 
 import type { Company, FollowOnRound } from '@/types/database';
+import { formatLocation } from '@/lib/india-locations';
 
 // ─── Avatar color helper ──────────────────────────
 const AVATAR_COLORS = [
@@ -209,7 +210,7 @@ function PortfolioContent() {
                     <div>
                         <div className="portfolio-board-card-name">{c.companyName}</div>
                         <div className="portfolio-board-card-meta">
-                            {industry}{industry && c.hqLocation ? ' \u00b7 ' : ''}{c.hqLocation || ''}
+                            {industry}{industry && formatLocation(c.hqCity, c.hqLocation) ? ' \u00b7 ' : ''}{formatLocation(c.hqCity, c.hqLocation)}
                         </div>
                     </div>
                 </div>
@@ -307,7 +308,7 @@ function PortfolioContent() {
                                     </div>
                                 </td>
                                 <td>{industry}</td>
-                                <td>{c.hqLocation || '\u2014'}</td>
+                                <td>{formatLocation(c.hqCity, c.hqLocation) || '\u2014'}</td>
                                 <td>
                                     <span
                                         className="badge"

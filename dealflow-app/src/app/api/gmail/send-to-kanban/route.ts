@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
@@ -289,8 +290,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Use AI-extracted company name for dedup
-        const companyName = ai.companyName || derivedCompanyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim() || 'Unknown';
+        // Same rule as gmail/ingest: the subject is a topic, not a name.
+        const companyName = deriveCompanyName({
+            aiName: ai.companyName || derivedCompanyName,
+            senderName: senderName || '',
+            senderEmail,
+            subject,
+        });
         const founderName = ai.founderName || senderName || senderEmail.split('@')[0];
         const founderEmail = ai.founderEmail || senderEmail;
 
@@ -319,6 +325,49 @@ export async function POST(request: NextRequest) {
             if (matchedIndustry && matchedIndustry.length > 0) {
                 industryId = matchedIndustry[0].id;
             }
+        }
+
+        // An email about a company we already track joins that record. Without
+        // this, sending a second mail to the kanban created a near-duplicate
+        // card beside the first.
+        const { data: companyRows } = await db
+            .from('companies')
+            .select('id, company_name, founder_email')
+            .eq('organization_id', ORGANIZATION_ID);
+        const match = matchCompany(companyRows || [], { companyName, senderEmail: founderEmail });
+
+        if (match) {
+            if (gmailMessageId) {
+                await db.from('ingested_emails').insert({
+                    organization_id: ORGANIZATION_ID,
+                    gmail_message_id: gmailMessageId,
+                    gmail_thread_id: gmailThreadId || null,
+                    sender_name: founderName,
+                    sender_email: founderEmail,
+                    subject,
+                    received_at: receivedAt || null,
+                    has_attachments: hasAttachments || false,
+                    attachment_names: attachmentNames || [],
+                    company_id: match.id,
+                    status: 'processed',
+                    error_message: `Filed under existing company "${match.company_name}" (matched on ${match.matchedBy})`,
+                    relevance_label: relevanceLabel || null,
+                });
+            }
+
+            await db.from('activity_logs').insert({
+                company_id: match.id,
+                user_id: userId,
+                action: 'email_received',
+                details: `Email from ${founderEmail}: "${subject}" filed from the Email Workspace`,
+            });
+
+            return NextResponse.json({
+                success: true,
+                matchedExisting: true,
+                matchedBy: match.matchedBy,
+                company: { id: match.id, companyName: match.company_name },
+            });
         }
 
         // Build company insert

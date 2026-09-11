@@ -85,6 +85,7 @@ function mapCompany(r: any): Company {
         exitValue: r.exit_value ?? null,
         exitDate: r.exit_date ?? null,
         hqLocation: r.hq_location ?? '',
+        hqCity: r.hq_city ?? '',
         notes: r.notes ?? '',
         sharePrice: r.share_price != null ? Number(r.share_price) : null,
         numShares: r.num_shares != null ? Number(r.num_shares) : null,
@@ -854,6 +855,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...(data.exitValue != null ? { exit_value: toBigint(data.exitValue) } : {}),
             ...(data.exitDate ? { exit_date: data.exitDate } : {}),
             ...(data.hqLocation ? { hq_location: data.hqLocation } : {}),
+            ...(data.hqCity ? { hq_city: data.hqCity } : {}),
             ...(data.notes ? { notes: data.notes } : {}),
             ...(data.sharePrice != null ? { share_price: data.sharePrice } : {}),
             ...(data.numShares != null ? { num_shares: toBigint(data.numShares) } : {}),
@@ -935,7 +937,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         'priorityLevel', 'dealSourceType', 'dealSourceNameId', 'industryId',
         'subIndustry', 'shareType', 'totalFundRaise', 'valuation', 'googleDriveLink',
         'customTags', 'terminalStatus', 'needsReview', 'pipelineStageId', 'slaDeadline',
-        'hqLocation', 'notes', 'portfolioStatus', 'initialInvestment', 'entryValuation',
+        'hqLocation', 'hqCity', 'notes', 'portfolioStatus', 'initialInvestment', 'entryValuation',
     ]);
 
     // The bulk load leaves out the large AI blobs (deck analysis, transcript,
@@ -982,7 +984,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             entryOwnership: 'entry_ownership', currentOwnership: 'current_ownership',
             latestValuation: 'latest_valuation', portfolioStatus: 'portfolio_status',
             exitValue: 'exit_value', exitDate: 'exit_date',
-            hqLocation: 'hq_location', notes: 'notes',
+            hqLocation: 'hq_location', hqCity: 'hq_city', notes: 'notes',
             sharePrice: 'share_price', numShares: 'num_shares', totalShares: 'total_shares',
             entryPreMoneyValuation: 'entry_pre_money_valuation',
             entryPostMoneyValuation: 'entry_post_money_valuation',
