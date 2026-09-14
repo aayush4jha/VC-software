@@ -19,13 +19,14 @@ import {
     subscribeLegalUpdates,
     getMissingMustHaveRights,
 } from '@/lib/legal-data';
-import type { Company, User } from '@/types/database';
-import { formatPortfolioCurrency } from '@/lib/portfolio-utils';
+import type { Company, User, FollowOnRound } from '@/types/database';
+import { formatPortfolioCurrency, getTotalInvested } from '@/lib/portfolio-utils';
 
 interface CardData {
     company: Company;
     record: LegalRecord;
     missingCount: number;
+    followOns: FollowOnRound[];
 }
 
 function daysSince(iso: string): number {
@@ -35,7 +36,26 @@ function daysSince(iso: string): number {
 
 function LegalContent() {
     const router = useRouter();
-    const { companies, users, setSelectedCompany } = useAppContext();
+    const { companies, users, setSelectedCompany, fetchAllFollowOns, followOnsVersion } = useAppContext();
+
+    // Total invested has to include follow-on cheques, or this board shows a
+    // smaller number than the portfolio does for the same company. One request
+    // for every round, the way the portfolio list does it — not one per card.
+    const [followOnsByCompany, setFollowOnsByCompany] = useState<Record<string, FollowOnRound[]>>({});
+    useEffect(() => {
+        let cancelled = false;
+        fetchAllFollowOns().then(rows => {
+            if (cancelled) return;
+            const grouped: Record<string, FollowOnRound[]> = {};
+            rows.forEach(r => {
+                if (!grouped[r.companyId]) grouped[r.companyId] = [];
+                grouped[r.companyId].push(r);
+            });
+            setFollowOnsByCompany(grouped);
+        }).catch(() => { if (!cancelled) setFollowOnsByCompany({}); });
+        return () => { cancelled = true; };
+        // followOnsVersion changes when a round is added, edited or deleted.
+    }, [fetchAllFollowOns, followOnsVersion]);
 
     const [search, setSearch] = useState('');
     const [stageFilter, setStageFilter] = useState<LegalStageId | 'all'>('all');
@@ -70,10 +90,10 @@ function LegalContent() {
                 const record = records[company.id];
                 if (!record) return null;
                 const missing = getMissingMustHaveRights(record);
-                return { company, record, missingCount: missing.length };
+                return { company, record, missingCount: missing.length, followOns: followOnsByCompany[company.id] || [] };
             })
             .filter((c): c is CardData => c !== null);
-    }, [portfolioCompanies, records]);
+    }, [portfolioCompanies, records, followOnsByCompany]);
 
     const filteredCards = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -266,7 +286,7 @@ function LegalCardInner({ card, users, onStageChange, onOwnerChange, onOpenPortf
     const [showOwnerMenu, setShowOwnerMenu] = useState(false);
     const stage = LEGAL_STAGES.find(s => s.id === record.stageId)!;
     const days = daysSince(record.stageUpdatedAt);
-    const investment = company.initialInvestment || 0;
+    const investment = getTotalInvested(company, card.followOns);
 
     return (
         <>

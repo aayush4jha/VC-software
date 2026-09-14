@@ -9,6 +9,7 @@ import {
 import { useAppContext } from '@/lib/context';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import { formatLocation } from '@/lib/india-locations';
+import { getCompanyFinancials } from '@/lib/company-financials';
 import {
     type LegalRecord,
     type InvestorTier,
@@ -18,10 +19,7 @@ import {
     inferPresenceFromText,
 } from '@/lib/legal-data';
 import {
-    formatPortfolioCurrency, formatMOIC, formatXIRR,
-    getTotalInvested, getInitialOwnership, getCurrentOwnership,
-    getLatestValuation, getCompanyMOIC, getCompanyIRR,
-    getPortfolioStage, PORTFOLIO_STAGE_COLORS,
+    formatPortfolioCurrency, formatMOIC, formatXIRR, PORTFOLIO_STAGE_COLORS,
 } from '@/lib/portfolio-utils';
 import type { Company, FollowOnRound } from '@/types/database';
 
@@ -45,11 +43,6 @@ function fmtNumber(n: number): string {
     if (!isFinite(n)) return '—';
     return n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
-function parseNum(s: string | number | null | undefined): number | null {
-    if (s == null || s === '') return null;
-    const n = typeof s === 'number' ? s : parseFloat(String(s).replace(/,/g, ''));
-    return isFinite(n) ? n : null;
-}
 function fmtDate(iso: string | null | undefined): string {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -57,12 +50,18 @@ function fmtDate(iso: string | null | undefined): string {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function LegalDashboard({ company, record, onUpdate }: Props) {
-    const { fetchFollowOns, followOnsVersion, getIndustryById, getDealSourceNameById, getUserById } = useAppContext();
+export default function LegalDashboard({ company, record }: Props) {
+    const { fetchFollowOns, followOnsVersion, getIndustryById, getDealSourceNameById, getUserById, updateCompany } = useAppContext();
     const [followOns, setFollowOns] = useState<FollowOnRound[]>([]);
     const [loading, setLoading] = useState(true);
-    const setInvestmentEntity = (value: string) => {
-        onUpdate(r => ({ ...r, sopData: { ...r.sopData, investmentEntity: value } }));
+    // The entity is a property of the investment, so it is stored on the
+    // company and edited here directly. It used to be kept in this page's own
+    // record, which meant Legal and Portfolio could never agree on it —
+    // changing it in one place left the other showing something else.
+    const [entityError, setEntityError] = useState<string | null>(null);
+    const setInvestmentEntity = async (value: string) => {
+        const { error } = await updateCompany(company.id, { investmentVehicle: value || null });
+        setEntityError(error ? `Could not save investment entity: ${error}` : null);
     };
 
     useEffect(() => {
@@ -83,37 +82,26 @@ export default function LegalDashboard({ company, record, onUpdate }: Props) {
         // elsewhere, so MOIC / IRR here never lag behind the portfolio panel.
     }, [company.id, fetchFollowOns, followOnsVersion]);
 
-    // ─── Derive every metric from portfolio data + post-investment overrides ──
-    const post = record.postInvestment;
+    // ─── Every figure comes from the shared derivation ───────────────────────
+    // Nothing on this page works a number out for itself. It used to, and it
+    // disagreed with the portfolio panel about the same company: the investment
+    // was dated from created_at rather than entry_date, the pre-money was read
+    // out of the legacy entry_valuation column (which holds the POST-money), a
+    // post-money was invented by adding the cheque to that, and shares and
+    // price showed as "—" because they were only ever looked for in this page's
+    // own localStorage record, which no screen can write to.
+    const fin = getCompanyFinancials(company, followOns);
 
-    const investmentDate = post.investmentDate || company.createdAt || '';
-    const initialInvestment = company.initialInvestment ?? null;
-    const totalInvested = getTotalInvested(company, followOns);
+    const {
+        entryDateISO: investmentDate, initialInvestment, totalInvested,
+        entryPreMoney, entryPostMoney, latestValuation,
+        entryOwnership, currentOwnership, dilutionDelta,
+        sharesBought, pricePerShare, moic, irr,
+    } = fin;
 
-    const entryValuation = parseNum(post.preMoneyValuation) ?? company.entryValuation ?? null;
-    const postMoney = parseNum(post.postMoneyValuation)
-        ?? (entryValuation != null && initialInvestment != null ? entryValuation + initialInvestment : null);
-    const latestValRaw = getLatestValuation(company, followOns);
-    const latestValuation = latestValRaw > 0 ? latestValRaw : null;
-
-    const _entryOwnRaw = parseNum(post.percentHolding) ?? company.entryOwnership ?? getInitialOwnership(company);
-    const entryOwnership = _entryOwnRaw && _entryOwnRaw > 0 ? _entryOwnRaw : null;
-    const _currentOwnRaw = getCurrentOwnership(company, followOns);
-    const currentOwnership = _currentOwnRaw > 0 ? _currentOwnRaw : entryOwnership;
-    const dilutionDelta = (entryOwnership != null && currentOwnership != null && Math.abs(entryOwnership - currentOwnership) > 0.01)
-        ? currentOwnership - entryOwnership
-        : null;
-
-    const sharesBought = parseNum(post.sharesBought);
-    const pricePerShare = parseNum(post.pricePerShare)
-        ?? (sharesBought != null && sharesBought > 0 && initialInvestment ? initialInvestment / sharesBought : null);
-
-    const moic = getCompanyMOIC(company, followOns);
-    const irr = getCompanyIRR(company, followOns);
-
-    const stage = getPortfolioStage(company);
+    const stage = fin.portfolioStage;
     const stageColor = PORTFOLIO_STAGE_COLORS[stage] || '#94a3b8';
-    const status = company.portfolioStatus || 'Active';
+    const status = fin.status;
     const industry = getIndustryById(company.industryId || '')?.name || '';
     const sourcer = getDealSourceNameById(company.dealSourceNameId || '')?.name || '';
     const analyst = company.analystId ? getUserById(company.analystId)?.name || '' : '';
@@ -203,15 +191,16 @@ export default function LegalDashboard({ company, record, onUpdate }: Props) {
                 </div>
                 <div className="legal-dash-metrics">
                     <EntityPicker
-                        value={record.sopData.investmentEntity}
+                        value={fin.investmentEntity || ''}
                         onChange={setInvestmentEntity}
+                        error={entityError}
                     />
                     <Metric icon={<Calendar size={12} />} label="Investment Date" value={fmtDate(investmentDate)} />
                     <Metric icon={<Wallet size={12} />} label="Amount Invested" value={initialInvestment ? formatPortfolioCurrency(initialInvestment) : '—'} accent="success" />
-                    <Metric icon={<Layers size={12} />} label="Shares Bought" value={sharesBought != null ? fmtNumber(sharesBought) : '—'} hint={sharesBought == null ? 'Add in Post-Investment tab' : undefined} />
-                    <Metric icon={<Coins size={12} />} label="Price / Share" value={pricePerShare != null ? `₹${fmtNumber(pricePerShare)}` : '—'} hint={pricePerShare != null && parseNum(post.pricePerShare) == null ? 'Computed from amount ÷ shares' : undefined} />
-                    <Metric icon={<Target size={12} />} label="Pre-Money" value={entryValuation ? formatPortfolioCurrency(entryValuation) : '—'} />
-                    <Metric icon={<Target size={12} />} label="Post-Money" value={postMoney ? formatPortfolioCurrency(postMoney) : '—'} hint={postMoney != null && parseNum(post.postMoneyValuation) == null ? 'Pre-money + amount' : undefined} />
+                    <Metric icon={<Layers size={12} />} label="Shares Bought" value={sharesBought != null ? fmtNumber(sharesBought) : '—'} hint={sharesBought == null ? 'Set in Portfolio → Number of Shares' : undefined} />
+                    <Metric icon={<Coins size={12} />} label="Price / Share" value={pricePerShare != null ? `₹${fmtNumber(pricePerShare)}` : '—'} hint={pricePerShare != null && company.sharePrice == null ? 'Computed from amount ÷ shares' : undefined} />
+                    <Metric icon={<Target size={12} />} label="Pre-Money" value={entryPreMoney ? formatPortfolioCurrency(entryPreMoney) : '—'} />
+                    <Metric icon={<Target size={12} />} label="Post-Money" value={entryPostMoney ? formatPortfolioCurrency(entryPostMoney) : '—'} />
                     <Metric icon={<PieChart size={12} />} label="% Holding (Entry)" value={entryOwnership != null ? `${fmtNumber(entryOwnership)}%` : '—'} hint={entryOwnership != null && company.entryOwnership == null ? 'Computed' : undefined} />
                     <Metric
                         icon={<PieChart size={12} />}
@@ -335,15 +324,19 @@ function HeroStat({ label, value, sub, subColor, accent }: { label: string; valu
 // The entity list is the shared registry, so Legal names an entity exactly as
 // Portfolio and Fund do — this used to read the Fund page's own list, which is
 // how the same entity ended up called DVPL here and DVLLP there.
-function EntityPicker({ value, onChange }: {
+function EntityPicker({ value, onChange, error }: {
     value: string;
     onChange: (value: string) => void;
+    error?: string | null;
 }) {
     return (
         <div className="legal-dash-metric">
             <div className="legal-dash-metric-label"><Building2 size={12} /> Investment Entity</div>
             <div style={{ marginTop: 4 }}>
                 <InvestmentEntitySelect value={value} onChange={onChange} labelFontSize={13} />
+                {error && (
+                    <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 4 }}>{error}</div>
+                )}
             </div>
         </div>
     );

@@ -216,7 +216,7 @@ function AnalyticsContent() {
     const {
         companies, industries, users, dealSourceNames,
         getIndustryById, getDealSourceNameById, getUserById,
-        fetchFollowOns, followOnsVersion, investmentVehicles, investmentInstruments,
+        fetchAllFollowOns, followOnsVersion, investmentVehicles, investmentInstruments,
     } = useAppContext();
 
     // ─── Follow-on data ──────────────────────────
@@ -228,21 +228,27 @@ function AnalyticsContent() {
         [companies]
     );
 
+    // One request for every round in the book. This used to fire one request
+    // per portfolio company — a hundred companies meant a hundred round-trips
+    // before the page could draw anything, and any that failed silently became
+    // a company with no rounds, quietly understating its invested capital.
     const loadFollowOns = useCallback(async () => {
         const map = new Map<string, FollowOnRound[]>();
-        await Promise.all(
-            portfolioCompanies.map(async (c) => {
-                try {
-                    const fos = await fetchFollowOns(c.id);
-                    map.set(c.id, fos);
-                } catch {
-                    map.set(c.id, []);
-                }
-            })
-        );
+        try {
+            const rows = await fetchAllFollowOns();
+            for (const r of rows) {
+                const list = map.get(r.companyId);
+                if (list) list.push(r);
+                else map.set(r.companyId, [r]);
+            }
+        } catch {
+            // Leave the map empty rather than half-filled: a partial cap table
+            // would show numbers that look right and are not.
+            map.clear();
+        }
         setFollowOnsMap(map);
         setFollowOnsLoaded(true);
-    }, [portfolioCompanies, fetchFollowOns]);
+    }, [fetchAllFollowOns]);
 
     // followOnsVersion bumps on any round add / edit / delete, so every metric
     // on this page re-derives from fresh rounds instead of a stale first load.
