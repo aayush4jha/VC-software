@@ -11,6 +11,7 @@ interface CompanyDocument {
     isPitchDeck: boolean;
     source: string;
     gmailMessageId: string | null;
+    hasStoredFile?: boolean;
     receivedAt: string | null;
     senderEmail: string | null;
     subject: string | null;
@@ -66,7 +67,7 @@ export default function CompanyDocuments({ companyId }: { companyId: string }) {
     if (docs.length === 0) {
         return (
             <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-                No documents yet. Attachments on emails ingested for this company appear here.
+                No documents yet. Decks that arrive by email or WhatsApp for this company appear here.
             </div>
         );
     }
@@ -74,9 +75,13 @@ export default function CompanyDocuments({ companyId }: { companyId: string }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {docs.map(d => {
-                const href = d.gmailMessageId
-                    ? `/api/gmail/attachment?messageId=${encodeURIComponent(d.gmailMessageId)}&filename=${encodeURIComponent(d.fileName)}`
-                    : null;
+                // A file kept in storage (WhatsApp) opens from there; an email
+                // attachment streams from the Gmail message it arrived in.
+                const href = d.hasStoredFile
+                    ? `/api/company-documents/file?id=${encodeURIComponent(d.id)}`
+                    : d.gmailMessageId
+                        ? `/api/gmail/attachment?messageId=${encodeURIComponent(d.gmailMessageId)}&filename=${encodeURIComponent(d.fileName)}`
+                        : null;
                 const meta = [formatSize(d.sizeBytes), formatDate(d.receivedAt), d.senderEmail]
                     .filter(Boolean).join(' · ');
                 return (

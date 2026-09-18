@@ -91,6 +91,14 @@ eq('a containing name is NOT merged automatically', matchCompany(
     [{ id: '7', company_name: 'Dholakia', founder_email: 'a@gmail.com' }],
     { companyName: 'Dholakia Ventures', senderEmail: 'b@yahoo.com' },
 ), null);
+eq('no sender email does NOT match a company with a blank email', matchCompany(
+    [{ id: '8', company_name: 'Unrelated Co', founder_email: '' }, { id: '9', company_name: 'Other', founder_email: null }],
+    { companyName: 'Zeta Robotics', senderEmail: '' },
+), null);
+eq('no sender email still matches by name', matchCompany(
+    [{ id: '8', company_name: 'Zeta Robotics', founder_email: '' }],
+    { companyName: 'Zeta Robotics Pvt Ltd', senderEmail: '' },
+)?.id, '8');
 eq('short name does not match loosely', matchCompany(
     [{ id: '9', company_name: 'AB', founder_email: 'a@x.com' }],
     { companyName: 'AB', senderEmail: 'b@gmail.com' },

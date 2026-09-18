@@ -47,6 +47,8 @@ export async function GET(request: NextRequest) {
             isPitchDeck: d.is_pitch_deck,
             source: d.source,
             gmailMessageId: d.gmail_message_id,
+            // Present once supabase/whatsapp.sql adds the column; undefined before.
+            hasStoredFile: !!d.storage_path,
             receivedAt: d.received_at,
             senderEmail: d.sender_email,
             subject: d.subject,

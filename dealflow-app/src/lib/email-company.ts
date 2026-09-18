@@ -144,12 +144,19 @@ export function matchCompany(
     candidates: { id: string; company_name: string; founder_email: string | null }[],
     input: { companyName: string; senderEmail: string },
 ): CompanyMatch | null {
-    const senderLower = input.senderEmail.toLowerCase();
+    const senderLower = (input.senderEmail || '').trim().toLowerCase();
+    // No address (a WhatsApp message, a form): only the name can match. Without
+    // this guard '' equals every blank founder_email on file, and '' is also a
+    // "domain" every blank address shares — so a message with no email would
+    // be filed under whichever company happened to have none recorded.
+    const hasEmail = senderLower.includes('@');
 
-    const byEmail = candidates.find(c => (c.founder_email || '').toLowerCase() === senderLower);
+    const byEmail = hasEmail
+        ? candidates.find(c => (c.founder_email || '').toLowerCase() === senderLower)
+        : undefined;
     if (byEmail) return { ...byEmail, matchedBy: 'founder-email' };
 
-    if (!isFreeEmailDomain(input.senderEmail)) {
+    if (hasEmail && !isFreeEmailDomain(senderLower)) {
         const domain = emailDomain(input.senderEmail);
         const byDomain = candidates.find(c => emailDomain(c.founder_email || '') === domain);
         if (byDomain) return { ...byDomain, matchedBy: 'domain' };

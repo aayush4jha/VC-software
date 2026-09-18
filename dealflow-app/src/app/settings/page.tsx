@@ -6,15 +6,16 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Layers, AlertTriangle, Tags, Building2, Users,
-    Plus, Trash2, GripVertical, Pencil, Check, X,
+    Plus, Trash2, GripVertical, Pencil, Check, X, MessageCircle,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
+import WhatsAppLink from '@/components/common/WhatsAppLink';
 import { ALL_PAGE_PERMISSIONS } from '@/types/database';
 import type { PagePermission } from '@/types/database';
 
-type SettingsSection = 'stages' | 'industries' | 'rejection' | 'sources' | 'team';
+type SettingsSection = 'stages' | 'industries' | 'rejection' | 'sources' | 'team' | 'whatsapp';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
     { id: 'stages',    label: 'Pipeline Stages',         icon: Layers },
@@ -22,6 +23,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[
     { id: 'rejection', label: 'Rejection Reasons',        icon: AlertTriangle },
     { id: 'sources',   label: 'Deal Sources',             icon: Tags },
     { id: 'team',      label: 'Team Members',             icon: Users },
+    { id: 'whatsapp',  label: 'WhatsApp',                 icon: MessageCircle },
 ];
 
 // Deterministic avatar colour from a string
@@ -625,6 +627,7 @@ export default function SettingsPage() {
                             {active === 'rejection'  && renderRejection()}
                             {active === 'sources'    && renderSources()}
                             {active === 'team'       && renderTeam()}
+                            {active === 'whatsapp'   && <WhatsAppLink showSetupStatus />}
                         </div>
 
                     </div>
