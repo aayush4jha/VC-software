@@ -13,6 +13,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
+import DeckReport from '@/components/emails/DeckReport';
 
 interface ExtractedData {
     companyName: string | null;
@@ -53,6 +54,8 @@ function EmailsContent() {
     const { isConnected, isChecking, connect, disconnect } = useGoogleAuth();
     const searchParams = useSearchParams();
     const targetMessageId = searchParams.get('messageId');
+    // The morning report email links here with ?view=decks.
+    const [view, setView] = useState<'inbox' | 'decks'>(searchParams.get('view') === 'decks' ? 'decks' : 'inbox');
 
     const [emails, setEmails] = useState<WorkspaceEmail[]>([]);
     const [loading, setLoading] = useState(false);
@@ -225,8 +228,31 @@ function EmailsContent() {
 
     return (
         <>
-            <TopHeader title="Email Workspace" subtitle={`${emails.length} emails`} />
+            <TopHeader title="Email Workspace" subtitle={view === 'decks' ? 'Your pitch deck report' : `${emails.length} emails`} />
             <div className="page-content page-enter" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', padding: 0 }}>
+                {/* Inbox / report switch */}
+                <div style={{ display: 'flex', gap: 4, padding: '10px 24px 0', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
+                    {([
+                        { key: 'inbox' as const, label: 'Inbox', icon: <Inbox size={14} /> },
+                        { key: 'decks' as const, label: 'Pitch Deck Report', icon: <FileText size={14} /> },
+                    ]).map(t => (
+                        <button
+                            key={t.key}
+                            onClick={() => setView(t.key)}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13,
+                                fontWeight: view === t.key ? 600 : 500, border: 'none', background: 'none', cursor: 'pointer',
+                                color: view === t.key ? 'var(--primary)' : 'var(--text-secondary)',
+                                borderBottom: view === t.key ? '2px solid var(--primary)' : '2px solid transparent',
+                                marginBottom: -1, fontFamily: 'var(--font-sans)',
+                            }}
+                        >
+                            {t.icon} {t.label}
+                        </button>
+                    ))}
+                </div>
+
+                {view === 'decks' ? <DeckReport /> : (<>
                 {/* Top Bar */}
                 <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -578,6 +604,7 @@ function EmailsContent() {
                         </div>
                     </div>
                 )}
+                </>)}
             </div>
         </>
     );

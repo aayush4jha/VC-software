@@ -40,7 +40,15 @@ async function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
 // OAuth callbacks, which establish the session in the first place. Every
 // other route under /api requires a signed-in member — and re-checks that
 // for itself, since middleware is a gate, not the guard.
-const PUBLIC_API_PATHS = ['/api/calendar/book', '/api/calendar/slots', '/api/auth/google/callback'];
+//
+// Two callers can never hold a session, so each route authenticates itself:
+//   /api/whatsapp/webhook — Meta. Verified by the X-Hub-Signature-256 HMAC.
+//   /api/cron/            — Vercel Cron. Verified by the CRON_SECRET bearer,
+//                           and refuses to run at all when it is unset.
+const PUBLIC_API_PATHS = [
+    '/api/calendar/book', '/api/calendar/slots', '/api/auth/google/callback',
+    '/api/whatsapp/webhook', '/api/cron/',
+];
 
 function isPublicApi(pathname: string): boolean {
     return PUBLIC_API_PATHS.some(p => pathname === p || pathname.startsWith(p));

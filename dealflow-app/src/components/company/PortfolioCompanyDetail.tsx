@@ -16,6 +16,7 @@ import { stateOptions, formatLocation } from '@/lib/india-locations';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
 import CompanyDocuments from '@/components/common/CompanyDocuments';
+import DebtFacilityPanel from './DebtFacilityPanel';
 import { getCompanyFinancials } from '@/lib/company-financials';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import CompanyNotesPanel from './CompanyNotesPanel';
@@ -652,6 +653,20 @@ export default function PortfolioCompanyDetail() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Debt terms and repayments — for Debt investments */}
+                    <DebtFacilityPanel
+                        key={c.id}
+                        companyId={c.id}
+                        isDebt={c.shareType === 'Debt' || c.investmentInstrument === 'Debt'}
+                        defaults={{
+                            principal: c.initialInvestment ? String(c.initialInvestment) : '',
+                            startDate: (c.entryDate ?? '').slice(0, 10),
+                            borrowerEmail: c.founderEmail || '',
+                        }}
+                        sectionTitleStyle={sectionTitleStyle}
+                        cardStyle={detailCardStyle}
+                    />
 
                     {/* Follow-on Rounds */}
                     <div style={{ marginBottom: 28 }}>

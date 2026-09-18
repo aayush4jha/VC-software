@@ -7,6 +7,7 @@ import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder }
 import { stateOptions } from '@/lib/india-locations';
 import { findSimilarCompanies } from '@/lib/company-dedupe';
 import DuplicateCompanyWarning from '@/components/common/DuplicateCompanyWarning';
+import { DebtTermsFields, emptyDebtDraft, draftError, draftToPayload, type DebtDraft } from './DebtFacilityPanel';
 import { INVESTMENT_TYPES } from '@/types/database';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
@@ -168,12 +169,32 @@ export default function PortfolioCompanyForm() {
         [companies, form.company_name, editingCompany?.id],
     );
     const [dupAckFor, setDupAckFor] = useState<string | null>(null);
+
     const dupAcknowledged = dupAckFor === form.company_name;
     const blockedByDuplicate = duplicates.length > 0 && !dupAcknowledged;
 
     const [followOns, setFollowOns] = useState<LocalFollowOn[]>([]);
     const [deletedFollowOnIds, setDeletedFollowOnIds] = useState<string[]>([]);
     const [founders, setFounders] = useState<Founder[]>([{ name: '', email: '' }]);
+
+    // Debt terms entered while adding the company. Optional here — they can be
+    // added from the company panel later — but if any are typed, all must be
+    // valid, so a half-filled loan is never saved as a real schedule.
+    const [debtDraft, setDebtDraft] = useState<DebtDraft>(() => emptyDebtDraft());
+    // What the fields show is the draft with the investment's own amount, entry
+    // date and first founder filled in where nothing was typed. This one object
+    // is what is displayed, validated AND saved — showing a prefilled amount
+    // while validating the empty draft underneath would reject a form that
+    // looks complete.
+    const effectiveDebtDraft: DebtDraft = {
+        ...debtDraft,
+        principal: debtDraft.principal || form.initial_investment,
+        startDate: debtDraft.startDate || form.entry_date,
+        borrowerEmail: debtDraft.borrowerEmail || founders[0]?.email || '',
+    };
+    // The rate has no default, so typing anything into the debt fields at all
+    // is what marks them as meant to be saved.
+    const debtDraftTouched = !!(debtDraft.principal || debtDraft.annualRatePct || debtDraft.startDate);
     const [saving, setSaving] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [showNewIndustryInput, setShowNewIndustryInput] = useState(false);
@@ -354,6 +375,7 @@ export default function PortfolioCompanyForm() {
             setFollowOns([]);
             setDeletedFollowOnIds([]);
             setFounders([{ name: '', email: '' }]);
+            setDebtDraft(emptyDebtDraft());
         }
     }, [editingCompany, isEditing, industries, dealSourceNames, fetchFollowOns]);
 
@@ -403,6 +425,14 @@ export default function PortfolioCompanyForm() {
         if (missing.length > 0) {
             setSubmitError(`Please fill: ${missing.join(', ')}.`);
             return;
+        }
+        const isDebt = form.share_type === 'Debt' || form.investment_instrument === 'Debt';
+        if (!isEditing && isDebt && debtDraftTouched) {
+            const problem = draftError(effectiveDebtDraft);
+            if (problem) {
+                setSubmitError(`Debt terms: ${problem}`);
+                return;
+            }
         }
         if (blockedByDuplicate) {
             setSubmitError('This company may already be on the platform — open the existing one, or tick "It\'s a different company".');
@@ -555,6 +585,25 @@ export default function PortfolioCompanyForm() {
                 const { fo } = orderedFollowOns[i];
                 const { dropped } = await addFollowOn({ ...buildFollowOnPayload(fo, followOnAuto[i]), companyId: created.id });
                 droppedColumns.push(...dropped);
+            }
+            const isDebt = form.share_type === 'Debt' || form.investment_instrument === 'Debt';
+            if (isDebt && debtDraftTouched) {
+                const res = await fetch('/api/debt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyId: created.id,
+                        ...draftToPayload(effectiveDebtDraft),
+                    }),
+                });
+                if (!res.ok) {
+                    const j = await res.json().catch(() => ({}));
+                    // The company exists; only the terms failed. Say so plainly
+                    // and keep the form open, rather than implying nothing saved.
+                    setSaving(false);
+                    setSubmitError(`Company added, but the debt terms were not saved: ${j.error || res.statusText}. Add them from the company's Debt section.`);
+                    return;
+                }
             }
         }
 
@@ -861,6 +910,24 @@ export default function PortfolioCompanyForm() {
                             </div>
                         )}
                     </div>
+
+                    {/* Debt terms — only when the investment is Debt */}
+                    {(form.share_type === 'Debt' || form.investment_instrument === 'Debt') && (
+                        <div style={{
+                            margin: '4px 0 16px', padding: 14, borderRadius: 10,
+                            border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
+                        }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Debt terms</div>
+                            {isEditing ? (
+                                <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                    Debt terms, the repayment schedule and payment status are managed in this
+                                    company&apos;s <strong>Debt Terms & Repayments</strong> section.
+                                </div>
+                            ) : (
+                                <DebtTermsFields draft={effectiveDebtDraft} onChange={setDebtDraft} compact />
+                            )}
+                        </div>
+                    )}
 
                     {/* Status + Portfolio Health */}
                     <div className="form-row">

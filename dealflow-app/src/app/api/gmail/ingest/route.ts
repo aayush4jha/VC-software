@@ -4,6 +4,7 @@ import { createClient as createServiceClient, type SupabaseClient } from '@supab
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
+import { collectAttachments, type AttachmentPart } from '@/lib/server/gmail-parse';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 const TARGET_EMAIL = 'pipeline@dholakiaventures.com';
@@ -48,36 +49,6 @@ function extractSenderInfo(fromHeader: string): { name: string; email: string } 
 function isPitchDeckAttachment(filename: string): boolean {
     const lower = filename.toLowerCase();
     return PITCH_DECK_EXTENSIONS.some(ext => lower.endsWith(ext));
-}
-
-export interface AttachmentPart {
-    filename?: string | null;
-    mimeType?: string | null;
-    body?: { attachmentId?: string | null; size?: number | null } | null;
-    parts?: AttachmentPart[] | null;
-}
-
-// Walks the whole MIME tree. Only the top level was read before, which missed
-// every deck sent as multipart/mixed inside multipart/related — the common
-// shape from Outlook and most mail clients that inline a signature image.
-export function collectAttachments(payload: AttachmentPart | null | undefined): {
-    filename: string; mimeType: string; attachmentId: string; size: number;
-}[] {
-    const out: { filename: string; mimeType: string; attachmentId: string; size: number }[] = [];
-    const walk = (part: AttachmentPart | null | undefined) => {
-        if (!part) return;
-        if (part.filename && part.body?.attachmentId) {
-            out.push({
-                filename: part.filename,
-                mimeType: part.mimeType || 'application/octet-stream',
-                attachmentId: part.body.attachmentId,
-                size: part.body.size || 0,
-            });
-        }
-        (part.parts || []).forEach(walk);
-    };
-    walk(payload);
-    return out;
 }
 
 function decodeBase64Url(data: string): string {

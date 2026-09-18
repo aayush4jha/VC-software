@@ -164,3 +164,41 @@ export function matchCompany(
 
     return null;
 }
+
+// Words a deck's filename carries that are about the document, not the company.
+const DECK_FILENAME_NOISE = new Set([
+    'pitch', 'deck', 'pitchdeck', 'investor', 'investors', 'presentation', 'ppt', 'pptx', 'pdf', 'key',
+    'final', 'draft', 'updated', 'update', 'new', 'latest', 'copy', 'version', 'ver', 'rev',
+    'seed', 'preseed', 'pre', 'series', 'a', 'b', 'c', 'round', 'fundraise', 'fundraising', 'raise',
+    'company', 'profile', 'overview', 'teaser', 'one', 'pager', 'onepager', 'business', 'plan',
+    'confidential', 'intro', 'introduction', 'for', 'dv', 'dholakia', 'ventures', 'vc',
+    'and', 'the', 'of', 'to', 'by', 'with', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug',
+    'sep', 'sept', 'oct', 'nov', 'dec', 'q1', 'q2', 'q3', 'q4', 'fy', 'h1', 'h2',
+]);
+
+/**
+ * The company a deck's filename names, if it plausibly names one:
+ * "StrainX_Pitch_Deck_v3.pdf" -> "StrainX", "Nova Robotics - Investor
+ * Presentation 2026.pptx" -> "Nova Robotics". Null when nothing is left once
+ * the document words, versions and dates are removed ("Pitch Deck.pdf").
+ */
+export function companyNameFromDeckFilename(filename: string): string | null {
+    const base = filename.replace(/\.[a-z0-9]{2,5}$/i, '');
+    const words = base
+        .split(/[\s_\-.,()[\]+]+/)
+        .filter(Boolean)
+        .filter(w => {
+            const lw = w.toLowerCase();
+            if (DECK_FILENAME_NOISE.has(lw)) return false;
+            if (/^v\d+$/i.test(w) || /^\d+$/.test(w) || /^(19|20)\d{2}$/.test(w)) return false;
+            if (/^\d+(st|nd|rd|th)$/i.test(w)) return false;
+            return true;
+        });
+    if (words.length === 0 || words.length > 4) return null;
+    const name = words.join(' ');
+    if (name.length < 2 || name.length > 40) return null;
+    // Keep the founder's own casing ("StrainX"), but lift an all-lowercase name.
+    return name === name.toLowerCase()
+        ? name.replace(/\b[a-z]/g, c => c.toUpperCase())
+        : name;
+}

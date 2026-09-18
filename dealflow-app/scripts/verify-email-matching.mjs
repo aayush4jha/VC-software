@@ -7,7 +7,7 @@
 //
 // Run with: npm run test:email
 
-import { deriveCompanyName, matchCompany, normalizeCompanyName, companyNameFromDomain } from '../.email-test/email-company.mjs';
+import { deriveCompanyName, matchCompany, normalizeCompanyName, companyNameFromDomain, companyNameFromDeckFilename } from '../.email-test/email-company.mjs';
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -95,6 +95,15 @@ eq('short name does not match loosely', matchCompany(
     [{ id: '9', company_name: 'AB', founder_email: 'a@x.com' }],
     { companyName: 'AB', senderEmail: 'b@gmail.com' },
 ), null);
+
+console.log('— company name from a deck filename —');
+eq('underscored with version', companyNameFromDeckFilename('StrainX_Pitch_Deck_v3.pdf'), 'StrainX');
+eq('spaced with year', companyNameFromDeckFilename('Nova Robotics - Investor Presentation 2026.pptx'), 'Nova Robotics');
+eq('lowercase lifted', companyNameFromDeckFilename('zippy-logistics-deck.pdf'), 'Zippy Logistics');
+eq('nothing but document words', companyNameFromDeckFilename('Pitch Deck.pdf'), null);
+eq('nothing but a date', companyNameFromDeckFilename('Deck_Sept_2026_final.pdf'), null);
+eq('series and round words dropped', companyNameFromDeckFilename('Acorn Health Series A Deck.pdf'), 'Acorn Health');
+eq('a sentence is not a name', companyNameFromDeckFilename('this is our company deck for your kind review please.pdf'), null);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
