@@ -83,6 +83,14 @@ eq('gmail does NOT match gmail by domain', matchCompany(
     [{ id: '9', company_name: 'Totally Different', founder_email: 'someone@gmail.com' }],
     { companyName: 'Another Co', senderEmail: 'other@gmail.com' },
 ), null);
+eq('spelling variant joins the existing company', matchCompany(
+    [{ id: '7', company_name: 'Dholakia', founder_email: 'a@gmail.com' }],
+    { companyName: "Dholakiya's", senderEmail: 'b@yahoo.com' },
+)?.id, '7');
+eq('a containing name is NOT merged automatically', matchCompany(
+    [{ id: '7', company_name: 'Dholakia', founder_email: 'a@gmail.com' }],
+    { companyName: 'Dholakia Ventures', senderEmail: 'b@yahoo.com' },
+), null);
 eq('short name does not match loosely', matchCompany(
     [{ id: '9', company_name: 'AB', founder_email: 'a@x.com' }],
     { companyName: 'AB', senderEmail: 'b@gmail.com' },

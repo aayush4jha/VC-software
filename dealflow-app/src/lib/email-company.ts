@@ -1,3 +1,5 @@
+import { isSameCompanyName } from './company-dedupe';
+
 // Working out which company an inbound email is about.
 //
 // Shared by every route that turns an email into a company (gmail/ingest and
@@ -153,11 +155,12 @@ export function matchCompany(
         if (byDomain) return { ...byDomain, matchedBy: 'domain' };
     }
 
-    const key = normalizeCompanyName(input.companyName);
-    if (key.length >= 3) {
-        const byName = candidates.find(c => normalizeCompanyName(c.company_name) === key);
-        if (byName) return { ...byName, matchedBy: 'name' };
-    }
+    // Spelling variants of the same name count — "Dholakiya" and "Dholakia's"
+    // join an existing "Dholakia". isSameCompanyName is the strict test, since
+    // nobody reviews this merge; looser near-misses are left for the forms to
+    // put in front of a person.
+    const byName = candidates.find(c => isSameCompanyName(c.company_name, input.companyName));
+    if (byName) return { ...byName, matchedBy: 'name' };
 
     return null;
 }

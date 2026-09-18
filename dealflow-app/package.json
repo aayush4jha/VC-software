@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:portfolio": "tsc src/lib/portfolio-utils.ts --outDir .portfolio-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; mv -f .portfolio-test/portfolio-utils.js .portfolio-test/portfolio-utils.mjs && node scripts/verify-overrides.mjs",
-    "test:email": "tsc src/lib/email-company.ts --outDir .email-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; mv -f .email-test/email-company.js .email-test/email-company.mjs && node scripts/verify-email-matching.mjs"
+    "test:email": "tsc src/lib/email-company.ts src/lib/company-dedupe.ts --outDir .email-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; node scripts/fix-test-imports.mjs .email-test && node scripts/verify-email-matching.mjs",
+    "test:dedupe": "tsc src/lib/company-dedupe.ts --outDir .dedupe-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; mv -f .dedupe-test/company-dedupe.js .dedupe-test/company-dedupe.mjs && node scripts/verify-company-dedupe.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

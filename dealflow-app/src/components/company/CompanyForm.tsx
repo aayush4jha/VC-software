@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { X, Plus, Search } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { CompanyRound, PriorityLevel, DealSourceType, ShareType, INVESTMENT_TYPES } from '@/types/database';
 import { stateOptions } from '@/lib/india-locations';
+import { findSimilarCompanies } from '@/lib/company-dedupe';
+import DuplicateCompanyWarning from '@/components/common/DuplicateCompanyWarning';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
@@ -53,6 +55,17 @@ export default function CompanyForm() {
         linked_previous_entry_id: '',
     });
     const [saving, setSaving] = useState(false);
+
+    // Companies already on the platform under this name or a spelling of it.
+    // The acknowledgement is keyed to the exact name it was given for, so
+    // editing the name re-arms the check instead of carrying a stale "yes".
+    const duplicates = useMemo(
+        () => findSimilarCompanies(companies, form.company_name, { excludeId: editingCompany?.id }),
+        [companies, form.company_name, editingCompany?.id],
+    );
+    const [dupAckFor, setDupAckFor] = useState<string | null>(null);
+    const dupAcknowledged = dupAckFor === form.company_name;
+    const blockedByDuplicate = duplicates.length > 0 && !dupAcknowledged;
 
     // State for the "Link to Previous Entry" searchable dropdown
     const [linkSearch, setLinkSearch] = useState('');
@@ -133,6 +146,7 @@ export default function CompanyForm() {
 
     const handleSubmit = async () => {
         if (!form.company_name || !form.founder_name || !form.founder_email) return;
+        if (blockedByDuplicate) return;
         setSaving(true);
         const data: Record<string, unknown> = {
             companyName: form.company_name,
@@ -191,6 +205,12 @@ export default function CompanyForm() {
                         <div className="form-group">
                             <label className="form-label">Company Name *</label>
                             <input className="form-input" placeholder="Enter company name" value={form.company_name} onChange={upd('company_name')} />
+                            <DuplicateCompanyWarning
+                                matches={duplicates}
+                                acknowledged={dupAcknowledged}
+                                onAcknowledge={v => setDupAckFor(v ? form.company_name : null)}
+                                onBeforeOpen={handleClose}
+                            />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Pipeline Stage</label>
@@ -393,7 +413,12 @@ export default function CompanyForm() {
                 </div>
                 <div className="modal-footer">
                     <button className="btn btn-secondary" onClick={handleClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleSubmit}
+                        disabled={saving || blockedByDuplicate}
+                        title={blockedByDuplicate ? 'This company may already exist — open it, or confirm it is a different company' : undefined}
+                    >
                         <Plus size={14} /> {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Company'}
                     </button>
                 </div>

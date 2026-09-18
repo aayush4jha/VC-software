@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { CompanyRound, ShareType, FollowOnRound, PortfolioHealth, Founder } from '@/types/database';
 import { stateOptions } from '@/lib/india-locations';
+import { findSimilarCompanies } from '@/lib/company-dedupe';
+import DuplicateCompanyWarning from '@/components/common/DuplicateCompanyWarning';
 import { INVESTMENT_TYPES } from '@/types/database';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
@@ -125,6 +127,7 @@ export default function PortfolioCompanyForm() {
         industries, users, dealSourceNames, pipelineStages,
         createCompany, updateCompany, addIndustry,
         fetchFollowOns, addFollowOn, updateFollowOn, deleteFollowOn,
+        companies,
     } = useAppContext();
 
     const isEditing = !!editingCompany && editingCompany.terminalStatus === 'Portfolio';
@@ -156,6 +159,17 @@ export default function PortfolioCompanyForm() {
         portfolio_health: '' as PortfolioHealth | '',
         notes: '',
     });
+
+    // Same check as the deal-flow form: a company already on the platform under
+    // this name or a spelling of it blocks saving until the person opens it or
+    // confirms it is different. Keyed to the exact name so an edit re-arms it.
+    const duplicates = useMemo(
+        () => findSimilarCompanies(companies, form.company_name, { excludeId: editingCompany?.id }),
+        [companies, form.company_name, editingCompany?.id],
+    );
+    const [dupAckFor, setDupAckFor] = useState<string | null>(null);
+    const dupAcknowledged = dupAckFor === form.company_name;
+    const blockedByDuplicate = duplicates.length > 0 && !dupAcknowledged;
 
     const [followOns, setFollowOns] = useState<LocalFollowOn[]>([]);
     const [deletedFollowOnIds, setDeletedFollowOnIds] = useState<string[]>([]);
@@ -390,6 +404,10 @@ export default function PortfolioCompanyForm() {
             setSubmitError(`Please fill: ${missing.join(', ')}.`);
             return;
         }
+        if (blockedByDuplicate) {
+            setSubmitError('This company may already be on the platform — open the existing one, or tick "It\'s a different company".');
+            return;
+        }
 
         setSaving(true);
 
@@ -569,6 +587,12 @@ export default function PortfolioCompanyForm() {
                         <div className="form-group">
                             <label className="form-label">Company Name *</label>
                             <input className="form-input" placeholder="Enter company name" value={form.company_name} onChange={upd('company_name')} />
+                            <DuplicateCompanyWarning
+                                matches={duplicates}
+                                acknowledged={dupAcknowledged}
+                                onAcknowledge={v => setDupAckFor(v ? form.company_name : null)}
+                                onBeforeOpen={handleClose}
+                            />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Industry *</label>
