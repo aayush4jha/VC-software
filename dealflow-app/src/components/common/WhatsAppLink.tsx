@@ -77,12 +77,14 @@ export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: bo
                 <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>WhatsApp</h2>
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 14px' }}>
-                Forward a founder&apos;s deck or type a startup&apos;s details to the Dholakia Ventures bot
-                {botNumber ? <> at <strong>{botNumber}</strong></> : ''} and it lands in Deal Flow — or is filed under
-                the company if it is already on the platform. The bot only listens to numbers linked here.
+                Forward a founder&apos;s deck or type a startup&apos;s details to the Dholakia Ventures bot on WhatsApp
+                and it lands in Deal Flow — or is filed under the company if it is already on the platform.
+                The bot only listens to numbers linked here.
             </p>
 
-            {(unavailable || (showSetupStatus && !configured)) && (
+            {/* Whether the bot can actually be messaged yet — shown to everyone,
+                not just admins: linking a number is useless while it cannot. */}
+            {(unavailable || !configured) && (
                 <div style={{
                     display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 8, marginBottom: 14, fontSize: 12,
                     border: '1px solid rgba(245,158,11,0.45)', background: 'rgba(245,158,11,0.08)', color: '#92400e',
@@ -90,13 +92,45 @@ export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: bo
                     <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
                     <div>
                         {unavailable && <div>Needs <code>supabase/whatsapp.sql</code> applied in the Supabase SQL editor.</div>}
-                        {showSetupStatus && !configured && (
+                        {!configured && (
                             <div>
-                                The bot is not connected yet. Set these in Vercel → Project → Environment Variables:{' '}
-                                <code>{(missing.length ? missing : ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN']).join(', ')}</code>
+                                <strong>The bot has no number yet</strong> — there is nothing to forward a deck to until
+                                an admin finishes the WhatsApp setup. You can link your number now; it will start working
+                                the moment the bot is connected.
+                                {showSetupStatus && (
+                                    <div style={{ marginTop: 6 }}>
+                                        Admin: create a Meta app with the WhatsApp product, point its webhook at{' '}
+                                        <code>/api/whatsapp/webhook</code>, then set these in Vercel → Environment Variables
+                                        and redeploy:{' '}
+                                        <code>{(missing.length ? missing : ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN']).join(', ')}</code>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Live: the number to message, one tap away. */}
+            {configured && botNumber && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                    padding: '12px 14px', borderRadius: 10, marginBottom: 14,
+                    border: '1px solid rgba(37,211,102,0.4)', background: 'rgba(37,211,102,0.08)',
+                }}>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Message the bot on</div>
+                        <div style={{ fontSize: 16, fontWeight: 700 }}>{botNumber}</div>
+                    </div>
+                    <a
+                        className="btn btn-primary btn-sm"
+                        href={`https://wa.me/${botNumber.replace(/\D/g, '')}?text=${encodeURIComponent('help')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: 'none' }}
+                    >
+                        <MessageCircle size={14} /> Open the chat
+                    </a>
                 </div>
             )}
 
