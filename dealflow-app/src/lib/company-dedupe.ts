@@ -117,6 +117,25 @@ export function isSameCompanyName(a: string, b: string): boolean {
     return nameSimilarity(a, b) >= AUTO_MERGE_SIMILARITY;
 }
 
+/**
+ * Could these two names be the same company? Used to sanity-check a match made
+ * on an email address: the address on a company is whoever sent the mail, not
+ * necessarily its founder, so one address that forwards many pitches would
+ * otherwise swallow every one of them into the first company it created.
+ *
+ * Deliberately generous — "Acme" and "Acme Technologies" are compatible, and an
+ * unknown name contradicts nothing. It only reports the clear case of two
+ * different companies, which is enough to stop a wrong merge.
+ */
+export function namesCompatible(a: string, b: string): boolean {
+    const ka = companyNameKey(a);
+    const kb = companyNameKey(b);
+    if (!ka || !kb) return true;
+    if (isSameCompanyName(a, b)) return true;
+    const [short, long] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
+    return short.length >= 4 && long.startsWith(short);
+}
+
 export type SimilarityReason = 'same-name' | 'spelling-variant' | 'contains';
 
 export interface SimilarCompany<T> {

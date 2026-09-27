@@ -72,8 +72,22 @@ const book = [
     { id: '2', company_name: 'Nova Robotics', founder_email: 'me@gmail.com' },
     { id: '3', company_name: 'Acorn Health', founder_email: 'x@acornhealth.com' },
 ];
-eq('exact address', matchCompany(book, { companyName: 'Whatever', senderEmail: 'ravi@acme.io' })?.id, '1');
-eq('co-founder on same work domain', matchCompany(book, { companyName: 'Whatever', senderEmail: 'priya@acme.io' })?.matchedBy, 'domain');
+eq('exact address, name unknown', matchCompany(book, { companyName: '', senderEmail: 'ravi@acme.io' })?.id, '1');
+eq('exact address, name is only the sender\'s own name', matchCompany(book,
+    { companyName: 'Ravi Kumar', senderEmail: 'ravi@acme.io', senderName: 'Ravi Kumar' })?.id, '1');
+eq('exact address, shorter form of the same name', matchCompany(book,
+    { companyName: 'Acme', senderEmail: 'ravi@acme.io' })?.id, '1');
+eq('co-founder on same work domain', matchCompany(book, { companyName: 'Acme', senderEmail: 'priya@acme.io' })?.matchedBy, 'domain');
+// The real merge that should not have happened: one address forwarding many
+// different pitches had them all filed under the first company it created.
+eq('a clearly different company is NOT merged on the sender address alone', matchCompany(
+    [{ id: '5', company_name: 'Pitch Deck - WebLedger II AI Co-Pilot', founder_email: 'forwarder@gmail.com' }],
+    { companyName: 'Veyra', senderEmail: 'forwarder@gmail.com', senderName: 'Aayush Jha' },
+), null);
+eq('...nor on a shared work domain', matchCompany(
+    [{ id: '5', company_name: 'WebLedger', founder_email: 'scout@fund.vc' }],
+    { companyName: 'Veyra', senderEmail: 'scout@fund.vc', senderName: 'Scout' },
+), null);
 eq('name match across providers', matchCompany(book, { companyName: 'Acme Technologies', senderEmail: 'ravi@gmail.com' })?.id, '1');
 eq('a differently-named firm is NOT merged in', matchCompany(book, { companyName: 'Acme Labs', senderEmail: 'z@gmail.com' }), null);
 eq('different company is NOT merged', matchCompany(book, { companyName: 'Acorn Health', senderEmail: 'new@gmail.com' })?.id, '3');

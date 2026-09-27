@@ -83,7 +83,7 @@ export function buildDeckReport(
 
     for (const g of groups) {
         for (const s of g.senders) {
-            const m = matchCompany(companies, { companyName: g.companyName, senderEmail: s.email });
+            const m = matchCompany(companies, { companyName: g.companyName, senderEmail: s.email, senderName: s.name });
             if (m) {
                 const c = companies.find(x => x.id === m.id)!;
                 const where = c.terminal_status === 'Portfolio' ? 'Portfolio'

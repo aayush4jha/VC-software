@@ -68,6 +68,7 @@ function EmailsContent() {
     const [filter, setFilter] = useState<'all' | 'received' | 'sent' | 'relevant'>('all');
     const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
     const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+    const [sentNote, setSentNote] = useState<Record<string, string>>({});
     const [selectedEmail, setSelectedEmail] = useState<WorkspaceEmail | null>(null);
     const [showCompose, setShowCompose] = useState(false);
     const [composeTo, setComposeTo] = useState('');
@@ -140,6 +141,12 @@ function EmailsContent() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
             setSentIds(prev => new Set(prev).add(email.id));
+            // Filing under an existing company is a different outcome from
+            // adding one, and looked identical here — a tick, and nothing new
+            // in Deal Flow to find.
+            if (data.matchedExisting) {
+                setSentNote(prev => ({ ...prev, [email.id]: `Filed under existing company "${data.company?.companyName}"` }));
+            }
             await refreshData();
         } catch (err) {
             alert((err as Error).message);
@@ -388,7 +395,16 @@ function EmailsContent() {
                                             <Paperclip size={11} style={{ color: 'var(--text-tertiary)' }} />
                                         )}
                                         {sentIds.has(email.id) && (
-                                            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontWeight: 600 }}>Added</span>
+                                            sentNote[email.id] ? (
+                                                <span
+                                                    title={sentNote[email.id]}
+                                                    style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.15)', color: '#b45309', fontWeight: 600 }}
+                                                >
+                                                    Filed under existing
+                                                </span>
+                                            ) : (
+                                                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontWeight: 600 }}>Added</span>
+                                            )
                                         )}
                                     </div>
                                 </div>

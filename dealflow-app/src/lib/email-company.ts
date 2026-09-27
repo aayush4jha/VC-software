@@ -1,4 +1,4 @@
-import { isSameCompanyName } from './company-dedupe';
+import { isSameCompanyName, namesCompatible } from './company-dedupe';
 
 // Working out which company an inbound email is about.
 //
@@ -137,12 +137,21 @@ export interface CompanyMatch {
  * startup — from the founder's personal address, a co-founder, or an
  * introducer — joins the existing record instead of creating a second one.
  *
- * Order matters: the exact address is certain, a shared work domain is strong,
- * and a matching normalised name is the loosest, so it is checked last.
+ * Order matters: the exact address first, then a shared work domain, then a
+ * matching name.
+ *
+ * An address match is strong but NOT certain, which is the lesson from a merge
+ * that should not have happened: founder_email holds whoever SENT the mail, so
+ * someone forwarding pitches from their own address had every one of them filed
+ * under the first company that address created. A match on address or domain is
+ * therefore dropped when the name says plainly that this is a different
+ * company. `senderName` is what separates a real company name from
+ * deriveCompanyName's last-resort fallback to the sender's own name — a
+ * person's name contradicts nothing.
  */
 export function matchCompany(
     candidates: { id: string; company_name: string; founder_email: string | null }[],
-    input: { companyName: string; senderEmail: string },
+    input: { companyName: string; senderEmail: string; senderName?: string },
 ): CompanyMatch | null {
     const senderLower = (input.senderEmail || '').trim().toLowerCase();
     // No address (a WhatsApp message, a form): only the name can match. Without
@@ -151,14 +160,21 @@ export function matchCompany(
     // be filed under whichever company happened to have none recorded.
     const hasEmail = senderLower.includes('@');
 
+    // Is the name we have a real company name, or just the sender's own name?
+    const named = (input.companyName || '').trim();
+    const nameIsSender = !!input.senderName && isSameCompanyName(named, input.senderName);
+    const nameIsKnown = named.length > 0 && !nameIsSender;
+    const compatible = (candidate: { company_name: string }) =>
+        !nameIsKnown || namesCompatible(candidate.company_name, named);
+
     const byEmail = hasEmail
-        ? candidates.find(c => (c.founder_email || '').toLowerCase() === senderLower)
+        ? candidates.find(c => (c.founder_email || '').toLowerCase() === senderLower && compatible(c))
         : undefined;
     if (byEmail) return { ...byEmail, matchedBy: 'founder-email' };
 
     if (hasEmail && !isFreeEmailDomain(senderLower)) {
         const domain = emailDomain(input.senderEmail);
-        const byDomain = candidates.find(c => emailDomain(c.founder_email || '') === domain);
+        const byDomain = candidates.find(c => emailDomain(c.founder_email || '') === domain && compatible(c));
         if (byDomain) return { ...byDomain, matchedBy: 'domain' };
     }
 

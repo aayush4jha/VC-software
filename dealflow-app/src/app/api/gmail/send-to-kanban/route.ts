@@ -334,7 +334,7 @@ export async function POST(request: NextRequest) {
             .from('companies')
             .select('id, company_name, founder_email')
             .eq('organization_id', ORGANIZATION_ID);
-        const match = matchCompany(companyRows || [], { companyName, senderEmail: founderEmail });
+        const match = matchCompany(companyRows || [], { companyName, senderEmail: founderEmail, senderName });
 
         if (match) {
             if (gmailMessageId) {

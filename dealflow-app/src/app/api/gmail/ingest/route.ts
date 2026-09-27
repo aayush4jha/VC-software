@@ -378,7 +378,7 @@ export async function POST(request: NextRequest) {
                 // normalised name — so a second mail about the same startup, from
                 // a co-founder or a personal address, joins that record instead
                 // of creating a near-duplicate beside it.
-                const match = matchCompany(existingCompanies, { companyName, senderEmail });
+                const match = matchCompany(existingCompanies, { companyName, senderEmail, senderName });
 
                 if (match) {
                     await db.from('ingested_emails').insert({

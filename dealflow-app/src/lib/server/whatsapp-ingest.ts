@@ -235,7 +235,9 @@ export async function processWhatsAppMessage(db: SupabaseClient, m: InboundMessa
         const { data: companyRows } = await db.from('companies')
             .select('id, company_name, founder_email, terminal_status, pipeline_stage_id')
             .eq('organization_id', ORGANIZATION_ID);
-        const match = matchCompany(companyRows || [], { companyName, senderEmail: ai.founderEmail || '' });
+        const match = matchCompany(companyRows || [], {
+            companyName, senderEmail: ai.founderEmail || '', senderName: m.profileName || '',
+        });
 
         let companyId: string;
         let created = false;
