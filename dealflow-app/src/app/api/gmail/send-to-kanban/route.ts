@@ -334,7 +334,11 @@ export async function POST(request: NextRequest) {
             .from('companies')
             .select('id, company_name, founder_email')
             .eq('organization_id', ORGANIZATION_ID);
-        const match = matchCompany(companyRows || [], { companyName, senderEmail: founderEmail, senderName });
+        // forceNew is the escape hatch for when the match is wrong: the person
+        // looking at the email overrules it, rather than having no way through.
+        const match = body.forceNew === true
+            ? null
+            : matchCompany(companyRows || [], { companyName, senderEmail: founderEmail, senderName });
 
         if (match) {
             if (gmailMessageId) {

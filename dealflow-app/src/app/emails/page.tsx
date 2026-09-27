@@ -116,7 +116,7 @@ function EmailsContent() {
         }
     }, [targetMessageId, emails, selectedEmail]);
 
-    const handleSendToKanban = useCallback(async (email: WorkspaceEmail) => {
+    const handleSendToKanban = useCallback(async (email: WorkspaceEmail, opts?: { forceNew?: boolean }) => {
         setSendingIds(prev => new Set(prev).add(email.id));
         try {
             const res = await fetch('/api/gmail/send-to-kanban', {
@@ -136,6 +136,7 @@ function EmailsContent() {
                     derivedCompanyName: email.derivedCompanyName,
                     extracted: email.extracted,
                     emailBody: email.emailBody || '',
+                    forceNew: opts?.forceNew === true,
                 }),
             });
             const data = await res.json();
@@ -144,9 +145,12 @@ function EmailsContent() {
             // Filing under an existing company is a different outcome from
             // adding one, and looked identical here — a tick, and nothing new
             // in Deal Flow to find.
-            if (data.matchedExisting) {
-                setSentNote(prev => ({ ...prev, [email.id]: `Filed under existing company "${data.company?.companyName}"` }));
-            }
+            setSentNote(prev => {
+                const next = { ...prev };
+                if (data.matchedExisting) next[email.id] = data.company?.companyName || 'an existing company';
+                else delete next[email.id];
+                return next;
+            });
             await refreshData();
         } catch (err) {
             alert((err as Error).message);
@@ -397,7 +401,7 @@ function EmailsContent() {
                                         {sentIds.has(email.id) && (
                                             sentNote[email.id] ? (
                                                 <span
-                                                    title={sentNote[email.id]}
+                                                    title={`Filed under existing company "${sentNote[email.id]}"`}
                                                     style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.15)', color: '#b45309', fontWeight: 600 }}
                                                 >
                                                     Filed under existing
@@ -536,7 +540,22 @@ function EmailsContent() {
                             {/* Action buttons */}
                             {selectedEmail.direction === 'received' && (
                                 <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-                                    {sentIds.has(selectedEmail.id) ? (
+                                    {sentIds.has(selectedEmail.id) && sentNote[selectedEmail.id] ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: 13, color: '#b45309', fontWeight: 600 }}>
+                                                Filed under existing company &ldquo;{sentNote[selectedEmail.id]}&rdquo;
+                                            </span>
+                                            <button
+                                                className="btn btn-primary btn-sm"
+                                                onClick={() => handleSendToKanban(selectedEmail, { forceNew: true })}
+                                                disabled={sendingIds.has(selectedEmail.id)}
+                                            >
+                                                {sendingIds.has(selectedEmail.id)
+                                                    ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Adding…</>
+                                                    : <>It&apos;s a different company — add it separately</>}
+                                            </button>
+                                        </div>
+                                    ) : sentIds.has(selectedEmail.id) ? (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
                                             <CheckCircle size={16} /> Added to Kanban
                                         </span>
