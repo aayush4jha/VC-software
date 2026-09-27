@@ -11,9 +11,10 @@
     "test:email": "tsc src/lib/email-company.ts src/lib/company-dedupe.ts --outDir .email-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; node scripts/fix-test-imports.mjs .email-test && node scripts/verify-email-matching.mjs",
     "test:dedupe": "tsc src/lib/company-dedupe.ts --outDir .dedupe-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; mv -f .dedupe-test/company-dedupe.js .dedupe-test/company-dedupe.mjs && node scripts/verify-company-dedupe.mjs",
     "test:debt": "tsc src/lib/debt-schedule.ts --outDir .debt-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; node scripts/fix-test-imports.mjs .debt-test && node scripts/verify-debt-schedule.mjs",
-    "test": "npm run test:portfolio && npm run test:email && npm run test:dedupe && npm run test:debt && npm run test:deckreport && npm run test:whatsapp",
+    "test": "npm run test:portfolio && npm run test:email && npm run test:dedupe && npm run test:debt && npm run test:deckreport && npm run test:whatsapp && npm run test:enums",
     "test:deckreport": "tsc src/lib/deck-report.ts src/lib/email-company.ts src/lib/company-dedupe.ts --outDir .deckreport-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; node scripts/fix-test-imports.mjs .deckreport-test && node scripts/verify-deck-report.mjs",
-    "test:whatsapp": "tsc src/lib/whatsapp.ts --outDir .whatsapp-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck --types node; node scripts/fix-test-imports.mjs .whatsapp-test && node scripts/verify-whatsapp.mjs"
+    "test:whatsapp": "tsc src/lib/whatsapp.ts --outDir .whatsapp-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck --types node; node scripts/fix-test-imports.mjs .whatsapp-test && node scripts/verify-whatsapp.mjs",
+    "test:enums": "tsc src/lib/company-enums.ts --outDir .enums-test --module esnext --target es2022 --moduleResolution bundler --skipLibCheck; node scripts/fix-test-imports.mjs .enums-test && node scripts/verify-company-enums.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

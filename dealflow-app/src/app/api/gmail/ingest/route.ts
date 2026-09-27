@@ -5,6 +5,7 @@ import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 import { collectAttachments, type AttachmentPart } from '@/lib/server/gmail-parse';
+import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 const TARGET_EMAIL = 'pipeline@dholakiaventures.com';
@@ -438,10 +439,12 @@ export async function POST(request: NextRequest) {
                     founder_name: founderName,
                     founder_email: senderEmail,
                     pipeline_stage_id: firstStageId,
-                    priority_level: ai.priorityLevel || 'Medium',
-                    company_round: ai.companyRound || 'Seed',
-                    deal_source_type: ai.dealSourceType || 'Founder Network',
-                    share_type: ai.shareType || 'Primary',
+                    // CHECK-constrained columns: an AI answering "Seed Round"
+                    // instead of "Seed" would fail the whole insert.
+                    priority_level: normalizePriority(ai.priorityLevel),
+                    company_round: normalizeCompanyRound(ai.companyRound),
+                    deal_source_type: normalizeDealSourceType(ai.dealSourceType),
+                    share_type: normalizeShareType(ai.shareType),
                     needs_review: true,
                     ingestion_source: 'email',
                     custom_tags: customTags,

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { callGeminiMultimodal, type GeminiPart } from '@/lib/gemini';
 import { companyNameFromDeckFilename, matchCompany } from '@/lib/email-company';
 import { isHelpCommand, WHATSAPP_HELP, type InboundMessage } from '@/lib/whatsapp';
+import { COMPANY_ROUNDS, normalizeCompanyRound } from '@/lib/company-enums';
 import { downloadWhatsAppMedia, sendWhatsAppText } from './whatsapp-api';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
@@ -30,7 +31,7 @@ const EMPTY: Extracted = {
     totalFundRaise: null, valuation: null, industry: null, subIndustry: null, summary: null,
 };
 
-const ROUNDS = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
+const ROUNDS = COMPANY_ROUNDS;
 
 /** Reads the message text — and the deck itself when it is a PDF or image. */
 async function extractStartup(text: string, filename: string | null, file: { mimeType: string; buffer: Buffer } | null): Promise<Extracted> {
@@ -62,7 +63,9 @@ Return ONLY a JSON object with these keys, null where unknown — never guess:
             companyName: str(json.companyName),
             founderName: str(json.founderName),
             founderEmail: str(json.founderEmail)?.includes('@') ? str(json.founderEmail) : null,
-            companyRound: ROUNDS.includes(json.companyRound) ? json.companyRound : null,
+            // Loose wording is mapped rather than dropped: "Seed Round" is Seed.
+            companyRound: typeof json.companyRound === 'string' && json.companyRound.trim()
+                ? normalizeCompanyRound(json.companyRound) : null,
             totalFundRaise: numv(json.totalFundRaise),
             valuation: numv(json.valuation),
             industry: str(json.industry),

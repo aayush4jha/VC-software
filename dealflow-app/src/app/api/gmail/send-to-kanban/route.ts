@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
+import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
@@ -300,10 +301,12 @@ export async function POST(request: NextRequest) {
         const founderName = ai.founderName || senderName || senderEmail.split('@')[0];
         const founderEmail = ai.founderEmail || senderEmail;
 
-        const companyRound = ai.companyRound || 'Seed';
-        const priorityLevel = ai.priorityLevel || 'Medium';
-        const dealSourceType = ai.dealSourceType || 'Founder Network';
-        const shareType = ai.shareType || 'Primary';
+        // Through the normalisers: these columns are CHECK-constrained, and an
+        // AI answering "Seed Round" instead of "Seed" failed the whole insert.
+        const companyRound = normalizeCompanyRound(ai.companyRound);
+        const priorityLevel = normalizePriority(ai.priorityLevel);
+        const dealSourceType = normalizeDealSourceType(ai.dealSourceType);
+        const shareType = normalizeShareType(ai.shareType);
         // AI returns amounts in crores — convert to full INR for storage
         const CRORE = 10000000;
         const totalFundRaise = ai.totalFundRaise != null ? Math.round(ai.totalFundRaise * CRORE) : null;
@@ -408,7 +411,17 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (companyError) {
-            return NextResponse.json({ error: companyError.message }, { status: 500 });
+            // A raw "violates check constraint companies_company_round_check"
+            // told the person nothing they could act on. Name the field.
+            const constraint = /check constraint "companies_(\w+)_check"/.exec(companyError.message)?.[1];
+            const field = constraint ? constraint.replace(/_/g, ' ') : null;
+            return NextResponse.json({
+                error: field
+                    ? `The ${field} read from this email ("${
+                        { company_round: companyRound, priority_level: priorityLevel, deal_source_type: dealSourceType, share_type: shareType }[constraint!] ?? '?'
+                    }") is not one the platform accepts, so the company was not created. Add it with + Add Company, or tell Claude.`
+                    : companyError.message,
+            }, { status: 500 });
         }
 
         // Record in ingested_emails
