@@ -3,6 +3,8 @@ import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
+import { collectAttachments, type AttachmentPart, type FoundAttachment } from '@/lib/server/gmail-parse';
+import { saveEmailDocuments } from '@/lib/server/company-documents';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
@@ -330,6 +332,33 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // The email's attachments, so the deck ends up on the company's
+        // Documents card. This path recorded only the file NAMES on the email
+        // log, so a deck sent to the kanban from here was findable in Gmail and
+        // nowhere on the company — unlike the automatic inbox scan, which filed
+        // it properly.
+        let attachments: FoundAttachment[] = [];
+        if (gmailMessageId) {
+            try {
+                const authResult = await getAuthenticatedClientForUser(userId);
+                if (authResult) {
+                    const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
+                    const msg = await gmail.users.messages.get({ userId: 'me', id: gmailMessageId, format: 'full' });
+                    attachments = collectAttachments(msg.data.payload as AttachmentPart);
+                }
+            } catch (err) {
+                // Filing the company matters more than filing its deck.
+                console.error('[send-to-kanban] could not read attachments:', (err as Error).message);
+            }
+        }
+        const documentMeta = {
+            messageId: gmailMessageId || '',
+            senderEmail: founderEmail,
+            subject,
+            receivedAt: receivedAt || null,
+            label: 'send-to-kanban',
+        };
+
         // An email about a company we already track joins that record. Without
         // this, sending a second mail to the kanban created a near-duplicate
         // card beside the first.
@@ -361,6 +390,8 @@ export async function POST(request: NextRequest) {
                     relevance_label: relevanceLabel || null,
                 });
             }
+
+            if (gmailMessageId) await saveEmailDocuments(db, match.id, attachments, documentMeta);
 
             await db.from('activity_logs').insert({
                 company_id: match.id,
@@ -423,6 +454,8 @@ export async function POST(request: NextRequest) {
                     : companyError.message,
             }, { status: 500 });
         }
+
+        if (gmailMessageId) await saveEmailDocuments(db, newCompany.id, attachments, documentMeta);
 
         // Record in ingested_emails
         if (gmailMessageId) {

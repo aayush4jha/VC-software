@@ -5,6 +5,7 @@ import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 import { collectAttachments, type AttachmentPart } from '@/lib/server/gmail-parse';
+import { saveEmailDocuments } from '@/lib/server/company-documents';
 import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
@@ -90,35 +91,6 @@ function extractBodyText(payload: { mimeType?: string; body?: { data?: string };
  * Best-effort by design: a failed insert must never cost us the company the
  * email created, so errors are logged and swallowed.
  */
-async function saveDocuments(
-    db: SupabaseClient,
-    companyId: string,
-    attachments: { filename: string; mimeType: string; attachmentId: string; size: number }[],
-    meta: { messageId: string; senderEmail: string; subject: string; receivedAt: string | null },
-): Promise<void> {
-    if (attachments.length === 0) return;
-    const rows = attachments.map(a => ({
-        organization_id: ORGANIZATION_ID,
-        company_id: companyId,
-        file_name: a.filename,
-        mime_type: a.mimeType,
-        size_bytes: a.size,
-        is_pitch_deck: isPitchDeckAttachment(a.filename),
-        source: 'email',
-        gmail_message_id: meta.messageId,
-        gmail_attachment_id: a.attachmentId,
-        received_at: meta.receivedAt,
-        sender_email: meta.senderEmail,
-        subject: meta.subject,
-    }));
-    // onConflict matches the table's (company_id, gmail_message_id, file_name)
-    // key, so re-ingesting a thread does not stack up duplicate rows.
-    const { error } = await db
-        .from('company_documents')
-        .upsert(rows, { onConflict: 'company_id,gmail_message_id,file_name', ignoreDuplicates: true });
-    if (error) console.error('[gmail/ingest] saveDocuments:', error.message);
-}
-
 interface ExtractedData {
     companyName: string | null;
     founderName: string | null;
@@ -402,7 +374,7 @@ export async function POST(request: NextRequest) {
 
                     // Its attachments belong on that company too — a follow-up
                     // carrying the updated deck is exactly the case this serves.
-                    await saveDocuments(db, match.id, attachments, {
+                    await saveEmailDocuments(db, match.id, attachments, {
                         messageId: msg.id,
                         senderEmail,
                         subject,
@@ -493,7 +465,7 @@ export async function POST(request: NextRequest) {
                     founder_email: senderEmail,
                 });
 
-                await saveDocuments(db, newCompany.id, attachments, {
+                await saveEmailDocuments(db, newCompany.id, attachments, {
                     messageId: msg.id,
                     senderEmail,
                     subject,
