@@ -81,6 +81,9 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
     // one opens it, so neither an old nor a new grant locks anyone out.
     '/legal': ['legal', 'portfolio'],
     '/fund': ['fund'],
+    // Funds we invest IN, as opposed to our own entities' balances. Same
+    // grant, so nobody's access has to change for the new page.
+    '/fund-investments': ['fund'],
     '/analytics': ['analytics'],
     '/contacts': ['contacts'],
     '/emails': ['emails'],
