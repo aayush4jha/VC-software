@@ -62,7 +62,11 @@ export default function Sidebar() {
                     .filter(item => hasAnyPermission(subject, item.permissions))
                     .map((item) => {
                         const Icon = item.icon;
-                        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                        // The slash matters: without it "/fund-investments" counts as
+                        // being inside "/fund" and lights up both. A sub-path only
+                        // belongs to a link when the next character is a separator.
+                        const isActive = pathname === item.href
+                            || (item.href !== '/' && pathname.startsWith(`${item.href}/`));
                         return (
                             <Link
                                 key={item.href}
@@ -80,7 +84,7 @@ export default function Sidebar() {
                 {hasPermission(subject, 'admin') && (
                     <Link
                         href="/admin"
-                        className={`sidebar-nav-item ${pathname.startsWith('/admin') ? 'active' : ''}`}
+                        className={`sidebar-nav-item ${pathname === '/admin' || pathname.startsWith('/admin/') ? 'active' : ''}`}
                         title={collapsed ? 'Admin' : undefined}
                         onClick={closeMobileSidebar}
                     >
