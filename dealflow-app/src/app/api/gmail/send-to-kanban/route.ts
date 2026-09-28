@@ -9,6 +9,9 @@ import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
+
+// Reading the deck and copying it into storage takes longer than a metadata write.
+export const maxDuration = 120;
 const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -338,12 +341,13 @@ export async function POST(request: NextRequest) {
         // nowhere on the company — unlike the automatic inbox scan, which filed
         // it properly.
         let attachments: FoundAttachment[] = [];
+        let documentGmail: ReturnType<typeof google.gmail> | undefined;
         if (gmailMessageId) {
             try {
                 const authResult = await getAuthenticatedClientForUser(userId);
                 if (authResult) {
-                    const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
-                    const msg = await gmail.users.messages.get({ userId: 'me', id: gmailMessageId, format: 'full' });
+                    documentGmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
+                    const msg = await documentGmail.users.messages.get({ userId: 'me', id: gmailMessageId, format: 'full' });
                     attachments = collectAttachments(msg.data.payload as AttachmentPart);
                 }
             } catch (err) {
@@ -391,7 +395,7 @@ export async function POST(request: NextRequest) {
                 });
             }
 
-            if (gmailMessageId) await saveEmailDocuments(db, match.id, attachments, documentMeta);
+            if (gmailMessageId) await saveEmailDocuments(db, match.id, attachments, documentMeta, documentGmail);
 
             await db.from('activity_logs').insert({
                 company_id: match.id,
@@ -455,7 +459,7 @@ export async function POST(request: NextRequest) {
             }, { status: 500 });
         }
 
-        if (gmailMessageId) await saveEmailDocuments(db, newCompany.id, attachments, documentMeta);
+        if (gmailMessageId) await saveEmailDocuments(db, newCompany.id, attachments, documentMeta, documentGmail);
 
         // Record in ingested_emails
         if (gmailMessageId) {

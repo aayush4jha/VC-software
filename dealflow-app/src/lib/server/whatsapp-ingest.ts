@@ -4,9 +4,9 @@ import { companyNameFromDeckFilename, matchCompany } from '@/lib/email-company';
 import { isHelpCommand, WHATSAPP_HELP, type InboundMessage } from '@/lib/whatsapp';
 import { COMPANY_ROUNDS, normalizeCompanyRound } from '@/lib/company-enums';
 import { downloadWhatsAppMedia, sendWhatsAppText } from './whatsapp-api';
+import { safeFileName, storeFile } from './file-store';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
-const BUCKET = 'company-documents';
 // A follow-up message ("this is StrainX, raising 5Cr") belongs to the deck sent
 // just before it. Longer than this and it is treated as a new conversation.
 const FOLLOW_UP_WINDOW_MS = 30 * 60 * 1000;
@@ -76,25 +76,6 @@ Return ONLY a JSON object with these keys, null where unknown — never guess:
         console.error('[whatsapp] extraction failed:', (err as Error).message);
         return EMPTY;
     }
-}
-
-/** Uploads to private storage, creating the bucket the first time. */
-async function storeFile(db: SupabaseClient, path: string, buffer: Buffer, mimeType: string): Promise<string | null> {
-    const upload = () => db.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, upsert: true });
-    let { error } = await upload();
-    if (error && /not found|does not exist/i.test(error.message)) {
-        await db.storage.createBucket(BUCKET, { public: false });
-        ({ error } = await upload());
-    }
-    if (error) {
-        console.error('[whatsapp] upload failed:', error.message);
-        return null;
-    }
-    return path;
-}
-
-function safeName(name: string): string {
-    return name.replace(/[^\w.\- ]+/g, '_').slice(0, 120) || 'file';
 }
 
 function extensionFor(mimeType: string): string {
@@ -180,8 +161,8 @@ export async function processWhatsAppMessage(db: SupabaseClient, m: InboundMessa
         let file: { name: string; mimeType: string; size: number; buffer: Buffer; path: string | null } | null = null;
         if (m.media) {
             const dl = await downloadWhatsAppMedia(m.media.id);
-            const name = safeName(m.media.filename || `WhatsApp ${m.kind} ${new Date().toISOString().slice(0, 10)}${extensionFor(dl.mimeType)}`);
-            const path = await storeFile(db, `whatsapp/${new Date().toISOString().slice(0, 7)}/${m.id}-${name}`, dl.buffer, dl.mimeType);
+            const name = safeFileName(m.media.filename || `WhatsApp ${m.kind} ${new Date().toISOString().slice(0, 10)}${extensionFor(dl.mimeType)}`);
+            const path = await storeFile(db, `whatsapp/${new Date().toISOString().slice(0, 7)}/${m.id}-${name}`, dl.buffer, dl.mimeType, 'whatsapp');
             file = { name, mimeType: dl.mimeType, size: dl.size, buffer: dl.buffer, path };
         }
 

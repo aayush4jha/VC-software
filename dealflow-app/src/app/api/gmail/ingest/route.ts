@@ -9,6 +9,9 @@ import { saveEmailDocuments } from '@/lib/server/company-documents';
 import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
+
+// A run reads a batch of mail and copies each deck into storage.
+export const maxDuration = 300;
 const TARGET_EMAIL = 'pipeline@dholakiaventures.com';
 const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -374,12 +377,12 @@ export async function POST(request: NextRequest) {
 
                     // Its attachments belong on that company too — a follow-up
                     // carrying the updated deck is exactly the case this serves.
-                    await saveEmailDocuments(db, match.id, attachments, {
+                    await saveEmailDocuments(db, match.id, attachments, { label: 'gmail/ingest',
                         messageId: msg.id,
                         senderEmail,
                         subject,
                         receivedAt: dateHeader ? new Date(dateHeader).toISOString() : null,
-                    });
+                    }, gmail);
 
                     await db.from('activity_logs').insert({
                         company_id: match.id,
@@ -465,12 +468,12 @@ export async function POST(request: NextRequest) {
                     founder_email: senderEmail,
                 });
 
-                await saveEmailDocuments(db, newCompany.id, attachments, {
+                await saveEmailDocuments(db, newCompany.id, attachments, { label: 'gmail/ingest',
                     messageId: msg.id,
                     senderEmail,
                     subject,
                     receivedAt: dateHeader ? new Date(dateHeader).toISOString() : null,
-                });
+                }, gmail);
 
                 // Record in ingested_emails
                 await db.from('ingested_emails').insert({
