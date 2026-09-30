@@ -6,6 +6,7 @@ import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 import { collectAttachments, type AttachmentPart } from '@/lib/server/gmail-parse';
 import { saveEmailDocuments } from '@/lib/server/company-documents';
+import { fillCompanyBlanks } from '@/lib/server/company-fill';
 import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
@@ -367,6 +368,8 @@ export async function POST(request: NextRequest) {
                         received_at: dateHeader ? new Date(dateHeader).toISOString() : null,
                         has_attachments: hasAttachments,
                         attachment_names: attachmentNames,
+                        body_text: bodyText || null,
+                        snippet: snippet || null,
                         company_id: match.id,
                         // 'processed', not 'skipped': the email was filed against a
                         // company, which is the outcome we wanted.
@@ -383,6 +386,13 @@ export async function POST(request: NextRequest) {
                         subject,
                         receivedAt: dateHeader ? new Date(dateHeader).toISOString() : null,
                     }, gmail);
+
+                    // What this email adds that the company does not have yet.
+                    await fillCompanyBlanks(db, match.id, {
+                        founderName: ai.founderName, founderEmail: senderEmail,
+                        totalFundRaise: ai.totalFundRaise, valuation: ai.valuation,
+                        subIndustry: ai.subIndustry, summary: ai.summary,
+                    }, { userId, source: `email from ${senderEmail}`, label: 'gmail/ingest' });
 
                     await db.from('activity_logs').insert({
                         company_id: match.id,
@@ -486,6 +496,8 @@ export async function POST(request: NextRequest) {
                     received_at: dateHeader ? new Date(dateHeader).toISOString() : null,
                     has_attachments: hasAttachments,
                     attachment_names: attachmentNames,
+                    body_text: bodyText || null,
+                    snippet: snippet || null,
                     company_id: newCompany.id,
                     status: 'processed',
                     relevance_label: relevanceLabel,

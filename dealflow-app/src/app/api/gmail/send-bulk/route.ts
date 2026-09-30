@@ -3,11 +3,15 @@ import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { COMPANY_DOCS_BUCKET } from '@/lib/server/file-store';
 
 // One send per founder rather than one mail with everyone on it: founders must
 // never see each other's addresses, and a reply has to come back as a normal
 // one-to-one thread against that company.
 const MAX_RECIPIENTS = 200;
+
+// One send per recipient, each carrying the attachments.
+export const maxDuration = 300;
 
 interface BulkRecipient {
     email: string;
@@ -25,17 +29,53 @@ function fillTemplate(text: string, r: BulkRecipient): string {
         .replace(/\{\{\s*company_name\s*\}\}/gi, (r.companyName || '').trim());
 }
 
-function encodeMessage(from: string, to: string, subject: string, body: string): string {
-    const message = [
+export interface OutgoingAttachment {
+    name: string;
+    mimeType: string;
+    /** Base64 of the file, read once and reused for every recipient. */
+    data: string;
+}
+
+// A header must be 7-bit; a filename with an accent or a rupee sign has to be
+// encoded or the attachment arrives with a mangled name.
+function encodeHeaderWord(value: string): string {
+    return /^[\x20-\x7E]*$/.test(value)
+        ? value
+        : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+}
+
+function encodeMessage(
+    from: string, to: string, subject: string, body: string,
+    attachments: OutgoingAttachment[] = [],
+): string {
+    const lines = [
         `From: ${from}`,
         `To: ${to}`,
-        `Subject: ${subject}`,
-        'Content-Type: text/plain; charset="UTF-8"',
+        `Subject: ${encodeHeaderWord(subject)}`,
         'MIME-Version: 1.0',
-        '',
-        body,
-    ].join('\n');
-    return Buffer.from(message)
+    ];
+    if (attachments.length === 0) {
+        lines.push('Content-Type: text/plain; charset="UTF-8"', '', body);
+    } else {
+        const boundary = `dv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+        lines.push(
+            `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
+            `--${boundary}`,
+            'Content-Type: text/plain; charset="UTF-8"', '',
+            body,
+        );
+        for (const a of attachments) {
+            lines.push(
+                `--${boundary}`,
+                `Content-Type: ${a.mimeType}; name="${encodeHeaderWord(a.name)}"`,
+                `Content-Disposition: attachment; filename="${encodeHeaderWord(a.name)}"`,
+                'Content-Transfer-Encoding: base64', '',
+                a.data.replace(/(.{76})/g, '$1\r\n'),
+            );
+        }
+        lines.push(`--${boundary}--`);
+    }
+    return Buffer.from(lines.join('\r\n'))
         .toString('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
@@ -54,7 +94,7 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    const { recipients, subject, body } = await request.json();
+    const { recipients, subject, body, attachmentPaths } = await request.json();
 
     if (!Array.isArray(recipients) || recipients.length === 0) {
         return NextResponse.json({ error: 'No recipients' }, { status: 400 });
@@ -82,6 +122,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'No valid email addresses' }, { status: 400 });
     }
 
+    // Read the files out of storage once, not once per recipient.
+    const attachments: OutgoingAttachment[] = [];
+    if (Array.isArray(attachmentPaths) && attachmentPaths.length > 0) {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!url || !key) return NextResponse.json({ error: 'Server config missing' }, { status: 500 });
+        const store = createServiceClient(url, key);
+        for (const p of attachmentPaths as { path: string; name: string }[]) {
+            const { data, error } = await store.storage.from(COMPANY_DOCS_BUCKET).download(p.path);
+            if (error || !data) {
+                return NextResponse.json({
+                    error: `Could not read the attachment "${p.name}" — nothing was sent.`,
+                }, { status: 500 });
+            }
+            const buffer = Buffer.from(await data.arrayBuffer());
+            attachments.push({
+                name: p.name,
+                mimeType: data.type || 'application/octet-stream',
+                data: buffer.toString('base64'),
+            });
+        }
+    }
+
     const gmail = google.gmail({ version: 'v1', auth: auth.oauth2Client });
 
     let senderEmail = 'me';
@@ -104,7 +167,7 @@ export async function POST(request: NextRequest) {
         try {
             await gmail.users.messages.send({
                 userId: 'me',
-                requestBody: { raw: encodeMessage(senderEmail, r.email, filledSubject, filledBody) },
+                requestBody: { raw: encodeMessage(senderEmail, r.email, filledSubject, filledBody, attachments) },
             });
             results.push({ email: r.email, ok: true });
 
@@ -133,6 +196,18 @@ export async function POST(request: NextRequest) {
             }
         } catch (err) {
             results.push({ email: r.email, ok: false, error: (err as Error).message });
+        }
+    }
+
+    // The uploads were staged only to be sent; clear them either way.
+    if (Array.isArray(attachmentPaths) && attachmentPaths.length > 0) {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (url && key) {
+            const store = createServiceClient(url, key);
+            await store.storage.from(COMPANY_DOCS_BUCKET)
+                .remove((attachmentPaths as { path: string }[]).map(p => p.path))
+                .catch(() => { /* a leftover staged file is harmless */ });
         }
     }
 

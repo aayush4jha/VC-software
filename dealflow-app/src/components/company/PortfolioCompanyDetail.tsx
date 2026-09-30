@@ -16,6 +16,7 @@ import { stateOptions, formatLocation } from '@/lib/india-locations';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
 import InvestmentInstrumentSelect from '@/components/common/InvestmentInstrumentSelect';
 import CompanyDocuments from '@/components/common/CompanyDocuments';
+import CompanyEmails from '@/components/common/CompanyEmails';
 import DebtFacilityPanel from './DebtFacilityPanel';
 import { getCompanyFinancials } from '@/lib/company-financials';
 import { useEscapeKey } from '@/lib/useEscapeKey';
@@ -609,6 +610,10 @@ export default function PortfolioCompanyDetail() {
                             <h3 style={sectionTitleStyle}>Documents</h3>
                             <div style={detailCardStyle}>
                                 <CompanyDocuments companyId={c.id} />
+                            </div>
+                            <h3 style={{ ...sectionTitleStyle, marginTop: 20 }}>Emails</h3>
+                            <div style={detailCardStyle}>
+                                <CompanyEmails companyId={c.id} />
                             </div>
                         </div>
                         <div>

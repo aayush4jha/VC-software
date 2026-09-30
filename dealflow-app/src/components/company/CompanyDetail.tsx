@@ -12,6 +12,7 @@ import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/conte
 import type { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
 import { INVESTMENT_TYPES } from '@/types/database';
 import CompanyDocuments from '@/components/common/CompanyDocuments';
+import CompanyEmails from '@/components/common/CompanyEmails';
 import { downloadAsDocx, downloadAsPdf } from '@/lib/report-download';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
@@ -621,6 +622,13 @@ export default function CompanyDetail() {
                             <div className="form-group" style={{ marginTop: 16 }}>
                                 <label className="form-label">Documents</label>
                                 <CompanyDocuments companyId={c.id} />
+                            </div>
+
+                            {/* Every email filed against this company, including
+                                the ones that joined it from another address. */}
+                            <div className="form-group" style={{ marginTop: 16 }}>
+                                <label className="form-label">Emails</label>
+                                <CompanyEmails companyId={c.id} />
                             </div>
 
                             {/* Tags */}

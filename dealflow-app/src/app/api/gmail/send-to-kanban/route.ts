@@ -5,6 +5,7 @@ import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
 import { collectAttachments, type AttachmentPart, type FoundAttachment } from '@/lib/server/gmail-parse';
 import { saveEmailDocuments } from '@/lib/server/company-documents';
+import { fillCompanyBlanks } from '@/lib/server/company-fill';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 
@@ -388,6 +389,7 @@ export async function POST(request: NextRequest) {
                     received_at: receivedAt || null,
                     has_attachments: hasAttachments || false,
                     attachment_names: attachmentNames || [],
+                    body_text: emailBody || null,
                     company_id: match.id,
                     status: 'processed',
                     error_message: `Filed under existing company "${match.company_name}" (matched on ${match.matchedBy})`,
@@ -396,6 +398,12 @@ export async function POST(request: NextRequest) {
             }
 
             if (gmailMessageId) await saveEmailDocuments(db, match.id, attachments, documentMeta, documentGmail);
+
+            await fillCompanyBlanks(db, match.id, {
+                founderName: ai.founderName, founderEmail: ai.founderEmail || founderEmail,
+                totalFundRaise: ai.totalFundRaise, valuation: ai.valuation,
+                subIndustry: ai.subIndustry, summary: ai.summary,
+            }, { userId, source: `email from ${founderEmail}`, label: 'send-to-kanban' });
 
             await db.from('activity_logs').insert({
                 company_id: match.id,
@@ -473,6 +481,7 @@ export async function POST(request: NextRequest) {
                 received_at: receivedAt || null,
                 has_attachments: hasAttachments || false,
                 attachment_names: attachmentNames || [],
+                body_text: emailBody || null,
                 company_id: newCompany.id,
                 status: 'processed',
                 relevance_label: relevanceLabel || null,

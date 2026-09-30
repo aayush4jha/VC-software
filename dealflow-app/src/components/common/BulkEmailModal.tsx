@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { X, Send, Loader2, Check, AlertCircle } from 'lucide-react';
+import { X, Send, Loader2, Check, AlertCircle, Paperclip, Trash2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export interface BulkRecipient {
     email: string;
@@ -31,6 +32,16 @@ export default function BulkEmailModal({ recipients, onClose }: {
     const [subject, setSubject] = useState('');
     const [body, setBody] = useState('');
     const [sending, setSending] = useState(false);
+    const [files, setFiles] = useState<File[]>([]);
+    const [stage, setStage] = useState<string | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    // Every recipient gets a copy, and Gmail rejects a message over 25 MB;
+    // base64 adds a third on top, so the ceiling here is lower than it looks.
+    const MAX_TOTAL_BYTES = 18 * 1024 * 1024;
+    const totalBytes = files.reduce((s, f) => s + f.size, 0);
+    const tooBig = totalBytes > MAX_TOTAL_BYTES;
+    const fmtSize = (n: number) => n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
     const [result, setResult] = useState<SendResult | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -53,10 +64,33 @@ export default function BulkEmailModal({ recipients, onClose }: {
         setSending(true);
         setError(null);
         try {
+            // Files go straight to storage on a signed URL: a serverless
+            // request body would cap attachments at about 3 MB.
+            let attachmentPaths: { path: string; name: string }[] = [];
+            if (files.length > 0) {
+                setStage(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`);
+                const prep = await fetch('/api/bulk-attachments', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: files.map(f => ({ name: f.name, size: f.size })) }),
+                });
+                const prepJson = await prep.json();
+                if (!prep.ok) throw new Error(prepJson.error || 'Could not prepare the attachments');
+
+                const supabase = createClient();
+                for (const [i, up] of (prepJson.uploads as { path: string; token: string; name: string }[]).entries()) {
+                    const { error: upErr } = await supabase.storage.from('company-documents')
+                        .uploadToSignedUrl(up.path, up.token, files[i]);
+                    if (upErr) throw new Error(`Could not upload "${up.name}": ${upErr.message}`);
+                }
+                attachmentPaths = (prepJson.uploads as { path: string; name: string }[])
+                    .map(u => ({ path: u.path, name: u.name }));
+            }
+
+            setStage(`Sending to ${unique.length}…`);
             const res = await fetch('/api/gmail/send-bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recipients: unique, subject, body }),
+                body: JSON.stringify({ recipients: unique, subject, body, attachmentPaths }),
             });
             const json = await res.json();
             if (!res.ok) {
@@ -67,6 +101,7 @@ export default function BulkEmailModal({ recipients, onClose }: {
         } catch (err) {
             setError((err as Error).message);
         }
+        setStage(null);
         setSending(false);
     };
 
@@ -148,6 +183,53 @@ export default function BulkEmailModal({ recipients, onClose }: {
                                 />
                             </div>
 
+                            <div style={{ marginTop: 12 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <button type="button" className="btn btn-sm" onClick={() => fileInputRef.current?.click()} disabled={sending}>
+                                        <Paperclip size={13} /> Attach files
+                                    </button>
+                                    {files.length > 0 && (
+                                        <span style={{ fontSize: 11, color: tooBig ? 'var(--danger, #b91c1c)' : 'var(--text-tertiary)' }}>
+                                            {files.length} file{files.length === 1 ? '' : 's'} · {fmtSize(totalBytes)}
+                                            {tooBig ? ` — over the ${MAX_TOTAL_BYTES / 1024 / 1024} MB limit` : ''}
+                                        </span>
+                                    )}
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        multiple
+                                        style={{ display: 'none' }}
+                                        onChange={e => {
+                                            setFiles(prev => [...prev, ...Array.from(e.target.files || [])]);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </div>
+                                {files.length > 0 && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
+                                        {files.map((f, i) => (
+                                            <div key={`${f.name}-${i}`} style={{
+                                                display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
+                                                padding: '4px 8px', borderRadius: 6, background: 'var(--bg-secondary)',
+                                            }}>
+                                                <Paperclip size={11} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {f.name}
+                                                </span>
+                                                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{fmtSize(f.size)}</span>
+                                                <button type="button" className="btn btn-ghost btn-sm" disabled={sending}
+                                                    onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}>
+                                                    <Trash2 size={11} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                                            Every founder receives the same files.
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             {preview && (subject || body) && (
                                 <div style={{
                                     marginTop: 14, padding: 12, borderRadius: 8,
@@ -184,11 +266,11 @@ export default function BulkEmailModal({ recipients, onClose }: {
                             <button
                                 className="btn btn-primary btn-sm"
                                 onClick={send}
-                                disabled={sending || !subject.trim() || !body.trim() || unique.length === 0}
+                                disabled={sending || tooBig || !subject.trim() || !body.trim() || unique.length === 0}
                             >
                                 {sending
-                                    ? <><Loader2 size={14} className="spin" /> Sending…</>
-                                    : <><Send size={14} /> Send to {unique.length}</>}
+                                    ? <><Loader2 size={14} className="spin" /> {stage || 'Sending…'}</>
+                                    : <><Send size={14} /> Send to {unique.length}{files.length > 0 ? ` with ${files.length} file${files.length === 1 ? '' : 's'}` : ''}</>}
                             </button>
                         </>
                     )}
