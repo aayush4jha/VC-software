@@ -351,14 +351,7 @@ function EmailsContent() {
             });
             const j = await res.json();
             if (!res.ok) throw new Error(j.error || 'Could not draft a reply');
-            setDraft({
-                id: email.id,
-                text: j.shouldReply === false
-                    ? '' : j.reply || '',
-                note: j.shouldReply === false
-                    ? 'The draft says this email does not need a reply — write one below if you disagree.'
-                    : j.note || '',
-            });
+            setDraft({ id: email.id, text: j.reply || '', note: j.note || '' });
         } catch (err) {
             setDraft({ id: email.id, text: '', note: (err as Error).message });
         }
@@ -902,6 +895,11 @@ function EmailsContent() {
                                 }}>
                                     <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
                                         Suggested reply to {selectedEmail.senderName || selectedEmail.senderEmail}
+                                        {selectedEmail.category && (
+                                            <span style={{ fontWeight: 500, color: 'var(--text-tertiary)' }}>
+                                                {' '}· written for {selectedEmail.category.toLowerCase()}
+                                            </span>
+                                        )}
                                     </div>
                                     {draft.note && (
                                         <div style={{ fontSize: 11, color: '#b45309', marginBottom: 8 }}>{draft.note}</div>

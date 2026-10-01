@@ -3,10 +3,21 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireMember } from '@/lib/api-auth';
 import { callGeminiMultimodal } from '@/lib/gemini';
 import { matchCompany } from '@/lib/email-company';
-import { classifyEmail } from '@/lib/email-triage';
+import { classifyEmail, type EmailCategory } from '@/lib/email-triage';
 import { DRAFT_FORMAT, parseDraft } from '@/lib/reply-draft';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
+
+// Every email gets a draft, but a founder's pitch and a bank alert do not want
+// the same reply. This is what changes between them.
+const TONE_BY_CATEGORY: Record<EmailCategory, string> = {
+    'Deals': 'An inbound pitch. Thank them, show you read the specific thing they sent, and either ask the one question that decides whether this is worth a call, or propose a call by asking for their times. Do not promise to invest, to review by a date, or to introduce anyone.',
+    'Portfolio Companies': 'A company we have already backed. Warm and familiar. Answer what they asked, offer help where it is genuinely ours to offer (intros, hiring, the next round), and keep it brief.',
+    'Calls': 'Someone wants time. Agree in principle and ask for their availability, or give a window to choose from — never invent a specific slot. If the purpose is unclear, ask what they would like to cover.',
+    'Events': 'An invitation. Thank them, and either express interest and ask for the details that decide it (date, format, who else is attending), or decline politely without inventing a conflicting commitment.',
+    'Promotions': 'Marketing, a newsletter or a cold sales approach. Keep it to two or three lines: a polite decline, or a request to be taken off the list, or a single question if the offer is genuinely relevant to a venture firm. Never enthusiastic.',
+    'Other': 'Acknowledge what they wrote, answer anything directly asked, and ask what they need from us if it is unclear. Short and courteous.',
+};
 
 export const maxDuration = 60;
 
@@ -56,6 +67,7 @@ export async function POST(request: NextRequest) {
         } catch { /* a reply without context is still a reply */ }
     }
 
+    // The tone table is keyed by category, so it is read after classifying.
     const classification = classifyEmail({
         subject, text: emailBody, senderEmail,
         attachmentNames: Array.isArray(body.attachmentNames) ? body.attachmentNames : [],
@@ -79,7 +91,10 @@ HOW TO WRITE IT
 - Reference one concrete detail from their email so it is plainly not a form letter.
 - Never invent a decision, a number, a date or a commitment we have not made. If a next step needs a date, ask them for times rather than inventing one.
 - No subject line, no "Dear Sir/Madam", no signature block — the sender's name is added automatically.
-- If the email does not deserve a reply (a newsletter, a blast), say so instead of writing one.
+- Write a reply for EVERY email. There is always a sensible one.
+
+WHAT A GOOD REPLY LOOKS LIKE FOR THIS KIND OF EMAIL
+${TONE_BY_CATEGORY[classification.category]}
 
 ${DRAFT_FORMAT}`;
 
@@ -88,10 +103,16 @@ ${DRAFT_FORMAT}`;
             temperature: 0.4, maxOutputTokens: 1200, label: 'draft-reply',
         });
         const draft = parseDraft(raw);
+        // A no-reply sender is worth flagging, but the draft is still written:
+        // it is often forwarded elsewhere or sent to a real address on the thread.
+        const noReplyAddress = /no-?reply|donotreply|notifications?@/i.test(senderEmail);
         return NextResponse.json({
-            shouldReply: !draft.skip && !!draft.reply,
+            shouldReply: true,
             reply: draft.reply,
-            note: draft.note,
+            note: [
+                draft.note,
+                noReplyAddress ? 'This came from a no-reply address, so it may bounce.' : '',
+            ].filter(Boolean).join(' '),
             category: classification.category,
             companyId,
         });

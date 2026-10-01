@@ -14,8 +14,10 @@ export const DRAFT_FORMAT = `Answer in exactly this shape, with the markers on t
 the reply body, as many lines as it needs
 @@NOTE@@
 one short line on what you assumed or left for the partner to fill in
-@@SKIP@@
-yes only if this email does not deserve a reply at all, otherwise no`;
+
+Always write a reply. Even for a newsletter, a notification or a cold sales
+pitch there is a sensible one — a short decline, a request to be removed, a
+one-line acknowledgement. Never refuse and never return an empty reply.`;
 
 export interface ParsedDraft {
     reply: string;
@@ -27,6 +29,9 @@ export interface ParsedDraft {
  * Pulls the reply out of whatever the model actually sent: the markers when it
  * followed instructions, JSON if it fell back to that, and otherwise the whole
  * response — because a draft the person can edit beats an error message.
+ *
+ * `skip` survives only to read older answers that still send it; the drafter no
+ * longer asks for it, because every email gets a template now.
  */
 export function parseDraft(raw: string): ParsedDraft {
     const text = (raw || '').replace(/```[a-z]*\s*/gi, '').replace(/```/g, '').trim();
