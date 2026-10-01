@@ -51,3 +51,4 @@ next-env.d.ts
 .fill-test
 .triage-test
 .gmailtext-test
+.draft-test

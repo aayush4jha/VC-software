@@ -4,6 +4,7 @@ import { requireMember } from '@/lib/api-auth';
 import { callGeminiMultimodal } from '@/lib/gemini';
 import { matchCompany } from '@/lib/email-company';
 import { classifyEmail } from '@/lib/email-triage';
+import { DRAFT_FORMAT, parseDraft } from '@/lib/reply-draft';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -80,26 +81,23 @@ HOW TO WRITE IT
 - No subject line, no "Dear Sir/Madam", no signature block — the sender's name is added automatically.
 - If the email does not deserve a reply (a newsletter, a blast), say so instead of writing one.
 
-Return ONLY JSON:
-{
-  "shouldReply": true or false,
-  "reply": "the reply body, plain text with line breaks",
-  "note": "one short line telling the partner what you assumed or left for them to fill in"
-}`;
+${DRAFT_FORMAT}`;
 
     try {
         const raw = await callGeminiMultimodal([{ text: prompt }], {
             temperature: 0.4, maxOutputTokens: 1200, label: 'draft-reply',
         });
-        const parsed = JSON.parse(raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim());
+        const draft = parseDraft(raw);
         return NextResponse.json({
-            shouldReply: parsed.shouldReply !== false,
-            reply: String(parsed.reply || '').trim(),
-            note: String(parsed.note || '').trim(),
+            shouldReply: !draft.skip && !!draft.reply,
+            reply: draft.reply,
+            note: draft.note,
             category: classification.category,
             companyId,
         });
     } catch (err) {
+        // Only a failed call reaches here now; reading the answer back cannot
+        // throw, so a draft is never lost to its own formatting.
         return NextResponse.json({
             error: `Could not draft a reply: ${(err as Error).message}`,
         }, { status: 502 });
