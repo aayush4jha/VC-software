@@ -50,3 +50,4 @@ next-env.d.ts
 .fund-test
 .fill-test
 .triage-test
+.gmailtext-test

@@ -4,6 +4,7 @@ import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName } from '@/lib/email-company';
 import { mapLimit } from '@/lib/server/concurrency';
+import { extractBodyText, decodeEntities, type AttachmentPart } from '@/lib/server/gmail-parse';
 import { classifyEmail, type EmailCategory } from '@/lib/email-triage';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { emailDomain, isFreeEmailDomain } from '@/lib/email-company';
@@ -70,39 +71,6 @@ function extractSenderInfo(fromHeader: string): { name: string; email: string } 
         };
     }
     return { name: fromHeader.split('@')[0], email: fromHeader };
-}
-
-function decodeBase64Url(data: string): string {
-    return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
-}
-
-function extractBodyText(payload: { mimeType?: string; body?: { data?: string }; parts?: unknown[] }): string {
-    if (payload.body?.data && payload.mimeType === 'text/plain') {
-        return decodeBase64Url(payload.body.data);
-    }
-    if (payload.parts) {
-        for (const part of payload.parts as typeof payload[]) {
-            // Prefer text/plain
-            if (part.mimeType === 'text/plain' && part.body?.data) {
-                return decodeBase64Url(part.body.data);
-            }
-        }
-        // Fallback to text/html stripped
-        for (const part of payload.parts as typeof payload[]) {
-            if (part.mimeType === 'text/html' && part.body?.data) {
-                const html = decodeBase64Url(part.body.data);
-                return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-            }
-        }
-        // Recurse into multipart
-        for (const part of payload.parts as typeof payload[]) {
-            if (part.parts) {
-                const result = extractBodyText(part);
-                if (result) return result;
-            }
-        }
-    }
-    return '';
 }
 
 interface ExtractedData {
@@ -254,7 +222,7 @@ export async function POST(request: NextRequest) {
                 const subject = headers.find(h => h.name === 'Subject')?.value || '(No Subject)';
                 const dateHeader = headers.find(h => h.name === 'Date')?.value;
                 const messageIdHeader = headers.find(h => (h.name || '').toLowerCase() === 'message-id')?.value || null;
-                const snippet = fullMsg.data.snippet || '';
+                const snippet = decodeEntities(fullMsg.data.snippet || '');
 
                 // Determine direction from Gmail labels
                 const labels = fullMsg.data.labelIds || [];
@@ -272,7 +240,7 @@ export async function POST(request: NextRequest) {
                 );
 
                 const { isRelevant, label } = detectRelevance(subject, snippet);
-                const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
+                const bodyText = extractBodyText(fullMsg.data.payload as AttachmentPart);
                 const extracted: ExtractedData = EMPTY_EXTRACTION;
 
                 const senderLower = senderEmail.toLowerCase();

@@ -4,6 +4,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireMember } from '@/lib/api-auth';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { extractBodyText, type AttachmentPart } from '@/lib/server/gmail-parse';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -11,30 +12,6 @@ function db() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     return url && key ? createServiceClient(url, key) : null;
-}
-
-function decodeBase64Url(data: string): string {
-    return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
-}
-
-// The readable text of a message, preferring plain text over stripped HTML.
-interface BodyPart { mimeType?: string | null; body?: { data?: string | null } | null; parts?: BodyPart[] | null }
-function extractBody(payload: BodyPart | null | undefined): string {
-    if (!payload) return '';
-    if (payload.mimeType === 'text/plain' && payload.body?.data) return decodeBase64Url(payload.body.data);
-    for (const p of payload.parts || []) {
-        if (p.mimeType === 'text/plain' && p.body?.data) return decodeBase64Url(p.body.data);
-    }
-    for (const p of payload.parts || []) {
-        if (p.mimeType === 'text/html' && p.body?.data) {
-            return decodeBase64Url(p.body.data).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        }
-    }
-    for (const p of payload.parts || []) {
-        const nested = extractBody(p);
-        if (nested) return nested;
-    }
-    return '';
 }
 
 /**
@@ -71,7 +48,7 @@ export async function GET(request: NextRequest) {
         try {
             const gmail = google.gmail({ version: 'v1', auth: google_.oauth2Client });
             const msg = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' });
-            const body = extractBody(msg.data.payload as BodyPart);
+            const body = extractBodyText(msg.data.payload as AttachmentPart);
             if (body && row?.id) {
                 await client.from('ingested_emails').update({ body_text: body }).eq('id', row.id);
             }

@@ -3,7 +3,8 @@
 export interface AttachmentPart {
     filename?: string | null;
     mimeType?: string | null;
-    body?: { attachmentId?: string | null; size?: number | null } | null;
+    // A part carries either an attachment to download or the body text itself.
+    body?: { attachmentId?: string | null; size?: number | null; data?: string | null } | null;
     parts?: AttachmentPart[] | null;
 }
 
@@ -51,4 +52,74 @@ export function extractSenderInfo(fromHeader: string): { name: string; email: st
         };
     }
     return { name: fromHeader.split('@')[0], email: fromHeader };
+}
+
+// ─── Reading an email as text ─────────────────────────────────────────────
+
+const ENTITIES: Record<string, string> = {
+    amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+    rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”',
+    mdash: '—', ndash: '–', hellip: '…', middot: '·',
+    trade: '™', copy: '©', reg: '®', eacute: 'é', rupee: '₹',
+};
+
+/** "we&#39;re" -> "we're". Gmail snippets arrive HTML-escaped too, not just bodies. */
+export function decodeEntities(text: string): string {
+    return text
+        .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+        .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+        .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m);
+}
+
+/**
+ * The readable text of an HTML email.
+ *
+ * Stripping tags alone is not enough: that leaves the CONTENTS of <style> and
+ * <script>, so a marketing email's stylesheet lands in the body and the reader
+ * sees a page of CSS. Those elements are removed whole, before anything else.
+ */
+export function htmlToText(html: string): string {
+    return decodeEntities(
+        html
+            .replace(/<!--[\s\S]*?-->/g, ' ')
+            .replace(/<(style|script|head|noscript|svg)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+            // Keep the line structure the writer intended.
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/(p|div|tr|li|h[1-6]|table|blockquote)>/gi, '\n')
+            .replace(/<[^>]+>/g, ' '),
+    )
+        .replace(/[ \t ]+/g, ' ')
+        .replace(/ ?\n ?/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function decodeBase64Url(data: string): string {
+    return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
+}
+
+/** Plain text if the message carries it, otherwise the HTML part made readable. */
+export function extractBodyText(payload: AttachmentPart | null | undefined): string {
+    if (!payload) return '';
+    if (payload.mimeType === 'text/plain' && payload.body?.data) {
+        return decodeEntities(decodeBase64Url(payload.body.data)).trim();
+    }
+    if (payload.mimeType === 'text/html' && payload.body?.data) {
+        return htmlToText(decodeBase64Url(payload.body.data));
+    }
+    for (const part of payload.parts || []) {
+        if (part.mimeType === 'text/plain' && part.body?.data) {
+            return decodeEntities(decodeBase64Url(part.body.data)).trim();
+        }
+    }
+    for (const part of payload.parts || []) {
+        if (part.mimeType === 'text/html' && part.body?.data) {
+            return htmlToText(decodeBase64Url(part.body.data));
+        }
+    }
+    for (const part of payload.parts || []) {
+        const nested = extractBodyText(part);
+        if (nested) return nested;
+    }
+    return '';
 }

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
-import { collectAttachments, type AttachmentPart } from '@/lib/server/gmail-parse';
+import { collectAttachments, extractBodyText, decodeEntities, type AttachmentPart } from '@/lib/server/gmail-parse';
 import { saveEmailDocuments } from '@/lib/server/company-documents';
 import { fillCompanyBlanks } from '@/lib/server/company-fill';
 import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
@@ -57,44 +57,6 @@ function isPitchDeckAttachment(filename: string): boolean {
     return PITCH_DECK_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
-function decodeBase64Url(data: string): string {
-    return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
-}
-
-function extractBodyText(payload: { mimeType?: string; body?: { data?: string }; parts?: unknown[] }): string {
-    if (payload.body?.data && payload.mimeType === 'text/plain') {
-        return decodeBase64Url(payload.body.data);
-    }
-    if (payload.parts) {
-        for (const part of payload.parts as typeof payload[]) {
-            if (part.mimeType === 'text/plain' && part.body?.data) {
-                return decodeBase64Url(part.body.data);
-            }
-        }
-        for (const part of payload.parts as typeof payload[]) {
-            if (part.mimeType === 'text/html' && part.body?.data) {
-                const html = decodeBase64Url(part.body.data);
-                return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-            }
-        }
-        for (const part of payload.parts as typeof payload[]) {
-            if (part.parts) {
-                const result = extractBodyText(part);
-                if (result) return result;
-            }
-        }
-    }
-    return '';
-}
-
-/**
- * Files an email's attachments against a company so they can be opened from the
- * company page later. The bytes stay in Gmail — this records where they are and
- * what they are; /api/gmail/attachment streams them on demand.
- *
- * Best-effort by design: a failed insert must never cost us the company the
- * email created, so errors are logged and swallowed.
- */
 interface ExtractedData {
     companyName: string | null;
     founderName: string | null;
@@ -305,7 +267,7 @@ export async function POST(request: NextRequest) {
                 const fromHeader = headers.find(h => h.name === 'From')?.value || '';
                 const subject = headers.find(h => h.name === 'Subject')?.value || '(No Subject)';
                 const dateHeader = headers.find(h => h.name === 'Date')?.value;
-                const snippet = fullMsg.data.snippet || '';
+                const snippet = decodeEntities(fullMsg.data.snippet || '');
 
                 const { name: senderName, email: senderEmail } = extractSenderInfo(fromHeader);
 
@@ -338,7 +300,7 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Extract body text and run AI analysis
-                const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
+                const bodyText = extractBodyText(fullMsg.data.payload as AttachmentPart);
                 const ai = await analyzeEmailWithAI(subject, senderName, senderEmail, bodyText, snippet);
 
                 const companyName = deriveCompanyName({
