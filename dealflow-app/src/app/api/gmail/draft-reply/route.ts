@@ -4,7 +4,7 @@ import { requireMember } from '@/lib/api-auth';
 import { callGeminiMultimodal } from '@/lib/gemini';
 import { matchCompany } from '@/lib/email-company';
 import { classifyEmail, type EmailCategory } from '@/lib/email-triage';
-import { DRAFT_FORMAT, parseDraft } from '@/lib/reply-draft';
+import { DRAFT_FORMAT, parseDraft, looksLikeCommentary, fallbackReply } from '@/lib/reply-draft';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -41,6 +41,24 @@ export async function POST(request: NextRequest) {
     const intent: string = typeof body.intent === 'string' ? body.intent.slice(0, 400) : '';
     if (!senderEmail) return NextResponse.json({ error: 'Missing sender' }, { status: 400 });
 
+    // The partner's own name: the reply is written as them and signed by them.
+    let partnerName = '';
+    try {
+        const url0 = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key0 = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (url0 && key0) {
+            const db0 = createServiceClient(url0, key0);
+            const { data: me } = await db0.from('profiles').select('name').eq('id', auth.actor.userId).maybeSingle();
+            partnerName = (me?.name || '').trim().split(/\s+/)[0] || '';
+        }
+        if (!partnerName && auth.actor.email) {
+            // No name on the profile: the address's own local part is still
+            // closer to a signature than nothing at all.
+            const local = auth.actor.email.split('@')[0].split(/[._-]/)[0];
+            partnerName = local ? local[0].toUpperCase() + local.slice(1) : '';
+        }
+    } catch { /* an unsigned draft is still a draft */ }
+
     // What we already know about them changes what a sensible reply says.
     let context = '';
     let companyId: string | null = null;
@@ -73,7 +91,13 @@ export async function POST(request: NextRequest) {
         attachmentNames: Array.isArray(body.attachmentNames) ? body.attachmentNames : [],
     });
 
-    const prompt = `You are drafting a reply on behalf of Dholakia Ventures, an Indian venture capital firm, to an email they received. The reply will be read and sent by a partner at the firm, so write it as them.
+    const senderFirst = (senderName || '').trim().split(/\s+/)[0] || '';
+
+    const prompt = `Write the REPLY ${partnerName || 'a partner'} at Dholakia Ventures will send to the email below.
+
+You are not describing the email, deciding whether it deserves an answer, or explaining anything. You are writing the words that will be sent. Output nothing but those words.
+
+Write in the first person, as ${partnerName || 'the partner'} — "I", not "we at Dholakia Ventures" unless the firm is genuinely the actor. It must read as if a person typed it in thirty seconds: no analysis, no preamble such as "Here is a draft", no square-bracket placeholders, no mention of being an assistant.
 
 THE EMAIL THEY RECEIVED
 From: ${senderName} <${senderEmail}>
@@ -90,19 +114,38 @@ HOW TO WRITE IT
 - Answer what they actually asked. If they asked for a call, respond to that; if they sent a deck, acknowledge it specifically.
 - Reference one concrete detail from their email so it is plainly not a form letter.
 - Never invent a decision, a number, a date or a commitment we have not made. If a next step needs a date, ask them for times rather than inventing one.
-- No subject line, no "Dear Sir/Madam", no signature block — the sender's name is added automatically.
-- Write a reply for EVERY email. There is always a sensible one.
+- Open with "Hi ${senderFirst || 'there'}," and close with "Best," on its own line then "${partnerName || ''}".
+- No subject line, no "Dear Sir/Madam", no bracketed blanks to fill in.
+- Write a reply for EVERY email. There is always a sensible one, even if it is a two-line decline.
 
 WHAT A GOOD REPLY LOOKS LIKE FOR THIS KIND OF EMAIL
 ${TONE_BY_CATEGORY[classification.category]}
 
 ${DRAFT_FORMAT}`;
 
+    const attempt = async (extra: string) => parseDraft(await callGeminiMultimodal(
+        [{ text: extra ? `${prompt}\n\n${extra}` : prompt }],
+        { temperature: 0.4, maxOutputTokens: 900, label: 'draft-reply' },
+    ));
+
     try {
-        const raw = await callGeminiMultimodal([{ text: prompt }], {
-            temperature: 0.4, maxOutputTokens: 1200, label: 'draft-reply',
-        });
-        const draft = parseDraft(raw);
+        let draft = await attempt('');
+        if (!draft.reply || looksLikeCommentary(draft.reply)) {
+            // It described the email instead of answering it. Say so plainly
+            // and ask again; models comply when told exactly what went wrong.
+            draft = await attempt(
+                'Your previous answer described the email instead of replying to it. Do not do that. '
+                + `Output only the message body, starting with "Hi ${senderFirst || 'there'}," and ending with "Best,".`,
+            );
+        }
+        if (!draft.reply || looksLikeCommentary(draft.reply)) {
+            // Still unusable: a plain template beats commentary in a send box.
+            draft = {
+                reply: fallbackReply(classification.category, senderFirst, partnerName),
+                note: 'Written from a template — the draft came back unusable, so edit before sending.',
+                skip: false,
+            };
+        }
         // A no-reply sender is worth flagging, but the draft is still written:
         // it is often forwarded elsewhere or sent to a real address on the thread.
         const noReplyAddress = /no-?reply|donotreply|notifications?@/i.test(senderEmail);
@@ -117,10 +160,15 @@ ${DRAFT_FORMAT}`;
             companyId,
         });
     } catch (err) {
-        // Only a failed call reaches here now; reading the answer back cannot
-        // throw, so a draft is never lost to its own formatting.
+        // The model could not be reached at all. Hand over the template rather
+        // than an error: the partner still has something to send.
+        console.error('[draft-reply]', (err as Error).message);
         return NextResponse.json({
-            error: `Could not draft a reply: ${(err as Error).message}`,
-        }, { status: 502 });
+            shouldReply: true,
+            reply: fallbackReply(classification.category, senderFirst, partnerName),
+            note: 'Written from a template — the drafting service could not be reached.',
+            category: classification.category,
+            companyId,
+        });
     }
 }

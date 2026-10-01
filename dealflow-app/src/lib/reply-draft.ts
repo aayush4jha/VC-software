@@ -68,3 +68,50 @@ export function parseDraft(raw: string): ParsedDraft {
 
     return { reply: text, note: '', skip: false };
 }
+
+// ─── Rejecting commentary ─────────────────────────────────────────────────
+
+// A model asked to write a reply sometimes describes the email instead:
+// "This email is a standard automated rejection. Dholakia Ventures is a VC
+// firm. There is no clear reason to…". That is analysis, not a reply, and it
+// must never reach the box the partner is about to send from.
+const COMMENTARY = [
+    /\bthis (?:e-?mail|message) (?:is|appears|seems|looks)\b/i,
+    /\bthe (?:sender|email|message|user|recipient) (?:is|has|wants|appears)\b/i,
+    /\bthere is no (?:clear )?(?:reason|need|benefit)\b/i,
+    /\b(?:as an|i am an) AI\b/i,
+    /\bi (?:cannot|can't|won't) (?:write|draft|reply|respond)\b/i,
+    /\b(?:no reply|a reply) (?:is )?(?:needed|necessary|required|warranted)\b/i,
+    /\bdoes not (?:require|warrant|deserve) a (?:reply|response)\b/i,
+    /\bhere(?:'s| is) (?:a|the) (?:draft|suggested|possible) (?:reply|response)\b/i,
+];
+
+/** True when the text talks ABOUT the email rather than being a reply to it. */
+export function looksLikeCommentary(text: string): boolean {
+    const head = (text || '').trim().slice(0, 400);
+    if (!head) return true;
+    return COMMENTARY.some(re => re.test(head));
+}
+
+/**
+ * What to send when the model will not produce a usable reply — short, correct
+ * for the kind of email, and plainly editable. A person opening the box should
+ * find something they could send, never an apology or an analysis.
+ */
+export function fallbackReply(
+    category: string,
+    senderFirstName: string,
+    signOffName: string,
+): string {
+    const hi = senderFirstName ? `Hi ${senderFirstName},` : 'Hello,';
+    const body: Record<string, string> = {
+        'Deals': 'Thanks for sending this across — I have had a first look.\n\nCould you share a little more on traction and what you are raising on?\n\nIf it is easier to talk it through, send me a few times that suit you this week.',
+        'Portfolio Companies': 'Thanks for the update.\n\nNoted on the below — let me know where you need a hand, whether that is intros, hiring or the next round.',
+        'Calls': 'Happy to speak.\n\nCould you send me a few times that work for you this week, and a line on what you would like to cover?',
+        'Events': 'Thanks for the invitation.\n\nCould you share the date, the format and who else is likely to attend? I will come back to you once I have those.',
+        'Promotions': 'Thanks for reaching out. This is not something we are looking at right now.\n\nPlease take us off the list for future mailers.',
+        'Other': 'Thanks for writing in.\n\nCould you let me know what you need from our side, and I will get back to you?',
+    };
+    const sign = signOffName ? `\n\nBest,\n${signOffName}` : '\n\nBest,';
+    return `${hi}\n\n${body[category] ?? body['Other']}${sign}`;
+}

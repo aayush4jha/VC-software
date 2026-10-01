@@ -3,7 +3,7 @@
 //
 // Run with: npm run test:draft
 
-import { parseDraft } from '../.draft-test/reply-draft.mjs';
+import { parseDraft, looksLikeCommentary, fallbackReply } from '../.draft-test/reply-draft.mjs';
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -53,6 +53,30 @@ eq('whitespace only', parseDraft('   \n  '), { reply: '', note: '', skip: false 
 console.log('— markers in any order —');
 const reordered = parseDraft('@@NOTE@@\nquick note\n@@REPLY@@\nThe body\n@@SKIP@@\nno');
 eq('note before reply still works', [reordered.reply, reordered.note], ['The body', 'quick note']);
+
+
+console.log('— commentary is not a reply —');
+// The exact thing that reached the send box.
+eq('the LinkedIn analysis is rejected', looksLikeCommentary(
+    'This email is a standard automated job application rejection. It is addressed to "Aayush" and is from the "LinkedIn Hiring Team". Dholakia Ventures is a VC firm. There is no clear reason for Dholakia Ventures to'), true);
+eq('"the sender is" is commentary', looksLikeCommentary('The sender is a recruiter at LinkedIn.'), true);
+eq('"no reply is needed" is commentary', looksLikeCommentary('No reply is needed for this newsletter.'), true);
+eq('"as an AI" is commentary', looksLikeCommentary('As an AI, I cannot send emails.'), true);
+eq('a preamble is commentary', looksLikeCommentary("Here's a draft reply you could send:"), true);
+eq('an empty draft counts as unusable', looksLikeCommentary('   '), true);
+eq('an actual reply passes', looksLikeCommentary('Hi Ravi,\n\nThanks for sending the deck across.'), false);
+eq('a decline passes', looksLikeCommentary('Thanks for reaching out. This is not something we are looking at right now.'), false);
+eq('mentioning email in passing passes', looksLikeCommentary('Hi Ravi, thanks for your email — could you send times?'), false);
+
+console.log('— the fallback is something you could actually send —');
+const fb = fallbackReply('Deals', 'Ravi', 'Aayush');
+eq('greets them by name', fb.startsWith('Hi Ravi,'), true);
+eq('signs off as the partner', fb.trim().endsWith('Aayush'), true);
+eq('is not commentary', looksLikeCommentary(fb), false);
+eq('promotions declines', fallbackReply('Promotions', 'Sam', 'Aayush').includes('take us off the list'), true);
+eq('calls ask for times', fallbackReply('Calls', '', 'Aayush').includes('times that work'), true);
+eq('no sender name still greets', fallbackReply('Other', '', 'Aayush').startsWith('Hello,'), true);
+eq('an unknown category still replies', looksLikeCommentary(fallbackReply('Nonsense', 'A', 'B')), false);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
