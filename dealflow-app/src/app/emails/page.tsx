@@ -125,6 +125,8 @@ function EmailsContent() {
     const [loadedAt, setLoadedAt] = useState<string | null>(null);
     const [rangeDays, setRangeDays] = useState<number>(1);
     const [loadingRange, setLoadingRange] = useState<number | null>(null);
+    const [cacheRead, setCacheRead] = useState(false);
+    const emailsRef = useRef<WorkspaceEmail[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -148,15 +150,29 @@ function EmailsContent() {
         setLoadingRange(days);
         setError(null);
         try {
-            const res = await fetch(`/api/gmail/workspace?days=${days}`);
+            // Send what is already held so only new mail is read. A second
+            // refresh over the same span costs almost nothing.
+            const held = new Map(emailsRef.current.map(e => [e.id, e]));
+            const res = await fetch('/api/gmail/workspace', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ days, knownIds: [...held.keys()] }),
+            });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to fetch emails');
-            const fresh: WorkspaceEmail[] = data.emails || [];
+
+            // New messages, plus the held ones this range still covers.
+            const seen: string[] = data.seenIds || [];
+            const merged = [
+                ...(data.emails as WorkspaceEmail[] || []),
+                ...seen.map(id => held.get(id)).filter((e): e is WorkspaceEmail => !!e),
+            ].sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime());
+
             const when = new Date().toISOString();
-            setEmails(fresh);
+            setEmails(merged);
             setLoadedAt(when);
             setRangeDays(days);
-            writeCache({ emails: fresh, loadedAt: when, rangeDays: days });
+            writeCache({ emails: merged, loadedAt: when, rangeDays: days });
         } catch (err) {
             setError((err as Error).message);
         }
@@ -176,7 +192,11 @@ function EmailsContent() {
             setLoadedAt(cached.loadedAt);
             setRangeDays(cached.rangeDays);
         }
+        setCacheRead(true);
     }, []);
+
+    // Keeps the ref in step so a refresh can diff against what is on screen.
+    useEffect(() => { emailsRef.current = emails; }, [emails]);
 
     // Auto-select email when navigated with ?messageId=
     useEffect(() => {
@@ -449,6 +469,8 @@ function EmailsContent() {
                             </div>
                         ) : error ? (
                             <div style={{ padding: 24, textAlign: 'center', color: 'var(--danger)' }}>{error}</div>
+                        ) : !cacheRead ? (
+                            <div style={{ height: '50vh' }} />
                         ) : filtered.length === 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', color: 'var(--text-tertiary)', textAlign: 'center', padding: 24 }}>
                                 <Inbox size={32} style={{ marginBottom: 8 }} />

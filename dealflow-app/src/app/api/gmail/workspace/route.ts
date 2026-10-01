@@ -3,8 +3,8 @@ import { google } from 'googleapis';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName } from '@/lib/email-company';
+import { mapLimit } from '@/lib/server/concurrency';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Reading a year of mail is a lot of Gmail calls.
 export const maxDuration = 300;
@@ -19,11 +19,19 @@ const RANGES: Record<string, { days: number; inbox: number; sent: number }> = {
     '365': { days: 365, inbox: 300, sent: 80 },
 };
 
-// Each relevant inbound email used to cost a Gemini call, in sequence — which
-// is why loading the workspace was slow enough to be worth never repeating.
-// Only the newest few are analysed now; the rest carry the heuristics, and
-// Send to Kanban re-runs the full extraction on the one email that needs it.
-const MAX_AI_EMAILS = 20;
+// The list does NO AI. Every relevant inbound email used to cost a Gemini call,
+// in sequence, which is what made opening the workspace slow. Send to Kanban
+// re-analyses the one email being filed — body and deck — so nothing is lost by
+// not doing it a hundred times over for a list.
+const EMPTY_EXTRACTION: ExtractedData = {
+    companyName: null, founderName: null, companyRound: null,
+    totalFundRaise: null, valuation: null, industry: null,
+    subIndustry: null, dealSourceType: null, priorityLevel: null,
+    shareType: null, summary: null,
+};
+
+// Messages are fetched this many at a time; it is all network waiting.
+const FETCH_CONCURRENCY = 10;
 
 const FUNDING_KEYWORDS = [
     'pitch deck', 'fundraising', 'funding', 'startup', 'investor',
@@ -108,98 +116,6 @@ interface ExtractedData {
     summary: string | null;
 }
 
-async function analyzeEmailWithAI(subject: string, senderName: string, senderEmail: string, bodyText: string, snippet: string): Promise<ExtractedData> {
-    if (!GEMINI_API_KEY) {
-        return {
-            companyName: null, founderName: null, companyRound: null,
-            totalFundRaise: null, valuation: null, industry: null,
-            subIndustry: null, dealSourceType: null, priorityLevel: null,
-            shareType: null, summary: null,
-        };
-    }
-
-    // Truncate body to avoid token limits
-    const truncatedBody = bodyText.slice(0, 4000);
-
-    const prompt = `You are analyzing an email received by a Venture Capital firm. Extract structured data from this email for their deal pipeline.
-
-EMAIL DETAILS:
-- Subject: ${subject}
-- From: ${senderName} <${senderEmail}>
-- Snippet: ${snippet}
-- Full Body:
-${truncatedBody}
-
-Extract the following fields. Return ONLY valid JSON with these exact keys. Use null for any field you cannot determine:
-
-{
-  "companyName": "The startup/company name (NOT the sender's personal name, extract the actual company name)",
-  "founderName": "The founder's full name",
-  "companyRound": "One of: Pre-Seed, Seed, Pre-Series A, Series A, Pre-Series B, Series B, Growth Stage, Pre-IPO, IPO",
-  "totalFundRaise": "Amount being raised in INR crores as a number (e.g. 1.2 for ₹1.2Cr). Convert from USD/other currencies if needed (1 USD ≈ 83 INR). null if not mentioned",
-  "valuation": "Company valuation in INR crores as a number. Convert if needed. null if not mentioned",
-  "industry": "The primary industry/sector (e.g. FinTech, HealthTech, SaaS, Defense, EdTech, E-commerce, AI/ML, CleanTech, etc.)",
-  "subIndustry": "More specific sub-industry if mentioned",
-  "dealSourceType": "One of: Founder Network, Investment Banker, Friends & Family, VC & PE",
-  "priorityLevel": "One of: Low, Medium, High - based on the quality/urgency of the opportunity",
-  "shareType": "One of: Primary, Secondary, Debt",
-  "summary": "A 1-2 sentence summary of what this email is about and why it's relevant for the VC firm"
-}
-
-IMPORTANT: Return ONLY the JSON object, no markdown formatting, no code blocks, no explanation.`;
-
-    try {
-        const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
-                }),
-            },
-        );
-
-        if (!res.ok) {
-            console.error('[workspace] Gemini API error:', res.status, await res.text());
-            return {
-                companyName: null, founderName: null, companyRound: null,
-                totalFundRaise: null, valuation: null, industry: null,
-                subIndustry: null, dealSourceType: null, priorityLevel: null,
-                shareType: null, summary: null,
-            };
-        }
-
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        // Strip markdown code blocks if present
-        const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-        const parsed = JSON.parse(cleaned);
-        return {
-            companyName: parsed.companyName || null,
-            founderName: parsed.founderName || null,
-            companyRound: parsed.companyRound || null,
-            totalFundRaise: typeof parsed.totalFundRaise === 'number' ? parsed.totalFundRaise : null,
-            valuation: typeof parsed.valuation === 'number' ? parsed.valuation : null,
-            industry: parsed.industry || null,
-            subIndustry: parsed.subIndustry || null,
-            dealSourceType: parsed.dealSourceType || null,
-            priorityLevel: parsed.priorityLevel || null,
-            shareType: parsed.shareType || null,
-            summary: parsed.summary || null,
-        };
-    } catch (err) {
-        console.error('[workspace] AI extraction error:', err);
-        return {
-            companyName: null, founderName: null, companyRound: null,
-            totalFundRaise: null, valuation: null, industry: null,
-            subIndustry: null, dealSourceType: null, priorityLevel: null,
-            shareType: null, summary: null,
-        };
-    }
-}
-
 export interface WorkspaceEmail {
     id: string;
     threadId: string | null;
@@ -221,7 +137,13 @@ export interface WorkspaceEmail {
     emailBody: string;
 }
 
-export async function GET(request: NextRequest) {
+/**
+ * Reads a span of mail. Called with the ids the browser already holds, so a
+ * refresh fetches only what is new — the rest it keeps from its own cache.
+ *
+ * POST, because the known-id list is too long for a query string.
+ */
+export async function POST(request: NextRequest) {
     const user = await getRouteUser(request);
     if (!user) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -240,7 +162,9 @@ export async function GET(request: NextRequest) {
 
         // The range the person asked for, not the connection date: "refresh a
         // year" has to mean a year even on an account connected last week.
-        const range = RANGES[new URL(request.url).searchParams.get('days') || '1'] ?? RANGES['1'];
+        const body = await request.json().catch(() => ({} as Record<string, unknown>));
+        const range = RANGES[String(body.days ?? '1')] ?? RANGES['1'];
+        const knownIds: string[] = Array.isArray(body.knownIds) ? (body.knownIds as string[]) : [];
         const since = Math.floor((Date.now() - range.days * 24 * 60 * 60 * 1000) / 1000);
         const afterFilter = ` after:${since}`;
 
@@ -262,25 +186,27 @@ export async function GET(request: NextRequest) {
         const sentMessages = (sentResponse.data.messages || []).map(m => ({ ...m, _direction: 'sent' as const }));
 
         // Dedup by ID (a message can appear in both inbox and sent if it's a reply)
-        const seenIds = new Set<string>();
+        const dedup = new Set<string>();
         const allMessages: Array<{ id?: string | null; threadId?: string | null; _direction: 'received' | 'sent' }> = [];
         for (const msg of [...inboxMessages, ...sentMessages]) {
-            if (msg.id && !seenIds.has(msg.id)) {
-                seenIds.add(msg.id);
+            if (msg.id && !dedup.has(msg.id)) {
+                dedup.add(msg.id);
                 allMessages.push(msg);
             }
         }
 
         if (allMessages.length === 0) {
-            return NextResponse.json({ emails: [] });
+            return NextResponse.json({ emails: [], seenIds: [], rangeDays: range.days, fetched: 0, reused: 0 });
         }
 
-        const emails: WorkspaceEmail[] = [];
-        let aiCalls = 0;
+        // What the caller already holds in its cache never needs reading again:
+        // a refresh then costs only the messages that are actually new.
+        const known = new Set(knownIds);
+        const seenIds = allMessages.map(m => m.id).filter((id): id is string => !!id);
+        const toFetch = allMessages.filter(m => m.id && !known.has(m.id));
 
-        for (const msg of allMessages) {
-            if (!msg.id) continue;
-
+        const fetched = await mapLimit(toFetch, FETCH_CONCURRENCY, async (msg) => {
+            if (!msg.id) return null;
             try {
                 // Fetch FULL format to get email body for AI analysis
                 const fullMsg = await gmail.users.messages.get({
@@ -312,21 +238,8 @@ export async function GET(request: NextRequest) {
                 );
 
                 const { isRelevant, label } = detectRelevance(subject, snippet);
-
-                // Extract full body text for AI analysis
                 const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
-                let extracted: ExtractedData;
-                if (direction === 'received' && isRelevant && GEMINI_API_KEY && aiCalls < MAX_AI_EMAILS) {
-                    aiCalls++;
-                    extracted = await analyzeEmailWithAI(subject, senderName, senderEmail, bodyText, snippet);
-                } else {
-                    extracted = {
-                        companyName: null, founderName: null, companyRound: null,
-                        totalFundRaise: null, valuation: null, industry: null,
-                        subIndustry: null, dealSourceType: null, priorityLevel: null,
-                        shareType: null, summary: null,
-                    };
-                }
+                const extracted: ExtractedData = EMPTY_EXTRACTION;
 
                 // The shared rule, which knows a subject is a topic rather than a
                 // name — this used to turn "Pitch Deck - Seed Round" into a company.
@@ -337,7 +250,7 @@ export async function GET(request: NextRequest) {
                     subject,
                 });
 
-                emails.push({
+                return {
                     id: msg.id,
                     threadId: msg.threadId || null,
                     senderName: extracted.founderName || senderName,
@@ -355,22 +268,22 @@ export async function GET(request: NextRequest) {
                     recipientEmail,
                     extracted,
                     emailBody: bodyText.slice(0, 5000),
-                });
+                } as WorkspaceEmail;
             } catch {
-                // Skip individual message errors
+                return null;   // one unreadable message must not sink the refresh
             }
-        }
-
-        // Sort by date (newest first)
-        emails.sort((a, b) => {
-            return new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime();
         });
+
+        const emails = fetched.filter((e): e is WorkspaceEmail => e !== null);
+        emails.sort((a, b) =>
+            new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime());
 
         return NextResponse.json({
             emails,
+            seenIds,
             rangeDays: range.days,
-            aiAnalysed: aiCalls,
-            truncated: emails.length >= range.inbox + range.sent,
+            fetched: emails.length,
+            reused: seenIds.length - toFetch.length,
         });
     } catch (error: unknown) {
         const err = error as { code?: number; message?: string };
