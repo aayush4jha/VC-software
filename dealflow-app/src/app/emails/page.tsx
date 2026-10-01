@@ -69,6 +69,11 @@ const RANGE_OPTIONS = [
 // loaded instead of re-reading Gmail — which cost a Gemini call per relevant
 // email. Only a refresh button fetches now.
 const CACHE_KEY = 'dv.emailWorkspace.v1';
+// Bumped whenever an email gains a field the list reads. A cache written
+// before categories existed has rows that can never be sorted or coloured,
+// and the incremental refresh would never re-read them — so it is dropped
+// and the next refresh fetches everything afresh.
+const CACHE_VERSION = 2;
 const CACHE_MAX_EMAILS = 250;
 const CACHE_MAX_BODY = 6000;
 
@@ -76,6 +81,7 @@ interface EmailCache {
     emails: WorkspaceEmail[];
     loadedAt: string;
     rangeDays: number;
+    version?: number;
 }
 
 function readCache(): EmailCache | null {
@@ -83,7 +89,12 @@ function readCache(): EmailCache | null {
         const raw = window.localStorage.getItem(CACHE_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw) as EmailCache;
-        return Array.isArray(parsed?.emails) ? parsed : null;
+        if (!Array.isArray(parsed?.emails)) return null;
+        if (parsed.version !== CACHE_VERSION) {
+            window.localStorage.removeItem(CACHE_KEY);
+            return null;
+        }
+        return parsed;
     } catch {
         return null;   // private window, cleared storage, or a stale shape
     }
@@ -94,12 +105,12 @@ function writeCache(cache: EmailCache) {
         ...e, emailBody: (e.emailBody || '').slice(0, CACHE_MAX_BODY),
     }));
     try {
-        window.localStorage.setItem(CACHE_KEY, JSON.stringify({ ...cache, emails: trim(cache.emails) }));
+        window.localStorage.setItem(CACHE_KEY, JSON.stringify({ ...cache, version: CACHE_VERSION, emails: trim(cache.emails) }));
     } catch {
         // Out of quota: keep the list, drop the bodies, which are the bulk of it.
         try {
             window.localStorage.setItem(CACHE_KEY, JSON.stringify({
-                ...cache, emails: trim(cache.emails).map(e => ({ ...e, emailBody: '' })),
+                ...cache, version: CACHE_VERSION, emails: trim(cache.emails).map(e => ({ ...e, emailBody: '' })),
             }));
         } catch { /* nothing cached this time; the page still works */ }
     }
@@ -164,10 +175,11 @@ function EmailsContent() {
             // Send what is already held so only new mail is read. A second
             // refresh over the same span costs almost nothing.
             const held = new Map(emailsRef.current.map(e => [e.id, e]));
+            const complete = [...held.values()].filter(e => !!e.category).map(e => e.id);
             const res = await fetch('/api/gmail/workspace', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ days, knownIds: [...held.keys()] }),
+                body: JSON.stringify({ days, knownIds: complete }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to fetch emails');
@@ -676,7 +688,6 @@ function EmailsContent() {
                                             const r = replyStates.get(email.id);
                                             if (!r) return null;
                                             const st = replyState(r.daysWaiting, r.replied);
-                                            if (st.urgency === 'fresh' && r.daysWaiting <= 0) return null;
                                             return (
                                                 <span
                                                     title={st.urgency === 'replied' ? 'Replied' : `Waiting ${r.daysWaiting} day(s) — reply within 3`}
