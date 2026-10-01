@@ -4,6 +4,9 @@ import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { deriveCompanyName } from '@/lib/email-company';
 import { mapLimit } from '@/lib/server/concurrency';
+import { classifyEmail, type EmailCategory } from '@/lib/email-triage';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { emailDomain, isFreeEmailDomain } from '@/lib/email-company';
 
 
 // Reading a year of mail is a lot of Gmail calls.
@@ -132,6 +135,10 @@ export interface WorkspaceEmail {
     derivedCompanyName: string;
     direction: 'received' | 'sent';
     recipientEmail: string | null;
+    category: EmailCategory;
+    categoryReason: string;
+    /** RFC Message-ID, so a reply can be threaded onto it. */
+    messageIdHeader: string | null;
     // AI-extracted fields
     extracted: ExtractedData;
     emailBody: string;
@@ -182,6 +189,32 @@ export async function POST(request: NextRequest) {
             }),
         ]);
 
+        // Addresses and work domains of companies already in the portfolio.
+        const portfolioAddresses = new Set<string>();
+        const portfolioDomains = new Set<string>();
+        try {
+            const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (url && key) {
+                const db = createServiceClient(url, key);
+                const { data: portfolio } = await db.from('companies')
+                    .select('founder_email, founders').eq('terminal_status', 'Portfolio');
+                for (const c of portfolio || []) {
+                    const addresses: string[] = [c.founder_email, ...(Array.isArray(c.founders)
+                        ? (c.founders as { email?: string }[]).map(f => f?.email || '') : [])];
+                    for (const a of addresses) {
+                        const lower = (a || '').trim().toLowerCase();
+                        if (!lower.includes('@')) continue;
+                        portfolioAddresses.add(lower);
+                        if (!isFreeEmailDomain(lower)) portfolioDomains.add(emailDomain(lower));
+                    }
+                }
+            }
+        } catch (err) {
+            // Sorting still works without it; everything simply lands elsewhere.
+            console.error('[gmail/workspace] portfolio lookup failed:', (err as Error).message);
+        }
+
         const inboxMessages = (inboxResponse.data.messages || []).map(m => ({ ...m, _direction: 'received' as const }));
         const sentMessages = (sentResponse.data.messages || []).map(m => ({ ...m, _direction: 'sent' as const }));
 
@@ -220,6 +253,7 @@ export async function POST(request: NextRequest) {
                 const toHeader = headers.find(h => h.name === 'To')?.value || '';
                 const subject = headers.find(h => h.name === 'Subject')?.value || '(No Subject)';
                 const dateHeader = headers.find(h => h.name === 'Date')?.value;
+                const messageIdHeader = headers.find(h => (h.name || '').toLowerCase() === 'message-id')?.value || null;
                 const snippet = fullMsg.data.snippet || '';
 
                 // Determine direction from Gmail labels
@@ -240,6 +274,19 @@ export async function POST(request: NextRequest) {
                 const { isRelevant, label } = detectRelevance(subject, snippet);
                 const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
                 const extracted: ExtractedData = EMPTY_EXTRACTION;
+
+                const senderLower = senderEmail.toLowerCase();
+                const fromPortfolioCompany = portfolioAddresses.has(senderLower)
+                    || (!isFreeEmailDomain(senderLower) && portfolioDomains.has(emailDomain(senderLower)));
+                const classification = classifyEmail({
+                    subject,
+                    text: `${snippet} ${bodyText.slice(0, 2000)}`,
+                    attachmentNames,
+                    senderEmail,
+                    fromPortfolioCompany,
+                    hasUnsubscribeHeader: headers.some(h => (h.name || '').toLowerCase() === 'list-unsubscribe'),
+                    direction,
+                });
 
                 // The shared rule, which knows a subject is a topic rather than a
                 // name — this used to turn "Pitch Deck - Seed Round" into a company.
@@ -268,6 +315,9 @@ export async function POST(request: NextRequest) {
                     recipientEmail,
                     extracted,
                     emailBody: bodyText.slice(0, 5000),
+                    category: classification.category,
+                    categoryReason: classification.reason,
+                    messageIdHeader,
                 } as WorkspaceEmail;
             } catch {
                 return null;   // one unreadable message must not sink the refresh

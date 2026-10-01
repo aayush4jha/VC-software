@@ -49,3 +49,4 @@ next-env.d.ts
 .enums-test
 .fund-test
 .fill-test
+.triage-test

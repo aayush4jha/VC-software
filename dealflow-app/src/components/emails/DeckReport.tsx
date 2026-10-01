@@ -115,6 +115,28 @@ export default function DeckReport() {
     const totalDecks = groups.reduce((s, g) => s + g.deckCount, 0);
     const newCount = groups.filter(g => !g.onPlatform).length;
 
+    // How many decks arrived on each of the last days in the range — the
+    // "how many did we get today?" question, answered for every day at once.
+    const perDay = (() => {
+        const counts = new Map<string, number>();
+        for (const g of groups) {
+            for (const e of g.emails) {
+                if (!e.hasDeck || !e.receivedAt) continue;
+                const day = new Date(e.receivedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                counts.set(day, (counts.get(day) ?? 0) + 1);
+            }
+        }
+        const out: { day: string; count: number }[] = [];
+        const span = Math.min(days, 30);     // a year of bars is unreadable
+        for (let i = span - 1; i >= 0; i--) {
+            const d = new Date(Date.now() - i * 86_400_000);
+            const key = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            out.push({ day: key, count: counts.get(key) ?? 0 });
+        }
+        return out;
+    })();
+    const perDayMax = Math.max(1, ...perDay.map(d => d.count));
+
     return (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
             {/* Controls */}
@@ -161,6 +183,37 @@ export default function DeckReport() {
                             <div style={{ fontSize: 22, fontWeight: 700, color: t.accent ? '#b45309' : 'var(--text-primary)' }}>{t.value}</div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Decks a day */}
+            {!loading && !error && perDay.length > 1 && (
+                <div style={{
+                    padding: '12px 14px', borderRadius: 10, marginBottom: 16,
+                    border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
+                }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 8 }}>
+                        Pitch decks a day{days > 30 ? ' (last 30 days)' : ''} · {perDay.reduce((s, d) => s + d.count, 0)} in total
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 54 }}>
+                        {perDay.map(d => (
+                            <div
+                                key={d.day}
+                                title={`${new Date(`${d.day}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}: ${d.count} deck${d.count === 1 ? '' : 's'}`}
+                                style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}
+                            >
+                                <div style={{
+                                    height: `${Math.max(d.count === 0 ? 2 : 8, (d.count / perDayMax) * 100)}%`,
+                                    background: d.count === 0 ? 'var(--border-light)' : '#4f46e5',
+                                    borderRadius: 3,
+                                }} />
+                            </div>
+                        ))}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                        <span>{new Date(`${perDay[0].day}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                        <span>Today · {perDay[perDay.length - 1].count}</span>
+                    </div>
                 </div>
             )}
 

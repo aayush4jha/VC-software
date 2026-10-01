@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { to, subject, body, companyId, attachments } = await request.json();
+        const { to, subject, body, companyId, attachments, threadId, inReplyTo } = await request.json();
 
         if (!to || !subject || !body) {
             return NextResponse.json(
@@ -71,10 +71,13 @@ export async function POST(request: NextRequest) {
             parts.push(`--${boundary}--`);
             message = parts.join('\n');
         } else {
+            // In-Reply-To and References are what make a reply land inside the
+            // founder's own thread rather than starting a new conversation.
             message = [
                 `From: ${senderEmail}`,
                 `To: ${to}`,
                 `Subject: ${subject}`,
+                ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
                 'Content-Type: text/plain; charset="UTF-8"',
                 'MIME-Version: 1.0',
                 '',
@@ -90,7 +93,7 @@ export async function POST(request: NextRequest) {
 
         const sendResult = await gmail.users.messages.send({
             userId: 'me',
-            requestBody: { raw: encodedMessage },
+            requestBody: { raw: encodedMessage, ...(threadId ? { threadId } : {}) },
         });
 
         // Log the sent email

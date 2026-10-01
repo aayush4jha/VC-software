@@ -15,6 +15,10 @@ import { useAppContext } from '@/lib/context';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 import DeckReport from '@/components/emails/DeckReport';
 import WhatsAppLink from '@/components/common/WhatsAppLink';
+import {
+    EMAIL_CATEGORIES, CATEGORY_COLORS, awaitingReply, replyState,
+    type EmailCategory,
+} from '@/lib/email-triage';
 
 interface ExtractedData {
     companyName: string | null;
@@ -48,6 +52,9 @@ interface WorkspaceEmail {
     recipientEmail: string | null;
     extracted: ExtractedData;
     emailBody: string;
+    category?: EmailCategory;
+    categoryReason?: string;
+    messageIdHeader?: string | null;
 }
 
 const RANGE_OPTIONS = [
@@ -126,11 +133,15 @@ function EmailsContent() {
     const [rangeDays, setRangeDays] = useState<number>(1);
     const [loadingRange, setLoadingRange] = useState<number | null>(null);
     const [cacheRead, setCacheRead] = useState(false);
+    const [category, setCategory] = useState<EmailCategory | 'all'>('all');
+    const [draft, setDraft] = useState<{ id: string; text: string; note: string } | null>(null);
+    const [drafting, setDrafting] = useState(false);
+    const [replying, setReplying] = useState(false);
     const emailsRef = useRef<WorkspaceEmail[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [filter, setFilter] = useState<'all' | 'received' | 'sent' | 'relevant'>('all');
+    const [filter, setFilter] = useState<'all' | 'received' | 'sent' | 'relevant' | 'awaiting'>('all');
     const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
     const [sentIds, setSentIds] = useState<Set<string>>(new Set());
     const [sentNote, setSentNote] = useState<Record<string, string>>({});
@@ -291,11 +302,101 @@ function EmailsContent() {
         setComposeFiles(prev => prev.filter((_, i) => i !== index));
     };
 
+    // Who is still waiting on us, worked out across everything loaded — a
+    // thread counts as answered only if we sent something after their last message.
+    const replyStates = useMemo(() => awaitingReply(emails.map(e => ({
+        id: e.id, threadId: e.threadId, direction: e.direction, receivedAt: e.receivedAt,
+    }))), [emails]);
+
+    const categoryCounts = useMemo(() => {
+        const counts = new Map<EmailCategory, number>();
+        for (const e of emails) {
+            if (e.direction === 'sent' || !e.category) continue;
+            counts.set(e.category, (counts.get(e.category) ?? 0) + 1);
+        }
+        return counts;
+    }, [emails]);
+
+    // Everything owed a reply, oldest first — the follow-up list.
+    const awaiting = useMemo(() => emails
+        .filter(e => e.direction === 'received'
+            && (e.category === 'Deals' || e.category === 'Portfolio Companies')
+            && replyStates.get(e.id)?.replied === false)
+        .sort((a, b) => (replyStates.get(b.id)?.daysWaiting ?? 0) - (replyStates.get(a.id)?.daysWaiting ?? 0)),
+        [emails, replyStates]);
+
+    const prepareReply = useCallback(async (email: WorkspaceEmail) => {
+        setDrafting(true);
+        setDraft({ id: email.id, text: '', note: '' });
+        try {
+            const res = await fetch('/api/gmail/draft-reply', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject: email.subject, emailBody: email.emailBody || email.snippet,
+                    senderName: email.senderName, senderEmail: email.senderEmail,
+                    attachmentNames: email.attachmentNames, derivedCompanyName: email.derivedCompanyName,
+                }),
+            });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error || 'Could not draft a reply');
+            setDraft({
+                id: email.id,
+                text: j.shouldReply === false
+                    ? '' : j.reply || '',
+                note: j.shouldReply === false
+                    ? 'The draft says this email does not need a reply — write one below if you disagree.'
+                    : j.note || '',
+            });
+        } catch (err) {
+            setDraft({ id: email.id, text: '', note: (err as Error).message });
+        }
+        setDrafting(false);
+    }, []);
+
+    // Sends the draft into the founder's own thread, and optionally files the
+    // company in the same action.
+    const sendReply = useCallback(async (email: WorkspaceEmail, alsoKanban: boolean) => {
+        if (!draft?.text.trim()) return;
+        setReplying(true);
+        try {
+            const res = await fetch('/api/gmail/send', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: email.senderEmail,
+                    subject: email.subject.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject}`,
+                    body: draft.text,
+                    threadId: email.threadId,
+                    inReplyTo: email.messageIdHeader,
+                }),
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(j.error || 'Could not send the reply');
+            setDraft(null);
+            if (alsoKanban && !sentIds.has(email.id)) await handleSendToKanban(email);
+            // The thread now counts as answered without a refresh.
+            setEmails(prev => {
+                const next = [...prev, {
+                    ...email,
+                    id: `local-sent-${email.id}`,
+                    direction: 'sent' as const,
+                    receivedAt: new Date().toISOString(),
+                }];
+                writeCache({ emails: next, loadedAt: loadedAt || new Date().toISOString(), rangeDays });
+                return next;
+            });
+        } catch (err) {
+            alert((err as Error).message);
+        }
+        setReplying(false);
+    }, [draft, sentIds, handleSendToKanban, loadedAt, rangeDays]);
+
     // Filters
     const filtered = emails.filter(e => {
         if (filter === 'received' && e.direction !== 'received') return false;
         if (filter === 'sent' && e.direction !== 'sent') return false;
         if (filter === 'relevant' && (!e.isRelevant || e.direction === 'sent')) return false;
+        if (filter === 'awaiting' && !awaiting.some(a => a.id === e.id)) return false;
+        if (category !== 'all' && e.category !== category) return false;
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             return e.subject.toLowerCase().includes(q) ||
@@ -393,6 +494,7 @@ function EmailsContent() {
                                 { key: 'received' as const, label: `Inbox (${receivedCount})` },
                                 { key: 'sent' as const, label: `Sent (${sentCount})` },
                                 { key: 'relevant' as const, label: `Deals (${relevantCount})` },
+                                { key: 'awaiting' as const, label: `Awaiting reply (${awaiting.length})` },
                             ]).map(f => (
                                 <button
                                     key={f.key}
@@ -408,6 +510,29 @@ function EmailsContent() {
                                     {f.label}
                                 </button>
                             ))}
+                        </div>
+                        {/* Categories */}
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {(['all', ...EMAIL_CATEGORIES] as const).map(c => {
+                                const active = category === c;
+                                const count = c === 'all' ? null : categoryCounts.get(c as EmailCategory) ?? 0;
+                                const colour = c === 'all' ? 'var(--text-secondary)' : CATEGORY_COLORS[c as EmailCategory];
+                                return (
+                                    <button
+                                        key={c}
+                                        onClick={() => setCategory(active ? 'all' : c as EmailCategory | 'all')}
+                                        style={{
+                                            padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 999,
+                                            cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                                            border: `1px solid ${active ? colour : 'var(--border-light)'}`,
+                                            background: active ? `${colour}1a` : 'transparent',
+                                            color: active ? colour : 'var(--text-secondary)',
+                                        }}
+                                    >
+                                        {c === 'all' ? 'All categories' : c}{count != null ? ` ${count}` : ''}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -534,6 +659,36 @@ function EmailsContent() {
                                         {email.hasAttachments && (
                                             <Paperclip size={11} style={{ color: 'var(--text-tertiary)' }} />
                                         )}
+                                        {email.category && email.direction === 'received' && (
+                                            <span
+                                                title={email.categoryReason}
+                                                style={{
+                                                    fontSize: 10, fontWeight: 600, borderRadius: 999, padding: '1px 7px',
+                                                    color: CATEGORY_COLORS[email.category],
+                                                    background: `${CATEGORY_COLORS[email.category]}1a`,
+                                                }}
+                                            >
+                                                {email.category}
+                                            </span>
+                                        )}
+                                        {email.direction === 'received' && (() => {
+                                            // How long they have been waiting on us.
+                                            const r = replyStates.get(email.id);
+                                            if (!r) return null;
+                                            const st = replyState(r.daysWaiting, r.replied);
+                                            if (st.urgency === 'fresh' && r.daysWaiting <= 0) return null;
+                                            return (
+                                                <span
+                                                    title={st.urgency === 'replied' ? 'Replied' : `Waiting ${r.daysWaiting} day(s) — reply within 3`}
+                                                    style={{
+                                                        fontSize: 10, fontWeight: 700, borderRadius: 999, padding: '1px 7px',
+                                                        color: st.color, background: `${st.color}1a`,
+                                                    }}
+                                                >
+                                                    {st.urgency === 'replied' ? '✓' : st.label}
+                                                </span>
+                                            );
+                                        })()}
                                         {sentIds.has(email.id) && (
                                             sentNote[email.id] ? (
                                                 <span
@@ -708,14 +863,62 @@ function EmailsContent() {
                                             )}
                                         </button>
                                     )}
+                                    <button
+                                        className="btn btn-ghost"
+                                        onClick={() => prepareReply(selectedEmail)}
+                                        disabled={drafting}
+                                    >
+                                        {drafting && draft?.id === selectedEmail.id
+                                            ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Drafting…</>
+                                            : <>Prepare reply</>}
+                                    </button>
                                     <button className="btn btn-ghost" onClick={() => {
                                         setComposeTo(selectedEmail.senderEmail);
                                         setComposeSubject(`Re: ${selectedEmail.subject}`);
                                         setComposeBody('');
                                         setShowCompose(true);
                                     }}>
-                                        Reply
+                                        Write my own
                                     </button>
+                                </div>
+                            )}
+
+                            {/* The drafted reply, for a human to read and send. */}
+                            {draft?.id === selectedEmail.id && (
+                                <div style={{
+                                    marginTop: 14, padding: 12, borderRadius: 10,
+                                    border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
+                                }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                                        Suggested reply to {selectedEmail.senderName || selectedEmail.senderEmail}
+                                    </div>
+                                    {draft.note && (
+                                        <div style={{ fontSize: 11, color: '#b45309', marginBottom: 8 }}>{draft.note}</div>
+                                    )}
+                                    <textarea
+                                        className="form-input"
+                                        rows={10}
+                                        value={draft.text}
+                                        onChange={e => setDraft({ ...draft, text: e.target.value })}
+                                        placeholder={drafting ? 'Writing…' : 'The draft will appear here — edit it before sending.'}
+                                        style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
+                                    />
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                                        <button className="btn btn-primary btn-sm" disabled={replying || !draft.text.trim()}
+                                            onClick={() => sendReply(selectedEmail, false)}>
+                                            {replying ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Sending…</> : <><Send size={13} /> Send reply</>}
+                                        </button>
+                                        <button className="btn btn-primary btn-sm" disabled={replying || !draft.text.trim()}
+                                            onClick={() => sendReply(selectedEmail, true)}>
+                                            <Send size={13} /> Send reply & move to Kanban
+                                        </button>
+                                        <button className="btn btn-ghost btn-sm" onClick={() => setDraft(null)} disabled={replying}>
+                                            Discard
+                                        </button>
+                                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', alignSelf: 'center' }}>
+                                            Goes out from your Gmail, in their thread.
+                                        </span>
+                                    </div>
                                 </div>
                             )}
                         </div>

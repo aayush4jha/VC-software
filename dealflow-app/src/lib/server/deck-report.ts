@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { companyNameFromDeckFilename, deriveCompanyName } from '@/lib/email-company';
 import { buildDeckReport, type DeckReportGroup, type PitchEmailRow, type PlatformCompany } from '@/lib/deck-report';
+import { REPLY_THRESHOLD_DAYS } from '@/lib/email-triage';
 import { collectAttachments, extractSenderInfo, isDeckFile, type AttachmentPart } from './gmail-parse';
 import { sendAsUser } from './gmail-send';
 
@@ -145,25 +146,98 @@ export async function loadDeckReport(db: SupabaseClient, userId: string, sinceMs
     return buildDeckReport((rows || []) as PitchEmailRow[], (companies || []) as PlatformCompany[], stageNames);
 }
 
+/**
+ * Pitch emails nobody has replied to, oldest first.
+ *
+ * A thread that contains anything we sent counts as answered. That is read
+ * from the sent-mail LIST, which carries thread ids without fetching a single
+ * message — the cheap way to ask "did we get back to them?".
+ */
+export async function findUnanswered(
+    db: SupabaseClient,
+    userId: string,
+    minDaysWaiting: number,
+    sinceMs: number,
+): Promise<{ companyName: string; senderEmail: string; subject: string; daysWaiting: number; messageId: string }[]> {
+    const auth = await getAuthenticatedClientForUser(userId);
+    if (!auth) return [];
+    const gmail = google.gmail({ version: 'v1', auth: auth.oauth2Client });
+
+    const repliedThreads = new Set<string>();
+    try {
+        let pageToken: string | undefined;
+        do {
+            const res = await gmail.users.messages.list({
+                userId: 'me', q: `in:sent after:${Math.floor(sinceMs / 1000)}`, maxResults: 200, pageToken,
+            });
+            for (const m of res.data.messages || []) if (m.threadId) repliedThreads.add(m.threadId);
+            pageToken = res.data.nextPageToken || undefined;
+        } while (pageToken && repliedThreads.size < 1000);
+    } catch (err) {
+        console.error('[deck-report] could not read sent mail:', (err as Error).message);
+        return [];
+    }
+
+    const { data: rows } = await db.from('inbox_pitch_emails')
+        .select('gmail_message_id, gmail_thread_id, sender_email, subject, received_at, company_name')
+        .eq('user_id', userId).eq('is_pitch', true)
+        .gte('received_at', new Date(sinceMs).toISOString())
+        .order('received_at', { ascending: true }).limit(500);
+
+    const now = Date.now();
+    const out: { companyName: string; senderEmail: string; subject: string; daysWaiting: number; messageId: string }[] = [];
+    const seenThreads = new Set<string>();
+    for (const r of rows || []) {
+        const thread = r.gmail_thread_id || r.gmail_message_id;
+        if (!thread || repliedThreads.has(thread) || seenThreads.has(thread)) continue;
+        const received = r.received_at ? new Date(r.received_at).getTime() : NaN;
+        if (isNaN(received)) continue;
+        const daysWaiting = Math.floor((now - received) / 86_400_000);
+        if (daysWaiting < minDaysWaiting) continue;
+        seenThreads.add(thread);
+        out.push({
+            companyName: r.company_name || r.sender_email,
+            senderEmail: r.sender_email,
+            subject: r.subject,
+            daysWaiting,
+            messageId: r.gmail_message_id,
+        });
+    }
+    return out.sort((a, b) => b.daysWaiting - a.daysWaiting);
+}
+
 function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function deckReportEmail(groups: DeckReportGroup[], dateLabel: string, appUrl: string | null) {
+export function deckReportEmail(
+    groups: DeckReportGroup[],
+    dateLabel: string,
+    appUrl: string | null,
+    unanswered: { companyName: string; senderEmail: string; subject: string; daysWaiting: number }[] = [],
+) {
     const decks = groups.reduce((s, g) => s + g.deckCount, 0);
     const fresh = groups.filter(g => !g.onPlatform).length;
-    const subject = `Your pitch deck report — ${groups.length} compan${groups.length === 1 ? 'y' : 'ies'}, ${dateLabel}`;
+    const subject = unanswered.length > 0
+        ? `${unanswered.length} founder${unanswered.length === 1 ? '' : 's'} waiting on a reply · ${groups.length} new — ${dateLabel}`
+        : `Your pitch deck report — ${groups.length} compan${groups.length === 1 ? 'y' : 'ies'}, ${dateLabel}`;
     const lines = groups.map(g => {
         const who = g.senders.map(s => s.name || s.email).join(', ');
         const files = g.emails.flatMap(e => e.attachments).filter(Boolean).join(', ');
         return `• ${g.companyName} — from ${who}${files ? ` — ${files}` : ''} — ${g.onPlatform ? `already on platform (${g.onPlatform.where})` : 'NEW'}`;
     });
     const link = appUrl ? `${appUrl.replace(/\/$/, '')}/emails?view=decks` : null;
+    const chaseText = unanswered.length === 0 ? [] : [
+        '',
+        `WAITING ON YOU (${unanswered.length}) — the reply window is ${REPLY_THRESHOLD_DAYS} days:`,
+        ...unanswered.map(u => `• ${u.companyName} — ${u.daysWaiting} days — "${u.subject}" — ${u.senderEmail}`),
+    ];
     const text = [
         `Pitch decks and investment emails received in your inbox — ${dateLabel}.`,
         `${groups.length} compan${groups.length === 1 ? 'y' : 'ies'}, ${decks} deck${decks === 1 ? '' : 's'}, ${fresh} not yet on the platform.`,
         '',
         ...lines,
+        ...chaseText,
         '',
         link ? `Open the full report: ${link}` : 'Open the Email Workspace for the full report.',
     ].join('\n');
@@ -182,6 +256,14 @@ export function deckReportEmail(groups: DeckReportGroup[], dateLabel: string, ap
 <tr style="text-align:left;color:#666;font-size:12px"><th style="padding:8px">Company</th><th style="padding:8px">From</th><th style="padding:8px">Attachments</th><th style="padding:8px">Status</th></tr>
 ${rowsHtml}
 </table>
+${unanswered.length === 0 ? '' : `<h3 style="margin:18px 0 6px;font-size:15px">Waiting on you (${unanswered.length})</h3>
+<p style="margin:0 0 8px;color:#666;font-size:12px">Founders who wrote and have had no reply. The window is ${REPLY_THRESHOLD_DAYS} days.</p>
+<table style="border-collapse:collapse;width:100%">
+${unanswered.map(u => `<tr>
+<td style="padding:6px 8px;border-bottom:1px solid #eee"><b>${escapeHtml(u.companyName)}</b><br><span style="color:#666;font-size:12px">${escapeHtml(u.subject)}</span></td>
+<td style="padding:6px 8px;border-bottom:1px solid #eee;color:${u.daysWaiting >= REPLY_THRESHOLD_DAYS ? '#b91c1c' : '#b45309'};font-weight:600;white-space:nowrap">${u.daysWaiting} days</td>
+</tr>`).join('\n')}
+</table>`}
 ${link ? `<p><a href="${escapeHtml(link)}">Open the full report</a></p>` : ''}
 <p style="color:#888;font-size:12px">You receive this because your Gmail is connected to Dholakia Ventures. Turn it off from the Deck Report in the Email Workspace.</p>
 </div>`;
@@ -217,9 +299,13 @@ export async function runDailyDeckReports(db: SupabaseClient, todayIST: string):
             const scan = await scanInboxForPitches(db, userId, since - 2 * 60 * 60 * 1000);
             if (scan.error) { result.errors.push(`${userId}: ${scan.error}`); continue; }
             const groups = await loadDeckReport(db, userId, since);
-            if (groups.length > 0) {
+            // Founders still waiting on a reply, over the last month.
+            const unanswered = await findUnanswered(
+                db, userId, REPLY_THRESHOLD_DAYS, Date.now() - 30 * 24 * 60 * 60 * 1000,
+            );
+            if (groups.length > 0 || unanswered.length > 0) {
                 const dateLabel = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
-                const mail = deckReportEmail(groups, dateLabel, appUrl);
+                const mail = deckReportEmail(groups, dateLabel, appUrl, unanswered);
                 const sent = await sendAsUser(userId, { to: 'self', ...mail });
                 if (!sent.ok) { result.errors.push(`${userId}: ${sent.error}`); continue; }
                 result.sent++;
