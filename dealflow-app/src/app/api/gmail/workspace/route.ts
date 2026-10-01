@@ -2,8 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { deriveCompanyName } from '@/lib/email-company';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Reading a year of mail is a lot of Gmail calls.
+export const maxDuration = 300;
+
+// How far back each refresh button looks, and how many messages it is worth
+// reading for that range.
+const RANGES: Record<string, { days: number; inbox: number; sent: number }> = {
+    '1': { days: 1, inbox: 60, sent: 30 },
+    '7': { days: 7, inbox: 100, sent: 40 },
+    '14': { days: 14, inbox: 150, sent: 50 },
+    '30': { days: 30, inbox: 200, sent: 60 },
+    '365': { days: 365, inbox: 300, sent: 80 },
+};
+
+// Each relevant inbound email used to cost a Gemini call, in sequence — which
+// is why loading the workspace was slow enough to be worth never repeating.
+// Only the newest few are analysed now; the rest carry the heuristics, and
+// Send to Kanban re-runs the full extraction on the one email that needs it.
+const MAX_AI_EMAILS = 20;
 
 const FUNDING_KEYWORDS = [
     'pitch deck', 'fundraising', 'funding', 'startup', 'investor',
@@ -218,24 +238,23 @@ export async function GET(request: NextRequest) {
     try {
         const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
 
-        // Only fetch emails after connection time
-        let afterFilter = '';
-        if (authResult.connectedAt) {
-            const epochSeconds = Math.floor(new Date(authResult.connectedAt).getTime() / 1000);
-            afterFilter = ` after:${epochSeconds}`;
-        }
+        // The range the person asked for, not the connection date: "refresh a
+        // year" has to mean a year even on an account connected last week.
+        const range = RANGES[new URL(request.url).searchParams.get('days') || '1'] ?? RANGES['1'];
+        const since = Math.floor((Date.now() - range.days * 24 * 60 * 60 * 1000) / 1000);
+        const afterFilter = ` after:${since}`;
 
         // Fetch both inbox and sent emails in parallel
         const [inboxResponse, sentResponse] = await Promise.all([
             gmail.users.messages.list({
                 userId: 'me',
                 q: `in:inbox${afterFilter}`,
-                maxResults: 50,
+                maxResults: range.inbox,
             }),
             gmail.users.messages.list({
                 userId: 'me',
                 q: `in:sent${afterFilter}`,
-                maxResults: 30,
+                maxResults: range.sent,
             }),
         ]);
 
@@ -257,6 +276,7 @@ export async function GET(request: NextRequest) {
         }
 
         const emails: WorkspaceEmail[] = [];
+        let aiCalls = 0;
 
         for (const msg of allMessages) {
             if (!msg.id) continue;
@@ -296,7 +316,8 @@ export async function GET(request: NextRequest) {
                 // Extract full body text for AI analysis
                 const bodyText = extractBodyText(fullMsg.data.payload as Parameters<typeof extractBodyText>[0]);
                 let extracted: ExtractedData;
-                if (direction === 'received' && isRelevant && GEMINI_API_KEY) {
+                if (direction === 'received' && isRelevant && GEMINI_API_KEY && aiCalls < MAX_AI_EMAILS) {
+                    aiCalls++;
                     extracted = await analyzeEmailWithAI(subject, senderName, senderEmail, bodyText, snippet);
                 } else {
                     extracted = {
@@ -307,13 +328,14 @@ export async function GET(request: NextRequest) {
                     };
                 }
 
-                // Use AI-extracted company name, or fall back to subject-based derivation
-                let derivedCompanyName = extracted.companyName || subject.replace(/^(re|fwd|fw):\s*/gi, '').trim();
-                if (!derivedCompanyName || derivedCompanyName === '(No Subject)') {
-                    const targetEmail = direction === 'sent' ? (recipientEmail || '') : senderEmail;
-                    const domain = targetEmail.split('@')[1]?.split('.')[0] || 'Unknown';
-                    derivedCompanyName = domain.charAt(0).toUpperCase() + domain.slice(1);
-                }
+                // The shared rule, which knows a subject is a topic rather than a
+                // name — this used to turn "Pitch Deck - Seed Round" into a company.
+                const derivedCompanyName = deriveCompanyName({
+                    aiName: extracted.companyName,
+                    senderName,
+                    senderEmail: direction === 'sent' ? (recipientEmail || senderEmail) : senderEmail,
+                    subject,
+                });
 
                 emails.push({
                     id: msg.id,
@@ -344,7 +366,12 @@ export async function GET(request: NextRequest) {
             return new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime();
         });
 
-        return NextResponse.json({ emails });
+        return NextResponse.json({
+            emails,
+            rangeDays: range.days,
+            aiAnalysed: aiCalls,
+            truncated: emails.length >= range.inbox + range.sent,
+        });
     } catch (error: unknown) {
         const err = error as { code?: number; message?: string };
         console.error('[gmail/workspace] error:', error);

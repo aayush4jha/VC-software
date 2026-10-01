@@ -50,6 +50,66 @@ interface WorkspaceEmail {
     emailBody: string;
 }
 
+const RANGE_OPTIONS = [
+    { days: 1, label: '24 hours' },
+    { days: 7, label: '7 days' },
+    { days: 14, label: '14 days' },
+    { days: 30, label: '1 month' },
+    { days: 365, label: '1 year' },
+];
+
+// The inbox is kept between visits so opening the page shows what was last
+// loaded instead of re-reading Gmail — which cost a Gemini call per relevant
+// email. Only a refresh button fetches now.
+const CACHE_KEY = 'dv.emailWorkspace.v1';
+const CACHE_MAX_EMAILS = 250;
+const CACHE_MAX_BODY = 6000;
+
+interface EmailCache {
+    emails: WorkspaceEmail[];
+    loadedAt: string;
+    rangeDays: number;
+}
+
+function readCache(): EmailCache | null {
+    try {
+        const raw = window.localStorage.getItem(CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as EmailCache;
+        return Array.isArray(parsed?.emails) ? parsed : null;
+    } catch {
+        return null;   // private window, cleared storage, or a stale shape
+    }
+}
+
+function writeCache(cache: EmailCache) {
+    const trim = (emails: WorkspaceEmail[]) => emails.slice(0, CACHE_MAX_EMAILS).map(e => ({
+        ...e, emailBody: (e.emailBody || '').slice(0, CACHE_MAX_BODY),
+    }));
+    try {
+        window.localStorage.setItem(CACHE_KEY, JSON.stringify({ ...cache, emails: trim(cache.emails) }));
+    } catch {
+        // Out of quota: keep the list, drop the bodies, which are the bulk of it.
+        try {
+            window.localStorage.setItem(CACHE_KEY, JSON.stringify({
+                ...cache, emails: trim(cache.emails).map(e => ({ ...e, emailBody: '' })),
+            }));
+        } catch { /* nothing cached this time; the page still works */ }
+    }
+}
+
+function fmtLoadedAt(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+        + ' ' + d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+}
+
 function EmailsContent() {
     const { refreshData } = useAppContext();
     const { isConnected, isChecking, connect, disconnect } = useGoogleAuth();
@@ -62,6 +122,9 @@ function EmailsContent() {
     );
 
     const [emails, setEmails] = useState<WorkspaceEmail[]>([]);
+    const [loadedAt, setLoadedAt] = useState<string | null>(null);
+    const [rangeDays, setRangeDays] = useState<number>(1);
+    const [loadingRange, setLoadingRange] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -80,33 +143,40 @@ function EmailsContent() {
     const loaded = useRef(false);
 
     // Auto-fetch emails when connected
-    const fetchEmails = useCallback(async () => {
+    const fetchEmails = useCallback(async (days: number) => {
         setLoading(true);
+        setLoadingRange(days);
         setError(null);
         try {
-            const res = await fetch('/api/gmail/workspace');
+            const res = await fetch(`/api/gmail/workspace?days=${days}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to fetch emails');
-            setEmails(data.emails || []);
+            const fresh: WorkspaceEmail[] = data.emails || [];
+            const when = new Date().toISOString();
+            setEmails(fresh);
+            setLoadedAt(when);
+            setRangeDays(days);
+            writeCache({ emails: fresh, loadedAt: when, rangeDays: days });
         } catch (err) {
             setError((err as Error).message);
         }
+        setLoadingRange(null);
         setLoading(false);
     }, []);
 
+    // Show what was last loaded. Nothing is fetched until a refresh button is
+    // pressed: reading the inbox is slow and costs an AI call per relevant
+    // email, so it must not happen just because someone opened the page.
     useEffect(() => {
-        if (isConnected && !isChecking && !loaded.current) {
-            loaded.current = true;
-            fetchEmails();
+        if (loaded.current) return;
+        loaded.current = true;
+        const cached = readCache();
+        if (cached) {
+            setEmails(cached.emails);
+            setLoadedAt(cached.loadedAt);
+            setRangeDays(cached.rangeDays);
         }
-    }, [isConnected, isChecking, fetchEmails]);
-
-    // Auto-refresh every 60 seconds
-    useEffect(() => {
-        if (!isConnected) return;
-        const interval = setInterval(fetchEmails, 60000);
-        return () => clearInterval(interval);
-    }, [isConnected, fetchEmails]);
+    }, []);
 
     // Auto-select email when navigated with ?messageId=
     useEffect(() => {
@@ -183,7 +253,7 @@ function EmailsContent() {
             setComposeSubject('');
             setComposeBody('');
             setComposeFiles([]);
-            setTimeout(fetchEmails, 2000);
+            // Not an automatic re-read: refreshing is the buttons' job.
         } catch (err) {
             alert((err as Error).message);
         }
@@ -320,10 +390,41 @@ function EmailsContent() {
                             ))}
                         </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn btn-ghost btn-sm" onClick={fetchEmails} disabled={loading} title="Refresh">
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                            {loadedAt
+                                ? `Loaded ${fmtLoadedAt(loadedAt)} · last ${RANGE_OPTIONS.find(r => r.days === rangeDays)?.label ?? `${rangeDays} days`}`
+                                : 'Nothing loaded yet'}
+                        </span>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => fetchEmails(rangeDays)}
+                            disabled={loading}
+                            title={`Reload the last ${RANGE_OPTIONS.find(r => r.days === rangeDays)?.label ?? 'range'}`}
+                        >
                             <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
                         </button>
+                        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-tertiary)', borderRadius: 6, padding: 2 }}>
+                            {RANGE_OPTIONS.map(r => (
+                                <button
+                                    key={r.days}
+                                    onClick={() => fetchEmails(r.days)}
+                                    disabled={loading}
+                                    title={`Read the last ${r.label} of mail from Gmail`}
+                                    style={{
+                                        padding: '6px 10px', fontSize: 11, fontWeight: 500, border: 'none',
+                                        cursor: loading ? 'default' : 'pointer', borderRadius: 4,
+                                        fontFamily: 'var(--font-sans)',
+                                        background: rangeDays === r.days ? 'var(--bg-secondary)' : 'transparent',
+                                        color: rangeDays === r.days ? 'var(--primary)' : 'var(--text-secondary)',
+                                        boxShadow: rangeDays === r.days ? 'var(--shadow-sm)' : 'none',
+                                        opacity: loading && loadingRange !== r.days ? 0.5 : 1,
+                                    }}
+                                >
+                                    {loadingRange === r.days ? 'Loading…' : r.label}
+                                </button>
+                            ))}
+                        </div>
                         <button className="btn btn-primary btn-sm" onClick={() => setShowCompose(true)}>
                             <Send size={13} /> Compose
                         </button>
@@ -349,9 +450,22 @@ function EmailsContent() {
                         ) : error ? (
                             <div style={{ padding: 24, textAlign: 'center', color: 'var(--danger)' }}>{error}</div>
                         ) : filtered.length === 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', color: 'var(--text-tertiary)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', color: 'var(--text-tertiary)', textAlign: 'center', padding: 24 }}>
                                 <Inbox size={32} style={{ marginBottom: 8 }} />
-                                <div style={{ fontWeight: 600 }}>No emails</div>
+                                <div style={{ fontWeight: 600 }}>
+                                    {loadedAt ? 'No emails in what was loaded' : 'Nothing loaded yet'}
+                                </div>
+                                <div style={{ fontSize: 12, marginTop: 6, maxWidth: 360 }}>
+                                    {loadedAt
+                                        ? 'Try a longer range, or clear the search and filters.'
+                                        : 'Pick a range above — 24 hours, 7 days, 14 days, 1 month or 1 year — to read your mail. The workspace keeps what it loaded, so it will be here next time.'}
+                                </div>
+                                {!loadedAt && (
+                                    <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }}
+                                        onClick={() => fetchEmails(1)} disabled={loading}>
+                                        <RefreshCw size={13} /> Load the last 24 hours
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             filtered.map(email => (
