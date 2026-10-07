@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { callGeminiMultimodal, getGeminiApiKeys } from '@/lib/gemini';
 import { deriveCompanyName, matchCompany } from '@/lib/email-company';
 import { collectAttachments, extractBodyText, decodeEntities, type AttachmentPart } from '@/lib/server/gmail-parse';
 import { saveEmailDocuments } from '@/lib/server/company-documents';
@@ -15,7 +16,6 @@ const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 export const maxDuration = 300;
 const TARGET_EMAIL = 'pipeline@dholakiaventures.com';
 const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const FUNDING_KEYWORDS = [
     'pitch deck', 'fundraising', 'funding', 'startup', 'investor',
@@ -72,7 +72,7 @@ interface ExtractedData {
 }
 
 async function analyzeEmailWithAI(subject: string, senderName: string, senderEmail: string, bodyText: string, snippet: string): Promise<ExtractedData> {
-    if (!GEMINI_API_KEY) {
+    if (getGeminiApiKeys().length === 0) {
         return {
             companyName: null, founderName: null, companyRound: null,
             totalFundRaise: null, valuation: null, industry: null,
@@ -111,27 +111,9 @@ Extract the following fields. Return ONLY valid JSON with these exact keys. Use 
 IMPORTANT: Return ONLY the JSON object, no markdown formatting, no code blocks, no explanation.`;
 
     try {
-        const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
-                }),
-            },
-        );
-
-        if (!res.ok) return {
-            companyName: null, founderName: null, companyRound: null,
-            totalFundRaise: null, valuation: null, industry: null,
-            subIndustry: null, dealSourceType: null, priorityLevel: null,
-            shareType: null, summary: null,
-        };
-
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const text = await callGeminiMultimodal([{ text: prompt }], {
+            temperature: 0.1, maxOutputTokens: 4096, label: 'ingest-extract',
+        });
         const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
         const parsed = JSON.parse(cleaned);
         return {

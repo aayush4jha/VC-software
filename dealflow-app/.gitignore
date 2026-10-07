@@ -52,3 +52,5 @@ next-env.d.ts
 .triage-test
 .gmailtext-test
 .draft-test
+.encode-test
+.gemini-test

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireMember } from '@/lib/api-auth';
+import { callGeminiMultimodal, getGeminiApiKeys } from '@/lib/gemini';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
     // These routes spend real money on model calls and read company data back
@@ -11,8 +10,8 @@ export async function POST(request: NextRequest) {
     const auth = await requireMember(request);
     if (auth.response) return auth.response;
 
-    if (!GEMINI_API_KEY) {
-        return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+    if (getGeminiApiKeys().length === 0) {
+        return NextResponse.json({ error: 'GEMINI_API_KEY is not configured.' }, { status: 500 });
     }
 
     const { companyName, founderName, rejectionReasons, rejectionStage, industry } = await request.json();
@@ -36,27 +35,13 @@ Write a rejection email that:
 Keep it professional but warm. 200-300 words. Do NOT include subject line — just the email body starting with "Dear ${founderName},".`;
 
     try {
-        const res = await fetch(GEMINI_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.5, maxOutputTokens: 1000 },
-            }),
+        const rawText = await callGeminiMultimodal([{ text: prompt }], {
+            temperature: 0.5, maxOutputTokens: 1000, label: 'rejection-email',
         });
 
-        if (!res.ok) {
-            const err = await res.text();
-            console.error('Gemini API error:', err);
-            return NextResponse.json({ error: 'AI generation failed' }, { status: 502 });
-        }
-
-        const data = await res.json();
-        const emailDraft = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-
-        return NextResponse.json({ emailDraft });
+        return NextResponse.json({ emailDraft: rawText });
     } catch (err) {
-        console.error('AI rejection-email error:', err);
-        return NextResponse.json({ error: 'AI generation failed' }, { status: 500 });
+        console.error('[rejection-email]', (err as Error).message);
+        return NextResponse.json({ error: (err as Error).message }, { status: 502 });
     }
 }

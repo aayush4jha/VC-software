@@ -12,6 +12,7 @@ import {
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
+import { bytesToBase64, inlineUploadError } from '@/lib/file-encode';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 import DeckReport from '@/components/emails/DeckReport';
 import WhatsAppLink from '@/components/common/WhatsAppLink';
@@ -275,12 +276,25 @@ function EmailsContent() {
         if (!composeTo || !composeSubject || !composeBody) return;
         setSending(true);
         try {
-            // Convert files to base64
+            const oversized = composeFiles
+                .map(f => inlineUploadError(f.name, f.size))
+                .filter((m): m is string => !!m);
+            if (oversized.length > 0) {
+                alert(oversized.join('\n\n'));
+                setSending(false);
+                return;
+            }
+
+            // Convert files to base64. Chunked, because spreading a file's
+            // bytes into fromCharCode overflows the stack on anything real.
             const attachments = await Promise.all(
                 composeFiles.map(async (file) => {
-                    const buffer = await file.arrayBuffer();
-                    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-                    return { filename: file.name, mimeType: file.type || 'application/octet-stream', data: base64 };
+                    const bytes = new Uint8Array(await file.arrayBuffer());
+                    return {
+                        filename: file.name,
+                        mimeType: file.type || 'application/octet-stream',
+                        data: bytesToBase64(bytes),
+                    };
                 })
             );
 

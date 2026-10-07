@@ -8,6 +8,7 @@ import {
     FileText, FileSearch, Download, FileDown, Video,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
+import { bytesToBase64, inlineUploadError } from '@/lib/file-encode';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import type { CompanyRound, PriorityLevel, DealSourceType, ShareType } from '@/types/database';
 import { INVESTMENT_TYPES } from '@/types/database';
@@ -262,9 +263,15 @@ export default function CompanyDetail() {
         try {
             let uploadedFile = null;
             if (file) {
-                const buffer = await file.arrayBuffer();
-                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-                uploadedFile = { data: base64, mimeType: file.type || 'application/pdf', filename: file.name };
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                const tooBig = inlineUploadError(file.name, bytes.length,
+                    'Attach it to the company as a document instead, or send a smaller export.');
+                if (tooBig) { alert(tooBig); setAnalyzingDeck(false); return; }
+                uploadedFile = {
+                    data: bytesToBase64(bytes),
+                    mimeType: file.type || 'application/pdf',
+                    filename: file.name,
+                };
             }
             await generateDeckAnalysis(c.id, uploadedFile);
         } catch (err) {
@@ -1364,9 +1371,14 @@ export default function CompanyDetail() {
                                             if (!file) return;
                                             setAnalyzingRecording(true);
                                             try {
-                                                const buffer = await file.arrayBuffer();
-                                                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-                                                await analyzeMeetingRecording(c.id, { data: base64, mimeType: file.type, filename: file.name });
+                                                const bytes = new Uint8Array(await file.arrayBuffer());
+                                                const tooBig = inlineUploadError(file.name, bytes.length);
+                                                if (tooBig) { alert(tooBig); setAnalyzingRecording(false); return; }
+                                                await analyzeMeetingRecording(c.id, {
+                                                    data: bytesToBase64(bytes),
+                                                    mimeType: file.type,
+                                                    filename: file.name,
+                                                });
                                             } catch (err) {
                                                 alert('Analysis failed: ' + (err as Error).message);
                                             }

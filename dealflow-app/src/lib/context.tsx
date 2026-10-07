@@ -1517,9 +1517,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }),
         });
         if (!res.ok) {
+            // The route explains itself now ("Gemini is busy right now…"), so
+            // pass that through rather than wrapping raw JSON in a status code.
             const errText = await res.text();
             console.error('generateDeckAnalysis error:', errText);
-            throw new Error(`AI analysis failed (${res.status}): ${errText.slice(0, 200)}`);
+            let message = errText.slice(0, 300);
+            try { message = JSON.parse(errText).error || message; } catch { /* not JSON */ }
+            throw new Error(message || `the server returned ${res.status}`);
         }
         const { analysis } = await res.json();
         await apiDb({ table: 'companies', operation: 'update', data: { deck_analysis: analysis }, match: { id: companyId } });

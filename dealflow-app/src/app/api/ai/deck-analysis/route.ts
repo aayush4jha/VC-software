@@ -6,6 +6,11 @@ import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { callGeminiMultimodal, getGeminiApiKeys, type GeminiPart } from '@/lib/gemini';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
+
+// Reading a whole pitch deck and writing the memo runs to half a minute, and
+// longer with a big PDF. Without this the platform's default cut the request
+// off mid-call and the UI reported it as an API error.
+export const maxDuration = 300;
 const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
 
 function isPitchDeckAttachment(filename: string): boolean {
@@ -25,13 +30,13 @@ function getMimeType(filename: string): string {
 
 export async function POST(request: NextRequest) {
     if (getGeminiApiKeys().length === 0) {
-        return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+        return NextResponse.json({ error: 'GEMINI_API_KEY is not configured.' }, { status: 500 });
     }
 
     const { companyId, companyName, founderName, industry, subIndustry, companyRound, totalFundRaise, valuation, quickSummary, googleDriveLink, uploadedFile } = await request.json();
 
     // ─── Try to fetch the actual pitch deck attachment from Gmail ───
-    let attachmentParts: GeminiPart[] = [];
+    const attachmentParts: GeminiPart[] = [];
     let attachmentInfo = '';
 
     // If a file was manually uploaded, use it directly
@@ -212,7 +217,7 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
 
         const rawText = await callGeminiMultimodal(geminiParts, {
             temperature: 0.3,
-            maxOutputTokens: 8000,
+            maxOutputTokens: 16000,
             label: 'deck-analysis',
         });
 
@@ -247,7 +252,7 @@ Respond in EXACTLY this JSON format (no markdown, no code blocks, just raw JSON)
 
         return NextResponse.json({ analysis });
     } catch (err) {
-        console.error('AI deck-analysis error:', err);
+        console.error('[deck-analysis]', (err as Error).message);
         return NextResponse.json({ error: (err as Error).message }, { status: 502 });
     }
 }

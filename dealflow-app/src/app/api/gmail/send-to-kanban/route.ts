@@ -8,13 +8,13 @@ import { saveEmailDocuments } from '@/lib/server/company-documents';
 import { fillCompanyBlanks } from '@/lib/server/company-fill';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { callGeminiMultimodal, getGeminiApiKeys, type GeminiPart } from '@/lib/gemini';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
 // Reading the deck and copying it into storage takes longer than a metadata write.
 export const maxDuration = 120;
 const PITCH_DECK_EXTENSIONS = ['.pdf', '.pptx', '.ppt', '.key', '.odp'];
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 function isPitchDeckAttachment(filename: string): boolean {
     return PITCH_DECK_EXTENSIONS.some(ext => filename.toLowerCase().endsWith(ext));
@@ -28,11 +28,6 @@ function getMimeType(filename: string): string {
     if (lower.endsWith('.key')) return 'application/x-iwork-keynote-sfile';
     if (lower.endsWith('.odp')) return 'application/vnd.oasis.opendocument.presentation';
     return 'application/octet-stream';
-}
-
-interface GeminiPart {
-    text?: string;
-    inlineData?: { mimeType: string; data: string };
 }
 
 interface ExtractedData {
@@ -51,7 +46,6 @@ interface ExtractedData {
 }
 
 async function analyzeWithGemini(
-    apiKey: string,
     subject: string,
     senderName: string,
     senderEmail: string,
@@ -92,66 +86,28 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting, no code blocks, 
 
     const parts: GeminiPart[] = [{ text: prompt }, ...attachmentParts];
 
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
-    const body = JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-    });
-
-    for (const model of models) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-        for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body,
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                    if (text) {
-                        const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-                        const parsed = JSON.parse(cleaned);
-                        return {
-                            companyName: parsed.companyName || null,
-                            founderName: parsed.founderName || null,
-                            founderEmail: parsed.founderEmail || null,
-                            companyRound: parsed.companyRound || null,
-                            totalFundRaise: typeof parsed.totalFundRaise === 'number' ? parsed.totalFundRaise : null,
-                            valuation: typeof parsed.valuation === 'number' ? parsed.valuation : null,
-                            industry: parsed.industry || null,
-                            subIndustry: parsed.subIndustry || null,
-                            dealSourceType: parsed.dealSourceType || null,
-                            priorityLevel: parsed.priorityLevel || null,
-                            shareType: parsed.shareType || null,
-                            summary: parsed.summary || null,
-                        };
-                    }
-                }
-
-                const errBody = await res.json().catch(() => ({ error: { code: res.status } }));
-                const code = errBody?.error?.code;
-
-                if (code === 429) {
-                    const retryDelay = errBody?.error?.details?.find(
-                        (d: { retryDelay?: string }) => d.retryDelay
-                    )?.retryDelay;
-                    const waitMs = retryDelay ? parseInt(retryDelay) * 1000 : 20000;
-                    await new Promise(r => setTimeout(r, Math.min(waitMs, 30000)));
-                    continue;
-                }
-
-                if (code === 404) break;
-                console.error(`[send-to-kanban] Gemini ${model} error (${code})`);
-                break;
-            } catch (e) {
-                console.error(`[send-to-kanban] Gemini ${model} fetch error:`, (e as Error).message);
-                break;
-            }
-        }
+    try {
+        const text = await callGeminiMultimodal(parts, {
+            temperature: 0.1, maxOutputTokens: 8192, label: 'send-to-kanban',
+        });
+        const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        return {
+            companyName: parsed.companyName || null,
+            founderName: parsed.founderName || null,
+            founderEmail: parsed.founderEmail || null,
+            companyRound: parsed.companyRound || null,
+            totalFundRaise: typeof parsed.totalFundRaise === 'number' ? parsed.totalFundRaise : null,
+            valuation: typeof parsed.valuation === 'number' ? parsed.valuation : null,
+            industry: parsed.industry || null,
+            subIndustry: parsed.subIndustry || null,
+            dealSourceType: parsed.dealSourceType || null,
+            priorityLevel: parsed.priorityLevel || null,
+            shareType: parsed.shareType || null,
+            summary: parsed.summary || null,
+        };
+    } catch (err) {
+        console.error('[send-to-kanban] extraction failed:', (err as Error).message);
     }
 
     // All models failed — return nulls
@@ -214,7 +170,7 @@ export async function POST(request: NextRequest) {
             shareType: null, summary: null,
         };
 
-        if (gmailMessageId && GEMINI_API_KEY) {
+        if (gmailMessageId && getGeminiApiKeys().length > 0) {
             try {
                 const authResult = await getAuthenticatedClientForUser(userId);
                 if (authResult) {
@@ -267,7 +223,6 @@ export async function POST(request: NextRequest) {
 
                     // Re-analyze with attachment content (multimodal)
                     const freshAI = await analyzeWithGemini(
-                        GEMINI_API_KEY,
                         subject,
                         senderName,
                         senderEmail,

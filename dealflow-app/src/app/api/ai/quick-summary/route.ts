@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireMember } from '@/lib/api-auth';
+import { callGeminiMultimodal, getGeminiApiKeys } from '@/lib/gemini';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
     // These routes spend real money on model calls and read company data back
@@ -11,8 +10,8 @@ export async function POST(request: NextRequest) {
     const auth = await requireMember(request);
     if (auth.response) return auth.response;
 
-    if (!GEMINI_API_KEY) {
-        return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+    if (getGeminiApiKeys().length === 0) {
+        return NextResponse.json({ error: 'GEMINI_API_KEY is not configured.' }, { status: 500 });
     }
 
     const { companyName, founderName, industry, subIndustry, companyRound, totalFundRaise, valuation, dealSourceType } = await request.json();
@@ -31,27 +30,13 @@ Deal Source: ${dealSourceType}
 Write a brief, professional summary (2-3 lines max) covering what the company likely does, the stage they're at, and a quick assessment. Be direct and factual.`;
 
     try {
-        const res = await fetch(GEMINI_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 200 },
-            }),
+        const rawText = await callGeminiMultimodal([{ text: prompt }], {
+            temperature: 0.3, maxOutputTokens: 200, label: 'quick-summary',
         });
 
-        if (!res.ok) {
-            const err = await res.text();
-            console.error('Gemini API error:', err);
-            return NextResponse.json({ error: 'AI generation failed' }, { status: 502 });
-        }
-
-        const data = await res.json();
-        const summary = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-
-        return NextResponse.json({ summary });
+        return NextResponse.json({ summary: rawText });
     } catch (err) {
-        console.error('AI quick-summary error:', err);
-        return NextResponse.json({ error: 'AI generation failed' }, { status: 500 });
+        console.error('[quick-summary]', (err as Error).message);
+        return NextResponse.json({ error: (err as Error).message }, { status: 502 });
     }
 }
