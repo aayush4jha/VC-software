@@ -18,11 +18,15 @@ export const maxDuration = 300;
  * worse than a job that does not run.
  */
 export async function GET(request: NextRequest) {
-    const secret = process.env.CRON_SECRET;
+    // Trimmed on both sides of the comparison. A value pasted with a trailing
+    // newline is rejected by the platform at build time, long before this runs,
+    // but the same paste into a local .env would otherwise fail here with
+    // nothing to suggest a stray character was the reason.
+    const secret = (process.env.CRON_SECRET || '').trim();
     if (!secret) {
         return NextResponse.json({ error: 'CRON_SECRET is not configured' }, { status: 503 });
     }
-    const given = Buffer.from(request.headers.get('authorization') || '');
+    const given = Buffer.from((request.headers.get('authorization') || '').trim());
     const expected = Buffer.from(`Bearer ${secret}`);
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
