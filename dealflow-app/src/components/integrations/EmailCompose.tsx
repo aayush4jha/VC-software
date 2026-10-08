@@ -12,6 +12,7 @@ export default function EmailCompose() {
     const { showEmailCompose, setShowEmailCompose, selectedCompany, user } = useAppContext();
     const { isConnected, isChecking, connect } = useGoogleAuth();
     const [to, setTo] = useState('');
+    const [cc, setCc] = useState('');
     const [subject, setSubject] = useState('');
     const [body, setBody] = useState('');
     const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
@@ -20,6 +21,7 @@ export default function EmailCompose() {
     useEffect(() => {
         if (showEmailCompose && selectedCompany) {
             setTo(selectedCompany.founderEmail);
+            setCc('');
             setSubject(`Re: ${selectedCompany.companyName}`);
             setBody(
                 `Hi ${selectedCompany.founderName},\n\nI hope this message finds you well.\n\n` +
@@ -58,6 +60,7 @@ export default function EmailCompose() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     to,
+                    cc,
                     subject,
                     body,
                     from: user?.email || '',
@@ -158,6 +161,10 @@ export default function EmailCompose() {
                             <input className="email-field-input" value={to} onChange={e => setTo(e.target.value)} placeholder="recipient@email.com" />
                         </div>
                         <div className="email-field">
+                            <span className="email-field-label">Cc</span>
+                            <input className="email-field-input" value={cc} onChange={e => setCc(e.target.value)} placeholder="Copy someone (optional)" />
+                        </div>
+                        <div className="email-field">
                             <span className="email-field-label">Subject</span>
                             <input className="email-field-input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject" />
                         </div>
@@ -168,6 +175,9 @@ export default function EmailCompose() {
                             placeholder="Write your email..."
                             rows={12}
                         />
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            Your Gmail signature is added at the bottom automatically.
+                        </div>
                     </div>
 
                     {/* Status message */}

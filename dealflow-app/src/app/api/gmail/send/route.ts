@@ -3,6 +3,8 @@ import { google } from 'googleapis';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
+import { appendSignature } from '@/lib/signature';
+import { fetchGmailSignature } from '@/lib/server/gmail-signature';
 
 export async function POST(request: NextRequest) {
     const user = await getRouteUser(request);
@@ -19,7 +21,14 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { to, subject, body, companyId, attachments, threadId, inReplyTo } = await request.json();
+        const { to, subject, body, companyId, attachments, threadId, inReplyTo, cc } = await request.json();
+
+        // Dropped rather than passed through: Gmail rejects a message whose
+        // Cc header is not a list of addresses.
+        const ccHeader = String(cc || '')
+            .split(/[,;]/).map(x => x.trim())
+            .filter(x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x))
+            .join(', ');
 
         if (!to || !subject || !body) {
             return NextResponse.json(
@@ -39,6 +48,12 @@ export async function POST(request: NextRequest) {
             // fallback to 'me'
         }
 
+        // The signature the person already has on their Gmail address goes on
+        // the end, so a mail sent from the platform looks like their own mail.
+        // Appended here rather than in each compose box: the workspace reply,
+        // the contact card and the company page all send through this route.
+        const signedBody = appendSignature(body, await fetchGmailSignature(gmail));
+
         let message: string;
         const hasAttachments = attachments && Array.isArray(attachments) && attachments.length > 0;
 
@@ -47,6 +62,7 @@ export async function POST(request: NextRequest) {
             const parts: string[] = [
                 `From: ${senderEmail}`,
                 `To: ${to}`,
+                ...(ccHeader ? [`Cc: ${ccHeader}`] : []),
                 `Subject: ${subject}`,
                 'MIME-Version: 1.0',
                 `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -54,7 +70,7 @@ export async function POST(request: NextRequest) {
                 `--${boundary}`,
                 'Content-Type: text/plain; charset="UTF-8"',
                 '',
-                body,
+                signedBody,
             ];
 
             for (const att of attachments as { filename: string; mimeType: string; data: string }[]) {
@@ -76,12 +92,13 @@ export async function POST(request: NextRequest) {
             message = [
                 `From: ${senderEmail}`,
                 `To: ${to}`,
+                ...(ccHeader ? [`Cc: ${ccHeader}`] : []),
                 `Subject: ${subject}`,
                 ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
                 'Content-Type: text/plain; charset="UTF-8"',
                 'MIME-Version: 1.0',
                 '',
-                body,
+                signedBody,
             ].join('\n');
         }
 

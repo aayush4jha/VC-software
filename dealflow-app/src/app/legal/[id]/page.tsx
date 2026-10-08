@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
     ArrowLeft, Briefcase, AlertTriangle, Info, LayoutDashboard,
-    ShieldCheck, GitCompareArrows, FolderOpen,
+    ShieldCheck, GitCompareArrows, FolderOpen, FileSpreadsheet,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
@@ -22,14 +22,16 @@ import LegalDashboard from '@/components/legal/LegalDashboard';
 import RightsMatrix from '@/components/legal/RightsMatrix';
 import RightsChanges from '@/components/legal/RightsChanges';
 import DocumentManager from '@/components/legal/DocumentManager';
+import ExcelImport from '@/components/legal/ExcelImport';
 
-type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'documents';
+type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'documents' | 'import';
 
 const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'rights', label: 'Rights', icon: ShieldCheck },
     { id: 'changes', label: 'Changes', icon: GitCompareArrows },
     { id: 'documents', label: 'Documents', icon: FolderOpen },
+    { id: 'import', label: 'Import from Excel', icon: FileSpreadsheet },
 ];
 
 function LegalDetailContent({ companyId }: { companyId: string }) {
@@ -207,6 +209,9 @@ function LegalDetailContent({ companyId }: { companyId: string }) {
                     )}
                     {activeTab === 'documents' && (
                         <DocumentManager record={record} onUpdate={updateRecord} />
+                    )}
+                    {activeTab === 'import' && (
+                        <ExcelImport company={company} />
                     )}
                 </div>
             </div>

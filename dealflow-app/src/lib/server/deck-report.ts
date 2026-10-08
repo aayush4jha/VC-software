@@ -275,6 +275,59 @@ ${link ? `<p><a href="${escapeHtml(link)}">Open the full report</a></p>` : ''}
  * on, scan the last day and email them their own report. At most once a day
  * per person (last_report_sent_on), and nothing is sent on a day with no pitches.
  */
+/**
+ * One person's report, scanned and emailed to them.
+ *
+ * The morning job and the "Send it to me now" button both go through here, so
+ * what arrives on demand is exactly what arrives at 9am — there is no second
+ * implementation to drift.
+ *
+ * `force` is the difference between the two: the scheduled run stays quiet on
+ * a day with nothing in it, while an on-demand send always produces an email,
+ * because an email that does not arrive is indistinguishable from a feature
+ * that does not work.
+ */
+export async function sendDeckReportTo(
+    db: SupabaseClient,
+    userId: string,
+    options: { sinceMs?: number; force?: boolean } = {},
+): Promise<{ ok: boolean; note?: string; error?: string; sent?: boolean }> {
+    const { sinceMs = Date.now() - 24 * 60 * 60 * 1000, force = false } = options;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+        || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
+
+    // A little overlap, so a message that arrived during the last run is not
+    // lost at the boundary.
+    const scan = await scanInboxForPitches(db, userId, sinceMs - 2 * 60 * 60 * 1000);
+    if (scan.error) return { ok: false, error: scan.error };
+
+    const groups = await loadDeckReport(db, userId, sinceMs);
+    const unanswered = await findUnanswered(
+        db, userId, REPLY_THRESHOLD_DAYS, Date.now() - 30 * 24 * 60 * 60 * 1000,
+    );
+
+    if (groups.length === 0 && unanswered.length === 0 && !force) {
+        return { ok: true, sent: false, note: 'Nothing new to report.' };
+    }
+
+    const dateLabel = new Date().toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata',
+    });
+    const mail = deckReportEmail(groups, dateLabel, appUrl, unanswered);
+    const sent = await sendAsUser(userId, { to: 'self', ...mail });
+    if (!sent.ok) return { ok: false, error: sent.error };
+
+    const decks = groups.reduce((n, g) => n + g.deckCount, 0);
+    return {
+        ok: true,
+        sent: true,
+        note: `Sent to your inbox — ${groups.length} compan${groups.length === 1 ? 'y' : 'ies'}, `
+            + `${decks} deck${decks === 1 ? '' : 's'}`
+            + (unanswered.length > 0 ? `, ${unanswered.length} awaiting a reply` : '')
+            + '.',
+    };
+}
+
 export async function runDailyDeckReports(db: SupabaseClient, todayIST: string): Promise<{
     users: number; sent: number; empty: number; skipped: number; errors: string[];
 }> {
@@ -285,33 +338,15 @@ export async function runDailyDeckReports(db: SupabaseClient, todayIST: string):
     if (prefErr) { result.errors.push(`user_report_prefs: ${prefErr.message}`); return result; }
     const prefBy = new Map((prefs || []).map((p: { user_id: string; daily_deck_report: boolean; last_report_sent_on: string | null }) => [p.user_id, p]));
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
-        || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
-    const since = Date.now() - 24 * 60 * 60 * 1000;
-
     for (const { user_id: userId } of (tokens || []) as { user_id: string }[]) {
         result.users++;
         const pref = prefBy.get(userId);
         if (pref && (!pref.daily_deck_report || pref.last_report_sent_on === todayIST)) { result.skipped++; continue; }
         try {
-            // Scan with a little overlap so a message that arrived during
-            // yesterday's run is not missed at the boundary.
-            const scan = await scanInboxForPitches(db, userId, since - 2 * 60 * 60 * 1000);
-            if (scan.error) { result.errors.push(`${userId}: ${scan.error}`); continue; }
-            const groups = await loadDeckReport(db, userId, since);
-            // Founders still waiting on a reply, over the last month.
-            const unanswered = await findUnanswered(
-                db, userId, REPLY_THRESHOLD_DAYS, Date.now() - 30 * 24 * 60 * 60 * 1000,
-            );
-            if (groups.length > 0 || unanswered.length > 0) {
-                const dateLabel = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
-                const mail = deckReportEmail(groups, dateLabel, appUrl, unanswered);
-                const sent = await sendAsUser(userId, { to: 'self', ...mail });
-                if (!sent.ok) { result.errors.push(`${userId}: ${sent.error}`); continue; }
-                result.sent++;
-            } else {
-                result.empty++;
-            }
+            const outcome = await sendDeckReportTo(db, userId);
+            if (!outcome.ok) { result.errors.push(`${userId}: ${outcome.error}`); continue; }
+            if (outcome.sent) result.sent++; else result.empty++;
+
             await db.from('user_report_prefs').upsert({
                 user_id: userId,
                 daily_deck_report: pref?.daily_deck_report ?? true,

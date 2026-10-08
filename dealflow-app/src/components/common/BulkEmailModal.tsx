@@ -30,6 +30,7 @@ export default function BulkEmailModal({ recipients, onClose }: {
     onClose: () => void;
 }) {
     const [subject, setSubject] = useState('');
+    const [cc, setCc] = useState('');
     const [body, setBody] = useState('');
     const [sending, setSending] = useState(false);
     const [files, setFiles] = useState<File[]>([]);
@@ -58,6 +59,9 @@ export default function BulkEmailModal({ recipients, onClose }: {
     }, [recipients]);
 
     const withoutEmail = recipients.length - unique.length;
+    // Mirrors the server's filter, so the warning counts what will really be sent.
+    const ccCount = cc.split(/[,;]/).map(x => x.trim())
+        .filter(x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)).length;
     const preview = unique[0];
 
     const send = async () => {
@@ -90,7 +94,7 @@ export default function BulkEmailModal({ recipients, onClose }: {
             const res = await fetch('/api/gmail/send-bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recipients: unique, subject, body, attachmentPaths }),
+                body: JSON.stringify({ recipients: unique, subject, body, attachmentPaths, cc }),
             });
             const json = await res.json();
             if (!res.ok) {
@@ -152,12 +156,35 @@ export default function BulkEmailModal({ recipients, onClose }: {
                     ) : (
                         <>
                             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
-                                Each founder gets their own email — nobody is CC&apos;d.
+                                Each founder gets their own email — no founder sees another&apos;s address.
                                 Use <code>{'{{founder_name}}'}</code>, <code>{'{{first_name}}'}</code> or{' '}
                                 <code>{'{{company_name}}'}</code> and they are filled in per recipient.
                                 {withoutEmail > 0 && (
                                     <> {withoutEmail} selected contact{withoutEmail === 1 ? ' has' : 's have'} no
                                     usable address and will be skipped.</>
+                                )}
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: 14 }}>
+                                <label className="form-label">CC (optional)</label>
+                                <input
+                                    className="form-input"
+                                    value={cc}
+                                    onChange={e => setCc(e.target.value)}
+                                    placeholder="colleague@dholakiaventures.com, analyst@…"
+                                />
+                                {ccCount > 0 && (
+                                    <div style={{ fontSize: 11, color: '#b45309', marginTop: 4 }}>
+                                        {ccCount === 1 ? 'This address' : `These ${ccCount} addresses`} will be
+                                        copied on all {unique.length} email{unique.length === 1 ? '' : 's'} —
+                                        that is {ccCount * unique.length} message
+                                        {ccCount * unique.length === 1 ? '' : 's'} in their inbox.
+                                    </div>
+                                )}
+                                {cc.trim() && ccCount === 0 && (
+                                    <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 4 }}>
+                                        That is not a usable address, so nobody will be copied.
+                                    </div>
                                 )}
                             </div>
 

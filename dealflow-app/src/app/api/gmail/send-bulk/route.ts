@@ -4,6 +4,8 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { COMPANY_DOCS_BUCKET } from '@/lib/server/file-store';
+import { appendSignature } from '@/lib/signature';
+import { fetchGmailSignature } from '@/lib/server/gmail-signature';
 
 // One send per founder rather than one mail with everyone on it: founders must
 // never see each other's addresses, and a reply has to come back as a normal
@@ -47,10 +49,15 @@ function encodeHeaderWord(value: string): string {
 function encodeMessage(
     from: string, to: string, subject: string, body: string,
     attachments: OutgoingAttachment[] = [],
+    cc = '',
 ): string {
     const lines = [
         `From: ${from}`,
         `To: ${to}`,
+        // One Cc for every founder in the batch: whoever is copied sees each
+        // message, which is the point of copying a colleague on an outreach
+        // round. The modal says so before anything is sent.
+        ...(cc ? [`Cc: ${cc}`] : []),
         `Subject: ${encodeHeaderWord(subject)}`,
         'MIME-Version: 1.0',
     ];
@@ -94,7 +101,7 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    const { recipients, subject, body, attachmentPaths } = await request.json();
+    const { recipients, subject, body, attachmentPaths, cc } = await request.json();
 
     if (!Array.isArray(recipients) || recipients.length === 0) {
         return NextResponse.json({ error: 'No recipients' }, { status: 400 });
@@ -102,6 +109,12 @@ export async function POST(request: NextRequest) {
     if (!subject || !body) {
         return NextResponse.json({ error: 'Missing subject or body' }, { status: 400 });
     }
+    // Only real addresses go in a header; anything else is dropped rather
+    // than handed to Gmail, which would reject the whole message.
+    const ccList = String(cc || '')
+        .split(/[,;]/).map(x => x.trim()).filter(x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
+    const ccHeader = ccList.join(', ');
+
     if (recipients.length > MAX_RECIPIENTS) {
         return NextResponse.json(
             { error: `Too many recipients (${recipients.length}). Send to at most ${MAX_RECIPIENTS} at a time.` },
@@ -153,6 +166,9 @@ export async function POST(request: NextRequest) {
         senderEmail = profile.data.emailAddress || 'me';
     } catch { /* 'me' is accepted by the API */ }
 
+    // Read once for the batch, not once per founder.
+    const signature = await fetchGmailSignature(gmail);
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const db = supabaseUrl && serviceRoleKey ? createServiceClient(supabaseUrl, serviceRoleKey) : null;
@@ -163,11 +179,13 @@ export async function POST(request: NextRequest) {
     // must be reportable per address rather than collapsing the whole batch.
     for (const r of unique) {
         const filledSubject = fillTemplate(subject, r);
-        const filledBody = fillTemplate(body, r);
+        // Signed after the merge fields are filled, so the signature is
+        // never mistaken for part of the template.
+        const filledBody = appendSignature(fillTemplate(body, r), signature);
         try {
             await gmail.users.messages.send({
                 userId: 'me',
-                requestBody: { raw: encodeMessage(senderEmail, r.email, filledSubject, filledBody, attachments) },
+                requestBody: { raw: encodeMessage(senderEmail, r.email, filledSubject, filledBody, attachments, ccHeader) },
             });
             results.push({ email: r.email, ok: true });
 
@@ -217,6 +235,7 @@ export async function POST(request: NextRequest) {
         sent,
         failed: results.length - sent,
         skipped: recipients.length - unique.length,
+        cc: ccList,
         results,
     });
 }

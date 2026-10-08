@@ -119,6 +119,12 @@ function ContactsContent() {
         });
     }, [founders, localSearch, activeCategories]);
 
+    // Bulk email selection. Keyed by contact id (company id + founder index),
+    // so the same person at two companies is two rows here and one send — the
+    // modal dedups by address.
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [showBulkEmail, setShowBulkEmail] = useState(false);
+
     // Per-category counts shown on the chips.
     const categoryCounts = useMemo(() => {
         const counts: Record<ContactCategory, number> = {
@@ -131,20 +137,26 @@ function ContactsContent() {
         return counts;
     }, [founders]);
 
+    // Clicking "Portfolio Founders" both filters to them and selects them, so
+    // emailing a whole category is one click rather than a filter followed by
+    // a select-all. Turning the chip off releases that category's selection
+    // again — otherwise people stay selected after they are out of view.
     const toggleCategory = (cat: ContactCategory) => {
+        const inCategory = founders.filter(f => f.category === cat && f.email.includes('@')).map(f => f.id);
+        const turningOn = !activeCategories.has(cat);
         setActiveCategories(prev => {
             const next = new Set(prev);
-            if (next.has(cat)) next.delete(cat);
-            else next.add(cat);
+            if (turningOn) next.add(cat); else next.delete(cat);
+            return next;
+        });
+        setSelected(prev => {
+            const next = new Set(prev);
+            for (const id of inCategory) {
+                if (turningOn) next.add(id); else next.delete(id);
+            }
             return next;
         });
     };
-
-    // Bulk email selection. Keyed by contact id (company id + founder index),
-    // so the same person at two companies is two rows here and one send — the
-    // modal dedups by address.
-    const [selected, setSelected] = useState<Set<string>>(new Set());
-    const [showBulkEmail, setShowBulkEmail] = useState(false);
 
     const selectableIds = useMemo(
         () => filtered.filter(f => f.email.includes('@')).map(f => f.id),

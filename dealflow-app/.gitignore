@@ -54,3 +54,5 @@ next-env.d.ts
 .draft-test
 .encode-test
 .gemini-test
+.legalimport-test
+.signature-test

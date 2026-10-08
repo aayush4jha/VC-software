@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, RefreshCw, Paperclip, FileText, Plus, Check, Mail, ExternalLink } from 'lucide-react';
+import { Loader2, RefreshCw, Paperclip, FileText, Plus, Check, Mail, ExternalLink, Send, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/lib/context';
 import type { DeckReportGroup } from '@/lib/deck-report';
@@ -38,6 +38,10 @@ export default function DeckReport() {
     const [truncated, setTruncated] = useState(false);
     const [dailyEmail, setDailyEmail] = useState(true);
     const [savingPref, setSavingPref] = useState(false);
+    const [schedule, setSchedule] = useState<{ ready: boolean; lastSentOn: string | null }>({ ready: true, lastSentOn: null });
+    const [prefError, setPrefError] = useState<string | null>(null);
+    const [sendingNow, setSendingNow] = useState(false);
+    const [sendNote, setSendNote] = useState<string | null>(null);
     const [adding, setAdding] = useState<string | null>(null);
     const [added, setAdded] = useState<Record<string, string>>({});
 
@@ -50,6 +54,7 @@ export default function DeckReport() {
             setGroups(j.groups || []);
             setTruncated(!!j.truncated);
             setDailyEmail(j.dailyEmail !== false);
+            setSchedule({ ready: j.scheduleReady !== false, lastSentOn: j.lastSentOn ?? null });
         } catch (e) {
             const msg = (e as Error).message;
             setError(/relation|does not exist|schema cache/i.test(msg)
@@ -61,15 +66,41 @@ export default function DeckReport() {
 
     useEffect(() => { load(days); }, [days, load]);
 
+    // The checkbox used to snap back in silence when the save failed, which
+    // is indistinguishable from the feature being broken. It now says why.
     const togglePref = async () => {
-        setSavingPref(true);
+        setSavingPref(true); setPrefError(null);
         const next = !dailyEmail;
-        const res = await fetch('/api/gmail/deck-report', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dailyEmail: next }),
-        });
-        if (res.ok) setDailyEmail(next);
+        try {
+            const res = await fetch('/api/gmail/deck-report', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dailyEmail: next }),
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(j.error || `the server returned ${res.status}`);
+            setDailyEmail(next);
+        } catch (e) {
+            setPrefError(`Could not save that: ${(e as Error).message}`);
+        }
         setSavingPref(false);
+    };
+
+    // Sends today's report immediately, through the same code the morning job
+    // uses — the only way to see that it works without waiting for tomorrow.
+    const sendNow = async () => {
+        setSendingNow(true); setSendNote(null); setPrefError(null);
+        try {
+            const res = await fetch('/api/gmail/deck-report', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sendNow: true }),
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(j.error || `the server returned ${res.status}`);
+            setSendNote(j.note || 'Sent to your inbox.');
+        } catch (e) {
+            setPrefError(`Could not send it: ${(e as Error).message}`);
+        }
+        setSendingNow(false);
     };
 
     const openCompany = (id: string) => {
@@ -161,11 +192,60 @@ export default function DeckReport() {
                 <button className="btn btn-ghost btn-sm" onClick={() => load(days)} disabled={loading} title="Rescan">
                     <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
                 </button>
-                <label style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={dailyEmail} onChange={togglePref} disabled={savingPref} />
-                    <Mail size={12} /> Email me this report every morning
-                </label>
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={dailyEmail} onChange={togglePref} disabled={savingPref} />
+                        <Mail size={12} /> Email me this report every morning
+                    </label>
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={sendNow} disabled={sendingNow}>
+                        {sendingNow
+                            ? <><Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> Sending…</>
+                            : <><Send size={11} /> Send it to me now</>}
+                    </button>
+                </div>
             </div>
+
+            {/* What the schedule is actually doing */}
+            {dailyEmail && !schedule.ready && (
+                <div style={{
+                    display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 8, marginBottom: 12,
+                    background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)',
+                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
+                }}>
+                    <AlertCircle size={15} style={{ color: '#b45309', flexShrink: 0, marginTop: 1 }} />
+                    <span>
+                        The morning send is switched on, but the scheduled job cannot run on this deployment:
+                        the <code>CRON_SECRET</code> environment variable is not set, so{' '}
+                        <code>/api/cron/daily</code> refuses every request. Set it in the hosting project&apos;s
+                        environment variables and redeploy. Until then, &ldquo;Send it to me now&rdquo; works.
+                    </span>
+                </div>
+            )}
+            {dailyEmail && schedule.ready && (
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>
+                    {schedule.lastSentOn
+                        ? `Last sent ${new Date(`${schedule.lastSentOn}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. Next at 9:00 am IST.`
+                        : 'Scheduled for 9:00 am IST. Nothing has been sent yet.'}
+                </div>
+            )}
+            {sendNote && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8,
+                    marginBottom: 12, fontSize: 12, fontWeight: 600, color: '#047857',
+                    background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)',
+                }}>
+                    <Check size={14} /> {sendNote}
+                </div>
+            )}
+            {prefError && (
+                <div style={{
+                    display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 8, marginBottom: 12,
+                    fontSize: 12, color: 'var(--danger, #b91c1c)',
+                    background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
+                }}>
+                    <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} /> {prefError}
+                </div>
+            )}
 
             {/* Summary */}
             {!loading && !error && (

@@ -3,6 +3,9 @@ import { google } from 'googleapis';
 const SCOPES = [
     'https://www.googleapis.com/auth/gmail.send',
     'https://www.googleapis.com/auth/gmail.readonly',
+    // Reading the signature the person has already set on their address, so a
+    // mail sent from the platform is signed the way their own mail is.
+    'https://www.googleapis.com/auth/gmail.settings.basic',
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
     'https://www.googleapis.com/auth/drive.readonly',

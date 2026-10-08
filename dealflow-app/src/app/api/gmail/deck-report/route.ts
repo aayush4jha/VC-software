@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/auth-helpers';
-import { scanInboxForPitches, loadDeckReport } from '@/lib/server/deck-report';
+import { scanInboxForPitches, loadDeckReport, sendDeckReportTo } from '@/lib/server/deck-report';
 
 // Scanning a month of mail is a few hundred Gmail reads.
 export const maxDuration = 60;
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
     const groups = await loadDeckReport(client, user.id, since);
     const { data: pref } = await client.from('user_report_prefs')
-        .select('daily_deck_report').eq('user_id', user.id).maybeSingle();
+        .select('daily_deck_report, last_report_sent_on').eq('user_id', user.id).maybeSingle();
 
     return NextResponse.json({
         days,
@@ -43,17 +43,37 @@ export async function GET(request: NextRequest) {
         scanned: scan.scanned,
         truncated: scan.truncated,
         dailyEmail: pref?.daily_deck_report ?? true,
+        // The morning email is sent by the cron job, which refuses to run
+        // without CRON_SECRET. Without this the checkbox looked switched on
+        // while nothing was ever sent, and there was no way to tell.
+        scheduleReady: !!process.env.CRON_SECRET,
+        lastSentOn: pref?.last_report_sent_on ?? null,
+        everSaved: !!pref,
     });
 }
 
-/** POST { dailyEmail: boolean } — switch the morning email on or off. */
+/**
+ * POST { dailyEmail: boolean } — switch the morning email on or off.
+ * POST { sendNow: true }       — send this person's report to themselves now.
+ *
+ * Sending on demand is how the feature gets verified without waiting for
+ * tomorrow morning, and how it still works at all on a deployment where the
+ * cron secret has not been set.
+ */
 export async function POST(request: NextRequest) {
     const user = await getRouteUser(request);
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const client = db();
     if (!client) return NextResponse.json({ error: 'Server config missing' }, { status: 500 });
 
-    const { dailyEmail } = await request.json();
+    const { dailyEmail, sendNow } = await request.json();
+
+    if (sendNow === true) {
+        const outcome = await sendDeckReportTo(client, user.id);
+        if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: 502 });
+        return NextResponse.json({ sent: true, note: outcome.note });
+    }
+
     if (typeof dailyEmail !== 'boolean') return NextResponse.json({ error: 'dailyEmail must be true or false' }, { status: 400 });
     const { error } = await client.from('user_report_prefs').upsert({
         user_id: user.id, daily_deck_report: dailyEmail, updated_at: new Date().toISOString(),

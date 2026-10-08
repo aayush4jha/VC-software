@@ -409,6 +409,10 @@ export default function KanbanBoard() {
     const { searchQuery, activeFilters, companies, pipelineStages, getIndustryById, moveCompanyStage, rejectionRecords } = useAppContext();
 
     // Rejected companies for the Rejected column
+    // When a company joined the board. entry_date is the portfolio's idea of
+    // "when", so created_at is what orders the pipeline.
+    const entered = (c: Company) => new Date(c.createdAt || 0).getTime();
+
     const rejectedCompanies = companies.filter(c => {
         if (c.terminalStatus !== 'Rejected') return false;
         if (searchQuery) {
@@ -487,7 +491,13 @@ export default function KanbanBoard() {
                             // High priority companies pinned to top
                             if (a.priorityLevel === 'High' && b.priorityLevel !== 'High') return -1;
                             if (a.priorityLevel !== 'High' && b.priorityLevel === 'High') return 1;
-                            return 0;
+                            // Then oldest first, so a company that has just
+                            // arrived — from Email Workspace, say — joins the
+                            // bottom of the column instead of displacing the
+                            // ones already being worked through. The list is
+                            // loaded newest-first, so without this a new
+                            // Thesis Check card appeared at the top.
+                            return entered(a) - entered(b);
                         });
                     return (
                         <div key={stage.id} className="kanban-column">

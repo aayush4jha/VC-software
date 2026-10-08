@@ -69,6 +69,10 @@ const RANGE_OPTIONS = [
 // The inbox is kept between visits so opening the page shows what was last
 // loaded instead of re-reading Gmail — which cost a Gemini call per relevant
 // email. Only a refresh button fetches now.
+// How wide the open mail is allowed to get. Mail arrives hard-wrapped at
+// roughly 72 characters, so past this the box grows but the text does not.
+const READING_WIDTH = 760;
+
 const CACHE_KEY = 'dv.emailWorkspace.v1';
 // Bumped whenever an email gains a field the list reads. A cache written
 // before categories existed has rows that can never be sorted or coloured,
@@ -727,7 +731,10 @@ function EmailsContent() {
 
                     {/* Email detail pane */}
                     {selectedEmail && (
-                        <div className="email-detail-pane" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                        // READING_WIDTH caps the column: a mail is hard-wrapped
+                        // by whoever sent it, so a pane the full width of a wide
+                        // monitor left most of the body box empty on the right.
+                        <div className="email-detail-pane" style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 24px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                                 <div style={{ flex: 1 }}>
                                     <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
@@ -824,9 +831,10 @@ function EmailsContent() {
                             {/* Email body */}
                             <div
                                 style={{
-                                    padding: 20, background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                                    padding: '16px 18px', background: 'var(--bg-secondary)', border: '1px solid var(--border)',
                                     borderRadius: 10, fontSize: 14, lineHeight: 1.7, color: 'var(--text-primary)',
                                     whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                    maxWidth: READING_WIDTH,
                                 }}
                                 dangerouslySetInnerHTML={{
                                     __html: (() => {
