@@ -60,3 +60,4 @@ next-env.d.ts
 .templates-test
 .ledger-test
 .legaltracker-test
+.masterimport-test
