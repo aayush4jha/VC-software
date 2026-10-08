@@ -6,6 +6,9 @@ export interface AttachmentPart {
     // A part carries either an attachment to download or the body text itself.
     body?: { attachmentId?: string | null; size?: number | null; data?: string | null } | null;
     parts?: AttachmentPart[] | null;
+    // Content-ID lives here; it is how an inline image in the HTML finds the
+    // attachment that holds its bytes.
+    headers?: { name?: string | null; value?: string | null }[] | null;
 }
 
 export interface FoundAttachment {
@@ -103,6 +106,36 @@ function decodeBase64Url(data: string): string {
  * The message's own HTML, undecoded by anything — what the sender actually
  * built. extractBodyText flattens this to words; the reading pane renders it.
  */
+/**
+ * The part an inline image refers to.
+ *
+ * The HTML says <img src="cid:logo@acme">; the bytes are on a part whose
+ * Content-ID header is <logo@acme>. The angle brackets are part of the header
+ * and not of the reference, so both sides are stripped before comparing, and
+ * the filename is tried as a last resort since some senders use that instead.
+ */
+export function findInlinePart(
+    payload: AttachmentPart | null | undefined,
+    contentId: string,
+): AttachmentPart | null {
+    const wanted = decodeURIComponent(contentId).replace(/^<|>$/g, '').trim().toLowerCase();
+    if (!wanted) return null;
+
+    const walk = (part: AttachmentPart | null | undefined): AttachmentPart | null => {
+        if (!part) return null;
+        const cid = (part.headers || [])
+            .find(h => (h?.name || '').toLowerCase() === 'content-id')?.value || '';
+        if (cid.replace(/^<|>$/g, '').trim().toLowerCase() === wanted) return part;
+        if ((part.filename || '').toLowerCase() === wanted) return part;
+        for (const child of part.parts || []) {
+            const found = walk(child);
+            if (found) return found;
+        }
+        return null;
+    };
+    return walk(payload);
+}
+
 export function extractBodyHtml(payload: AttachmentPart | null | undefined): string {
     if (!payload) return '';
     if (payload.mimeType === 'text/html' && payload.body?.data) {

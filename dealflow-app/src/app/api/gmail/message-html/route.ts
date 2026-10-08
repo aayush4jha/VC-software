@@ -32,14 +32,23 @@ export async function GET(request: NextRequest) {
 
         const rawHtml = extractBodyHtml(payload);
         if (rawHtml) {
-            const { html, changed } = sanitizeEmailHtml(rawHtml);
-            if (html) return NextResponse.json({ document: html, kind: 'html', sanitized: changed });
+            const { html, changed, images } = sanitizeEmailHtml(rawHtml, {
+                // Every picture comes back through the platform: a cid: source
+                // is an attachment the browser cannot resolve at all, and a
+                // remote one loaded directly would report the reader to the
+                // sender. See /api/gmail/image.
+                rewriteImageUrl: (url) =>
+                    `/api/gmail/image?messageId=${encodeURIComponent(messageId)}&src=${encodeURIComponent(url)}`,
+            });
+            if (html) {
+                return NextResponse.json({ document: html, kind: 'html', sanitized: changed, images });
+            }
         }
 
         // No HTML part: a plain-text mail, shown through the same frame so
         // both kinds of message look like one reading pane.
         const text = extractBodyText(payload);
-        return NextResponse.json({ document: textToDocument(text), kind: 'text', sanitized: false });
+        return NextResponse.json({ document: textToDocument(text), kind: 'text', sanitized: false, images: 0 });
     } catch (err) {
         const e = err as { code?: number; message?: string };
         if (e.code === 404) return NextResponse.json({ error: 'That message is no longer in Gmail' }, { status: 404 });

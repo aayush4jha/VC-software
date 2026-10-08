@@ -51,11 +51,33 @@ const doc = sanitize('<p>x</p>');
 check('it is a whole document', doc.startsWith('<!doctype html>'), true);
 check('it declares its charset', has(doc, '<meta charset="utf-8">'), true);
 check('it forbids everything but images and inline style', has(doc, "default-src 'none'"), true);
-check('images may still load', has(doc, 'img-src http: https: data: cid:'), true);
+check('images may still load', has(doc, 'img-src \'self\' http: https: data:'), true);
 check('no referrer goes back to the sender', has(doc, 'content="no-referrer"'), true);
 check('images cannot overflow the column', has(doc, 'img { max-width: 100%'), true);
 check('an empty mail produces nothing', sanitizeEmailHtml('').html, '');
 check('whitespace counts as empty', sanitizeEmailHtml('   \n  ').html, '');
+
+console.log('— images come back through the platform —');
+const proxied = sanitizeEmailHtml(
+    '<img src="https://cdn.sbi/banner.png"><img src=\'cid:logo@sbi\'><img src=x.gif>',
+    { rewriteImageUrl: (u) => `/api/gmail/image?src=${encodeURIComponent(u)}` },
+);
+check('every image is counted', proxied.images, 3);
+check('a remote image is rewritten', proxied.html.includes('src="/api/gmail/image?src=https%3A%2F%2Fcdn.sbi%2Fbanner.png"'), true);
+check('an inline cid image is rewritten', proxied.html.includes('src%3Alogo') || proxied.html.includes('cid%3Alogo%40sbi'), true);
+check('an unquoted src is rewritten', proxied.html.includes('src=%22') === false && proxied.html.includes('x.gif'), true);
+check('nothing points at the sender any more', /src="https:\/\/cdn\.sbi/.test(proxied.html), false);
+check(
+    'a srcset cannot fetch behind the rewrite',
+    sanitizeEmailHtml('<img src="a.png" srcset="https://cdn.sbi/2x.png 2x">', { rewriteImageUrl: () => '/p' })
+        .html.includes('srcset'),
+    false,
+);
+check('without a rewriter the source is left alone',
+    sanitizeEmailHtml('<img src="https://cdn.sbi/b.png">').html.includes('src="https://cdn.sbi/b.png"'), true);
+check('an image with no src is left alone',
+    sanitizeEmailHtml('<img alt="x">', { rewriteImageUrl: () => '/p' }).images, 0);
+check('the frame may load from our own origin', sanitizeEmailHtml('<p>x</p>').html.includes("img-src 'self'"), true);
 
 console.log('— is it HTML at all? —');
 check('a table layout is', looksLikeHtml('<table><tr><td>x</td></tr></table>'), true);

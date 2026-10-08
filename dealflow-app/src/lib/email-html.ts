@@ -26,6 +26,23 @@ export interface SanitizedEmail {
     html: string;
     /** True when anything was removed — shown to the reader as a note. */
     changed: boolean;
+    /** How many images the mail refers to. A bank mailer is mostly images. */
+    images: number;
+}
+
+export interface SanitizeOptions {
+    /**
+     * Where an image should really be loaded from.
+     *
+     * A marketing mail is a stack of image slices with their heights fixed in
+     * the markup, so an image that does not load leaves a tall empty block
+     * exactly where the picture should be — which is what the reading pane was
+     * showing. Hot-link protection and a stripped referrer are enough to cause
+     * that, so the images are fetched through the platform instead of by the
+     * reader's browser. It is also what keeps the sender from learning who
+     * opened the mail and from where.
+     */
+    rewriteImageUrl?: (url: string) => string;
 }
 
 /**
@@ -34,10 +51,10 @@ export interface SanitizedEmail {
  * Inline styles and table attributes are kept, because they ARE the layout.
  * What goes is anything that executes, navigates or phones home on its own.
  */
-export function sanitizeEmailHtml(raw: string): SanitizedEmail {
-    if (!raw || !raw.trim()) return { html: '', changed: false };
+export function sanitizeEmailHtml(raw: string, options: SanitizeOptions = {}): SanitizedEmail {
+    if (!raw || !raw.trim()) return { html: '', changed: false, images: 0 };
 
-    const cleaned = raw
+    let cleaned = raw
         .replace(DROP_WHOLE, '')
         .replace(DROP_OPEN, '')
         .replace(EVENT_ATTR, '')
@@ -45,7 +62,23 @@ export function sanitizeEmailHtml(raw: string): SanitizedEmail {
         // A link opening inside the frame would navigate the reading pane.
         .replace(/<a\b/gi, '<a target="_blank" rel="noopener noreferrer nofollow"');
 
-    return { html: wrapDocument(cleaned), changed: cleaned !== raw };
+    // Only one source is honoured, so a srcset cannot quietly win over the
+    // rewritten src and fetch straight from the sender.
+    cleaned = cleaned.replace(/\ssrcset\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+
+    let images = 0;
+    cleaned = cleaned.replace(
+        /(<img\b[^>]*?\ssrc\s*=\s*)("([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+        (whole, prefix: string, _q, dq?: string, sq?: string, bare?: string) => {
+            const url = (dq ?? sq ?? bare ?? '').trim();
+            if (!url) return whole;
+            images++;
+            const next = options.rewriteImageUrl ? options.rewriteImageUrl(url) : url;
+            return `${prefix}"${next.replace(/"/g, '&quot;')}"`;
+        },
+    );
+
+    return { html: wrapDocument(cleaned), changed: cleaned !== raw, images };
 }
 
 /**
@@ -75,7 +108,7 @@ const FRAME_CSS = `
 function wrapDocument(body: string): string {
     return `<!doctype html><html><head><meta charset="utf-8">`
         // No remote CSS, no plugins, and images may not carry a referrer back.
-        + `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src http: https: data: cid:; style-src 'unsafe-inline'; font-src http: https: data:">`
+        + `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' http: https: data:; style-src 'unsafe-inline'; font-src 'self' http: https: data:">`
         + `<meta name="referrer" content="no-referrer">`
         + `<style>${FRAME_CSS}</style></head><body>${body}</body></html>`;
 }

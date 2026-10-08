@@ -16,6 +16,7 @@ interface Loaded {
     document: string | null;
     kind: 'html' | 'text';
     sanitized: boolean;
+    images: number;
 }
 
 export default function EmailBody({ messageId, fallbackText, maxWidth }: Props) {
@@ -42,11 +43,12 @@ export default function EmailBody({ messageId, fallbackText, maxWidth }: Props) 
                     document: j.document || null,
                     kind: j.kind === 'text' ? 'text' : 'html',
                     sanitized: !!j.sanitized,
+                    images: Number(j.images) || 0,
                 });
             })
             .catch(() => {
                 if (cancelled) return;
-                setLoaded({ forId: messageId, document: null, kind: 'text', sanitized: false });
+                setLoaded({ forId: messageId, document: null, kind: 'text', sanitized: false, images: 0 });
             });
         return () => { cancelled = true; };
     }, [messageId]);
@@ -80,14 +82,19 @@ export default function EmailBody({ messageId, fallbackText, maxWidth }: Props) 
                         borderRadius: 10, background: '#fff', display: 'block',
                     }}
                 />
-                {showing.sanitized && (
-                    <div style={{
-                        display: 'flex', alignItems: 'center', gap: 5, marginTop: 6,
-                        fontSize: 11, color: 'var(--text-tertiary)',
-                    }}>
-                        <ShieldCheck size={11} /> Scripts and tracking in this mail were removed before it was shown.
-                    </div>
-                )}
+                {/* How it was rendered, in one line. Without this, "the body
+                    still looks wrong" cannot be told apart from "the body
+                    rendered correctly and the mail is mostly pictures". */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 5, marginTop: 6,
+                    fontSize: 11, color: 'var(--text-tertiary)',
+                }}>
+                    <ShieldCheck size={11} />
+                    {showing.kind === 'html'
+                        ? `Shown as the sender built it${showing.images > 0 ? ` · ${showing.images} image${showing.images === 1 ? '' : 's'}, loaded through the platform` : ''}`
+                        : 'Plain-text mail'}
+                    {showing.sanitized && ' · scripts and trackers removed'}
+                </div>
             </div>
         );
     }
