@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import UpdateBanner from '@/components/layout/UpdateBanner';
 import "./globals.css";
 import { AppProvider } from "@/lib/context";
 
@@ -15,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AppProvider>{children}</AppProvider>
+        <AppProvider>
+          {children}
+          <UpdateBanner />
+        </AppProvider>
       </body>
     </html>
   );
