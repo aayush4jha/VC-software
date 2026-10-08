@@ -10,6 +10,13 @@ const ALLOWED_TABLES = new Set([
     'comments', 'activity_logs', 'notifications', 'saved_views', 'email_logs',
     'profiles', 'ingested_emails', 'company_scores', 'company_feedback', 'audit_logs', 'booking_tokens',
     'portfolio_follow_ons', 'company_notes', 'investment_vehicles',
+    // 02_Legal Page and 01_Fund Page. The two trackers are readable here but
+    // written through /api/legal/tracker, which appends to the history tables
+    // first — the sheet requires old versions to be retained, and the proxy
+    // has no way to do that.
+    'legal_documents', 'investor_rights', 'legal_actions',
+    'legal_document_history', 'investor_rights_history',
+    'fund_accounts', 'fund_transactions', 'fund_adjustments', 'fund_imports',
 ]);
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';
@@ -26,6 +33,15 @@ const TABLE_READ_PERMISSIONS: Record<string, string[]> = {
     ingested_emails: ['emails', 'dealflow'],
     audit_logs: ['audit-trail'],
     rejection_records: ['dealflow', 'analytics', 'pipeline-analytics'],
+    legal_documents: ['legal'],
+    legal_document_history: ['legal'],
+    investor_rights: ['legal'],
+    investor_rights_history: ['legal'],
+    legal_actions: ['legal'],
+    fund_accounts: ['fund'],
+    fund_transactions: ['fund'],
+    fund_adjustments: ['fund'],
+    fund_imports: ['fund'],
 };
 
 // Tables only an admin may write to. `profiles` carries `role` and
@@ -36,9 +52,22 @@ const ADMIN_WRITE_TABLES = new Set(['profiles']);
 
 // The audit trail is append-only: it exists to record what happened, so the
 // proxy must not offer a way to rewrite or erase it.
-const APPEND_ONLY_TABLES = new Set(['audit_logs']);
+const APPEND_ONLY_TABLES = new Set([
+    'audit_logs', 'legal_document_history', 'investor_rights_history', 'fund_imports',
+]);
+
+// Writing these here would skip the history append, so the proxy refuses and
+// names the route that does it properly. Applies to admins too: the rule is
+// about keeping the record, not about who is allowed to change it.
+const HISTORY_TRACKED_TABLES: Record<string, string> = {
+    legal_documents: '/api/legal/tracker',
+    investor_rights: '/api/legal/tracker',
+};
 
 function authorize(actor: ApiActor, table: string, operation: Operation): string | null {
+    if (operation !== 'select' && HISTORY_TRACKED_TABLES[table]) {
+        return `${table} keeps a version history — write it through ${HISTORY_TRACKED_TABLES[table]}.`;
+    }
     if (actor.isAdmin) return null;
 
     if (operation === 'select') {

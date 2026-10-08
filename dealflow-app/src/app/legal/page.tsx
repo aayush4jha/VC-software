@@ -9,6 +9,7 @@ import { AlertTriangle, Plus, Search, UserCircle, ChevronDown, Briefcase } from 
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import Sidebar from '@/components/layout/Sidebar';
 import TopHeader from '@/components/layout/TopHeader';
+import LegalTracker from '@/components/legal/LegalTracker';
 import { useAppContext } from '@/lib/context';
 import {
     LEGAL_STAGES,
@@ -32,6 +33,39 @@ interface CardData {
 function daysSince(iso: string): number {
     const d = new Date(iso).getTime();
     return Math.max(0, Math.floor((Date.now() - d) / (1000 * 60 * 60 * 24)));
+}
+
+function LegalViewTabs({ view, setView }: {
+    view: 'tracker' | 'stages';
+    setView: (v: 'tracker' | 'stages') => void;
+}) {
+    const tabs: { key: 'tracker' | 'stages'; label: string }[] = [
+        { key: 'tracker', label: 'Legal Tracker' },
+        { key: 'stages', label: 'Closing Stages' },
+    ];
+    return (
+        <div style={{
+            display: 'flex', gap: 4, padding: '10px 24px 0',
+            borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)',
+        }}>
+            {tabs.map(t => (
+                <button
+                    key={t.key}
+                    onClick={() => setView(t.key)}
+                    style={{
+                        padding: '8px 14px', fontSize: 13, border: 'none', cursor: 'pointer',
+                        background: 'none', fontFamily: 'var(--font-sans)',
+                        fontWeight: view === t.key ? 600 : 500,
+                        color: view === t.key ? 'var(--primary)' : 'var(--text-secondary)',
+                        borderBottom: `2px solid ${view === t.key ? 'var(--primary)' : 'transparent'}`,
+                        marginBottom: -1,
+                    }}
+                >
+                    {t.label}
+                </button>
+            ))}
+        </div>
+    );
 }
 
 function LegalContent() {
@@ -58,6 +92,7 @@ function LegalContent() {
     }, [fetchAllFollowOns, followOnsVersion]);
 
     const [search, setSearch] = useState('');
+    const [view, setView] = useState<'tracker' | 'stages'>('tracker');
     const [stageFilter, setStageFilter] = useState<LegalStageId | 'all'>('all');
     const [ownerFilter, setOwnerFilter] = useState<string>('all');
     const [tick, setTick] = useState(0);
@@ -151,10 +186,26 @@ function LegalContent() {
         return acc;
     }, {});
 
+    // The tracker is the whole portfolio at once — counts, documents, rights
+    // and deadlines. The stage board is one company moving through the closing
+    // process. Both are wanted, so neither replaces the other.
+    if (view === 'tracker') {
+        return (
+            <>
+                <TopHeader title="Legal Management" subtitle="Documents, rights and deadlines" />
+                <div className="page-content" style={{ padding: 0 }}>
+                    <LegalViewTabs view={view} setView={setView} />
+                    <LegalTracker />
+                </div>
+            </>
+        );
+    }
+
     return (
         <>
             <TopHeader title="Legal Management" subtitle={`${filteredCards.length} companies`} />
             <div className="page-content">
+                <LegalViewTabs view={view} setView={setView} />
                 {/* Toolbar */}
                 <div className="toolbar">
                     <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
