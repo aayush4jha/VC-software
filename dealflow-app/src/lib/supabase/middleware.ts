@@ -45,9 +45,14 @@ async function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
 //   /api/whatsapp/webhook — Meta. Verified by the X-Hub-Signature-256 HMAC.
 //   /api/cron/            — Vercel Cron. Verified by the CRON_SECRET bearer,
 //                           and refuses to run at all when it is unset.
+//   /api/version          — which build is serving. It holds nothing but a
+//                           commit hash, and has to be readable without a
+//                           session: every other API path answers 401 whether
+//                           or not it exists, so there was no way to tell a
+//                           deployed build from a failed one from outside.
 const PUBLIC_API_PATHS = [
     '/api/calendar/book', '/api/calendar/slots', '/api/auth/google/callback',
-    '/api/whatsapp/webhook', '/api/cron/',
+    '/api/whatsapp/webhook', '/api/cron/', '/api/version',
 ];
 
 function isPublicApi(pathname: string): boolean {
