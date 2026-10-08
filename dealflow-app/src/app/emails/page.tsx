@@ -893,11 +893,61 @@ function EmailsContent() {
                                     }}>
                                         Write my own
                                     </button>
-                                    <button className="btn btn-ghost" onClick={() => setDraft({
-                                        id: selectedEmail.id, text: '', note: 'Pick a template below, or edit this box.',
-                                    })}>
-                                        Use a template
-                                    </button>
+                                </div>
+                            )}
+
+                            {/* Ready-made replies, always in reach.
+                                These used to be inside the draft panel, which
+                                meant finding them required opening a draft
+                                first — a template is meant to be the quick
+                                path, not a second step after the slow one. */}
+                            {selectedEmail.direction === 'received' && (
+                                <div style={{ marginTop: 10 }}>
+                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 5 }}>
+                                        Ready-made replies{selectedEmail.category ? ` for ${selectedEmail.category.toLowerCase()}` : ''} — one click, then edit:
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                        {templatesFor(selectedEmail.category)
+                                            .slice(0, showAllTemplates ? undefined : 6)
+                                            .map(t => (
+                                                <button
+                                                    key={t.id}
+                                                    type="button"
+                                                    onClick={() => setDraft({
+                                                        id: selectedEmail.id,
+                                                        text: fillTemplate(t, {
+                                                            senderName: selectedEmail.senderName,
+                                                            companyName: selectedEmail.derivedCompanyName
+                                                                || selectedEmail.extracted?.companyName
+                                                                || '',
+                                                            signOffName: (user?.name || '').split(' ')[0],
+                                                        }),
+                                                        note: `Template: ${t.label}. Edit it before sending.`,
+                                                    })}
+                                                    style={{
+                                                        padding: '5px 11px', borderRadius: 999, fontSize: 11.5,
+                                                        border: '1px solid var(--border)', background: 'var(--bg-primary)',
+                                                        color: 'var(--text-secondary)', cursor: 'pointer',
+                                                        fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap',
+                                                    }}
+                                                >
+                                                    {t.label}
+                                                </button>
+                                            ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAllTemplates(v => !v)}
+                                            style={{
+                                                padding: '5px 8px', borderRadius: 999, fontSize: 11.5,
+                                                border: 'none', background: 'none', cursor: 'pointer',
+                                                color: 'var(--primary)', fontFamily: 'var(--font-sans)',
+                                            }}
+                                        >
+                                            {showAllTemplates
+                                                ? 'Show fewer'
+                                                : `All ${templatesFor(selectedEmail.category).length}`}
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -908,63 +958,16 @@ function EmailsContent() {
                                     border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
                                 }}>
                                     <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
-                                        Suggested reply to {selectedEmail.senderName || selectedEmail.senderEmail}
+                                        Reply to {selectedEmail.senderName || selectedEmail.senderEmail}
                                         {selectedEmail.category && (
                                             <span style={{ fontWeight: 500, color: 'var(--text-tertiary)' }}>
-                                                {' '}· written for {selectedEmail.category.toLowerCase()}
+                                                {' '}· {selectedEmail.category.toLowerCase()}
                                             </span>
                                         )}
                                     </div>
                                     {draft.note && (
                                         <div style={{ fontSize: 11, color: '#b45309', marginBottom: 8 }}>{draft.note}</div>
                                     )}
-
-                                    {/* Ready-made replies, the likely ones first. */}
-                                    <div style={{ marginBottom: 8 }}>
-                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 5 }}>
-                                            Or use a template:
-                                        </div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                                            {templatesFor(selectedEmail.category)
-                                                .slice(0, showAllTemplates ? undefined : 5)
-                                                .map(t => (
-                                                    <button
-                                                        key={t.id}
-                                                        type="button"
-                                                        onClick={() => setDraft({
-                                                            id: selectedEmail.id,
-                                                            text: fillTemplate(t, {
-                                                                senderName: selectedEmail.senderName,
-                                                                companyName: selectedEmail.derivedCompanyName
-                                                                    || selectedEmail.extracted?.companyName
-                                                                    || '',
-                                                                signOffName: (user?.name || '').split(' ')[0],
-                                                            }),
-                                                            note: `Template: ${t.label}. Edit it before sending.`,
-                                                        })}
-                                                        style={{
-                                                            padding: '4px 10px', borderRadius: 999, fontSize: 11,
-                                                            border: '1px solid var(--border)', background: 'var(--bg-primary)',
-                                                            color: 'var(--text-secondary)', cursor: 'pointer',
-                                                            fontFamily: 'var(--font-sans)',
-                                                        }}
-                                                    >
-                                                        {t.label}
-                                                    </button>
-                                                ))}
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowAllTemplates(v => !v)}
-                                                style={{
-                                                    padding: '4px 8px', borderRadius: 999, fontSize: 11,
-                                                    border: 'none', background: 'none', cursor: 'pointer',
-                                                    color: 'var(--primary)', fontFamily: 'var(--font-sans)',
-                                                }}
-                                            >
-                                                {showAllTemplates ? 'Fewer' : `All ${templatesFor(selectedEmail.category).length}`}
-                                            </button>
-                                        </div>
-                                    </div>
 
                                     <textarea
                                         className="form-input"
