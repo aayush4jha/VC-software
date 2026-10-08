@@ -56,3 +56,5 @@ next-env.d.ts
 .gemini-test
 .legalimport-test
 .signature-test
+.emailhtml-test
+.templates-test

@@ -125,7 +125,8 @@ ${DRAFT_FORMAT}`;
 
     const attempt = async (extra: string) => parseDraft(await callGeminiMultimodal(
         [{ text: extra ? `${prompt}\n\n${extra}` : prompt }],
-        { temperature: 0.4, maxOutputTokens: 900, label: 'draft-reply' },
+        // A reply plus its note. 900 cut longer ones off mid-sentence.
+        { temperature: 0.4, maxOutputTokens: 2400, label: 'draft-reply' },
     ));
 
     try {

@@ -212,13 +212,17 @@ export async function callGeminiMultimodal(
         throw new Error('GEMINI_API_KEY is not set, so no AI feature can run.');
     }
 
+    // Raised when an answer comes back cut off, so the retry has room.
+    let budget = maxOutputTokens;
+    const stretched = new Set<string>();
+    // The longest truncated answer seen. Handed back only if nothing finishes.
+    let partial = '';
+
     const bodyFor = (model: string) => JSON.stringify({
         contents: [{ parts }],
         generationConfig: {
             temperature,
-            maxOutputTokens: THINKING_MODELS.test(model)
-                ? maxOutputTokens + THINKING_HEADROOM
-                : maxOutputTokens,
+            maxOutputTokens: THINKING_MODELS.test(model) ? budget + THINKING_HEADROOM : budget,
         },
     });
 
@@ -252,11 +256,27 @@ export async function callGeminiMultimodal(
 
                     if (res.ok) {
                         const text = extractGeminiText(data);
-                        if (text) return text;
-                        failure = classifyGeminiFailure({
-                            model, status: 200,
-                            finishReason: data?.candidates?.[0]?.finishReason,
-                        });
+                        const finishReason = data?.candidates?.[0]?.finishReason;
+
+                        if (text && finishReason === 'MAX_TOKENS') {
+                            // Stopped mid-sentence. Returning this is worse
+                            // than failing: a half-written reply looks finished
+                            // in a send box. Keep it only as a last resort and
+                            // give the same model room to finish properly.
+                            if (!partial || text.length > partial.length) partial = text;
+                            failure = classifyGeminiFailure({ model, status: 200, finishReason });
+                            if (!stretched.has(model)) {
+                                stretched.add(model);
+                                budget *= 2;
+                                failures.push(failure);
+                                console.warn(`[${label}] ${failure.message} — retrying with ${budget}`);
+                                continue;
+                            }
+                        } else if (text) {
+                            return text;
+                        } else {
+                            failure = classifyGeminiFailure({ model, status: 200, finishReason });
+                        }
                     } else {
                         failure = classifyGeminiFailure({
                             model, status: res.status,
@@ -274,5 +294,9 @@ export async function callGeminiMultimodal(
         }
     }
 
+    if (partial) {
+        console.warn(`[${label}] handing back a truncated answer: every model ran out of room`);
+        return partial;
+    }
     throw new Error(summarizeGeminiFailures(failures));
 }

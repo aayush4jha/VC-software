@@ -99,6 +99,29 @@ function decodeBase64Url(data: string): string {
 }
 
 /** Plain text if the message carries it, otherwise the HTML part made readable. */
+/**
+ * The message's own HTML, undecoded by anything — what the sender actually
+ * built. extractBodyText flattens this to words; the reading pane renders it.
+ */
+export function extractBodyHtml(payload: AttachmentPart | null | undefined): string {
+    if (!payload) return '';
+    if (payload.mimeType === 'text/html' && payload.body?.data) {
+        return decodeBase64Url(payload.body.data);
+    }
+    for (const part of payload.parts || []) {
+        if (part.mimeType === 'text/html' && part.body?.data) {
+            return decodeBase64Url(part.body.data);
+        }
+    }
+    // multipart/alternative nests the HTML one level down inside
+    // multipart/related whenever the mail carries inline images.
+    for (const part of payload.parts || []) {
+        const nested = extractBodyHtml(part);
+        if (nested) return nested;
+    }
+    return '';
+}
+
 export function extractBodyText(payload: AttachmentPart | null | undefined): string {
     if (!payload) return '';
     if (payload.mimeType === 'text/plain' && payload.body?.data) {

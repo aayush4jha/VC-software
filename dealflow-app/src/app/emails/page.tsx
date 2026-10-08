@@ -10,8 +10,10 @@ import {
     ArrowDownLeft, ArrowUpRight, ChevronDown, X, MessageCircle,
 } from 'lucide-react';
 import Sidebar from '@/components/layout/Sidebar';
+import EmailBody from '@/components/emails/EmailBody';
 import TopHeader from '@/components/layout/TopHeader';
 import { useAppContext } from '@/lib/context';
+import { templatesFor, fillTemplate } from '@/lib/reply-templates';
 import { bytesToBase64, inlineUploadError } from '@/lib/file-encode';
 import { useGoogleAuth } from '@/lib/useGoogleAuth';
 import DeckReport from '@/components/emails/DeckReport';
@@ -134,7 +136,7 @@ function fmtLoadedAt(iso: string): string {
 }
 
 function EmailsContent() {
-    const { refreshData } = useAppContext();
+    const { refreshData, user } = useAppContext();
     const { isConnected, isChecking, connect, disconnect } = useGoogleAuth();
     const searchParams = useSearchParams();
     const targetMessageId = searchParams.get('messageId');
@@ -152,6 +154,8 @@ function EmailsContent() {
     const [category, setCategory] = useState<EmailCategory | 'all'>('all');
     const [draft, setDraft] = useState<{ id: string; text: string; note: string } | null>(null);
     const [drafting, setDrafting] = useState(false);
+    // The picker shows the likely few; this opens the rest.
+    const [showAllTemplates, setShowAllTemplates] = useState(false);
     const [replying, setReplying] = useState(false);
     const emailsRef = useRef<WorkspaceEmail[]>([]);
     const [loading, setLoading] = useState(false);
@@ -828,30 +832,13 @@ function EmailsContent() {
                                 </div>
                             )}
 
-                            {/* Email body */}
-                            <div
-                                style={{
-                                    padding: '16px 18px', background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                                    borderRadius: 10, fontSize: 14, lineHeight: 1.7, color: 'var(--text-primary)',
-                                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                                    maxWidth: READING_WIDTH,
-                                }}
-                                dangerouslySetInnerHTML={{
-                                    __html: (() => {
-                                        const raw = selectedEmail.emailBody || selectedEmail.snippet || '(no content)';
-                                        // Escape HTML entities first to prevent XSS
-                                        const escaped = raw
-                                            .replace(/&/g, '&amp;')
-                                            .replace(/</g, '&lt;')
-                                            .replace(/>/g, '&gt;')
-                                            .replace(/"/g, '&quot;');
-                                        // Convert URLs to clickable links
-                                        return escaped.replace(
-                                            /(https?:\/\/[^\s<>"')\]]+)/g,
-                                            '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #6366f1; text-decoration: underline; word-break: break-all;">$1</a>'
-                                        );
-                                    })(),
-                                }}
+                            {/* Email body, rendered as the sender built it. */}
+                            <EmailBody
+                                // A row synthesised locally after sending has no
+                                // message in Gmail to fetch.
+                                messageId={selectedEmail.id.startsWith('local-') ? null : selectedEmail.id}
+                                fallbackText={selectedEmail.emailBody || selectedEmail.snippet || ''}
+                                maxWidth={READING_WIDTH}
                             />
 
                             {/* Action buttons */}
@@ -906,6 +893,11 @@ function EmailsContent() {
                                     }}>
                                         Write my own
                                     </button>
+                                    <button className="btn btn-ghost" onClick={() => setDraft({
+                                        id: selectedEmail.id, text: '', note: 'Pick a template below, or edit this box.',
+                                    })}>
+                                        Use a template
+                                    </button>
                                 </div>
                             )}
 
@@ -926,6 +918,54 @@ function EmailsContent() {
                                     {draft.note && (
                                         <div style={{ fontSize: 11, color: '#b45309', marginBottom: 8 }}>{draft.note}</div>
                                     )}
+
+                                    {/* Ready-made replies, the likely ones first. */}
+                                    <div style={{ marginBottom: 8 }}>
+                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 5 }}>
+                                            Or use a template:
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                            {templatesFor(selectedEmail.category)
+                                                .slice(0, showAllTemplates ? undefined : 5)
+                                                .map(t => (
+                                                    <button
+                                                        key={t.id}
+                                                        type="button"
+                                                        onClick={() => setDraft({
+                                                            id: selectedEmail.id,
+                                                            text: fillTemplate(t, {
+                                                                senderName: selectedEmail.senderName,
+                                                                companyName: selectedEmail.derivedCompanyName
+                                                                    || selectedEmail.extracted?.companyName
+                                                                    || '',
+                                                                signOffName: (user?.name || '').split(' ')[0],
+                                                            }),
+                                                            note: `Template: ${t.label}. Edit it before sending.`,
+                                                        })}
+                                                        style={{
+                                                            padding: '4px 10px', borderRadius: 999, fontSize: 11,
+                                                            border: '1px solid var(--border)', background: 'var(--bg-primary)',
+                                                            color: 'var(--text-secondary)', cursor: 'pointer',
+                                                            fontFamily: 'var(--font-sans)',
+                                                        }}
+                                                    >
+                                                        {t.label}
+                                                    </button>
+                                                ))}
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAllTemplates(v => !v)}
+                                                style={{
+                                                    padding: '4px 8px', borderRadius: 999, fontSize: 11,
+                                                    border: 'none', background: 'none', cursor: 'pointer',
+                                                    color: 'var(--primary)', fontFamily: 'var(--font-sans)',
+                                                }}
+                                            >
+                                                {showAllTemplates ? 'Fewer' : `All ${templatesFor(selectedEmail.category).length}`}
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <textarea
                                         className="form-input"
                                         rows={10}
