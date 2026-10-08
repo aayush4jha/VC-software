@@ -58,3 +58,5 @@ next-env.d.ts
 .signature-test
 .emailhtml-test
 .templates-test
+.ledger-test
+.legaltracker-test
