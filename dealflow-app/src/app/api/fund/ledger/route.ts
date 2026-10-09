@@ -32,16 +32,19 @@ export async function GET(request: NextRequest) {
     const client = db();
     if (!client) return NextResponse.json({ error: 'Server config missing' }, { status: 500 });
 
-    const [accounts, transactions, adjustments, imports] = await Promise.all([
+    const [accounts, transactions, adjustments, imports, rules, settings] = await Promise.all([
         client.from('fund_accounts').select('*').eq('organization_id', ORGANIZATION_ID).order('entity'),
         client.from('fund_transactions').select('*').eq('organization_id', ORGANIZATION_ID)
             .order('txn_date', { ascending: true, nullsFirst: false }).limit(20000),
         client.from('fund_adjustments').select('*').eq('organization_id', ORGANIZATION_ID).order('adj_date'),
         client.from('fund_imports').select('*').eq('organization_id', ORGANIZATION_ID)
             .order('created_at', { ascending: false }).limit(10),
+        client.from('fund_mapping_rules').select('*').eq('organization_id', ORGANIZATION_ID)
+            .order('priority', { ascending: true }),
+        client.from('fund_settings').select('*').eq('organization_id', ORGANIZATION_ID).maybeSingle(),
     ]);
 
-    for (const r of [accounts, transactions, adjustments, imports]) {
+    for (const r of [accounts, transactions, adjustments, imports, rules, settings]) {
         if (r.error) {
             if (missingTable(r.error.message)) {
                 return NextResponse.json({
@@ -58,6 +61,8 @@ export async function GET(request: NextRequest) {
         transactions: transactions.data || [],
         adjustments: adjustments.data || [],
         imports: imports.data || [],
+        rules: rules.data || [],
+        settings: settings.data || null,
         // The page says so when it has hit the ceiling, rather than quietly
         // totalling a slice of the ledger.
         truncated: (transactions.data || []).length >= 20000,

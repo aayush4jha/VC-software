@@ -292,3 +292,65 @@ BEGIN
              )', t || '_members_read', t, t);
     END LOOP;
 END $$;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- SETTINGS / MAPPING
+--
+-- 04_Developer Summary suggests a Settings page for "entity, bank, category
+-- and FY mapping rules". Without it, every misclassified transaction is a
+-- code change: the built-in rules read an Indian bank narration well enough,
+-- but no fixed list of patterns survives contact with a new bank, a new
+-- counterparty or a new expense head. A rule here beats the built-ins, so the
+-- person who can see the mistake is the person who can fix it.
+-- ─────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.fund_mapping_rules (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id  UUID NOT NULL,
+    kind             TEXT NOT NULL DEFAULT 'category'
+                     CHECK (kind IN ('category', 'entity_alias', 'bank_alias')),
+    -- Which column to look in, and what to look for (case-insensitive substring).
+    field            TEXT NOT NULL DEFAULT 'description'
+                     CHECK (field IN ('description', 'major_head', 'entity', 'bank')),
+    match_text       TEXT NOT NULL,
+    -- For kind='category': the category to assign.
+    category         TEXT,
+    -- For the alias kinds: the canonical name to map onto.
+    maps_to          TEXT,
+    -- Lower runs first, so a specific rule can be put ahead of a general one.
+    priority         INTEGER NOT NULL DEFAULT 100,
+    active           BOOLEAN NOT NULL DEFAULT true,
+    note             TEXT NOT NULL DEFAULT '',
+    created_by       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS fund_mapping_rules_idx
+    ON public.fund_mapping_rules (organization_id, active, priority);
+
+-- One row. The defaults the Fund page opens with.
+CREATE TABLE IF NOT EXISTS public.fund_settings (
+    organization_id  UUID PRIMARY KEY,
+    fy_start         TEXT NOT NULL DEFAULT 'april' CHECK (fy_start IN ('april', 'november')),
+    -- Used only where a UAE statement carries no INR column of its own.
+    default_fx_rate  NUMERIC,
+    updated_by       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.fund_mapping_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fund_settings      ENABLE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE t TEXT;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['fund_mapping_rules', 'fund_settings'] LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_members_read', t);
+        EXECUTE format(
+            'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (
+                 EXISTS (SELECT 1 FROM public.profiles p
+                         WHERE p.id = auth.uid()
+                           AND p.organization_id = %I.organization_id)
+             )', t || '_members_read', t, t);
+    END LOOP;
+END $$;

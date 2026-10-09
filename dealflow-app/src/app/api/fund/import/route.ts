@@ -18,7 +18,7 @@ function db() {
 const VALID_CATEGORY = new Set<string>(LEDGER_CATEGORIES);
 
 interface IncomingRow {
-    entity: string; bank: string; date: string | null; description: string;
+    entity: string; bank: string; accountLabel: string; date: string | null; description: string;
     amount: number; currency: string; amountInr: number | null;
     balanceAfter: number | null; category: string; categoryReason: string;
     majorHead: string; issues: string[]; sourceRow: number; sheetName: string;
@@ -77,15 +77,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: accErr.message }, { status: 500 });
     }
 
-    const accountKey = (entity: string, bank: string) => `${entity.trim().toLowerCase()}::${bank.trim().toLowerCase()}`;
+    const accountKey = (entity: string, bank: string, account: string) =>
+        `${entity.trim().toLowerCase()}::${bank.trim().toLowerCase()}::${account.trim().toLowerCase()}`;
     const accountIds = new Map<string, string>();
-    for (const a of existingAccounts || []) accountIds.set(accountKey(a.entity, a.bank), a.id);
+    for (const a of existingAccounts || []) accountIds.set(accountKey(a.entity, a.bank, a.account_label || ''), a.id);
 
-    const needed = new Map<string, { entity: string; bank: string; currency: string }>();
+    const needed = new Map<string, { entity: string; bank: string; accountLabel: string; currency: string }>();
     for (const r of rows) {
-        const key = accountKey(r.entity || '', r.bank || '');
+        const key = accountKey(r.entity || '', r.bank || '', r.accountLabel || '');
         if (!r.entity?.trim() || accountIds.has(key) || needed.has(key)) continue;
-        needed.set(key, { entity: r.entity.trim(), bank: (r.bank || '').trim(), currency: r.currency || 'INR' });
+        needed.set(key, {
+            entity: r.entity.trim(), bank: (r.bank || '').trim(),
+            accountLabel: (r.accountLabel || '').trim(), currency: r.currency || 'INR',
+        });
     }
     if (needed.size > 0) {
         const { data: created, error } = await client.from('fund_accounts').insert(
@@ -93,17 +97,18 @@ export async function POST(request: NextRequest) {
                 organization_id: ORGANIZATION_ID,
                 entity: a.entity,
                 bank: a.bank,
+                account_label: a.accountLabel,
                 country: /fz|llc|dubai|uae/i.test(a.entity) || a.currency === 'AED' ? 'UAE' : 'India',
                 currency: a.currency,
             })),
         ).select();
         if (error) return NextResponse.json({ error: `Could not record the accounts: ${error.message}` }, { status: 500 });
-        for (const a of created || []) accountIds.set(accountKey(a.entity, a.bank), a.id);
+        for (const a of created || []) accountIds.set(accountKey(a.entity, a.bank, a.account_label || ''), a.id);
     }
 
     const toInsert = rows.map(r => ({
         organization_id: ORGANIZATION_ID,
-        account_id: accountIds.get(accountKey(r.entity || '', r.bank || '')) || null,
+        account_id: accountIds.get(accountKey(r.entity || '', r.bank || '', r.accountLabel || '')) || null,
         entity: (r.entity || '').trim(),
         bank: (r.bank || '').trim(),
         txn_date: r.date,

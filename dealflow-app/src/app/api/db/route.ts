@@ -17,9 +17,10 @@ const ALLOWED_TABLES = new Set([
     'legal_documents', 'investor_rights', 'legal_actions',
     'legal_document_history', 'investor_rights_history',
     'fund_accounts', 'fund_transactions', 'fund_adjustments', 'fund_imports',
+    'fund_mapping_rules', 'fund_settings',
 ]);
 
-type Operation = 'select' | 'insert' | 'update' | 'delete';
+type Operation = 'select' | 'insert' | 'update' | 'delete' | 'upsert';
 
 // Reading a table requires holding at least one of these page permissions.
 // Tables backing pages everyone uses (companies, stages, lookups) are absent
@@ -42,6 +43,8 @@ const TABLE_READ_PERMISSIONS: Record<string, string[]> = {
     fund_transactions: ['fund'],
     fund_adjustments: ['fund'],
     fund_imports: ['fund'],
+    fund_mapping_rules: ['fund'],
+    fund_settings: ['fund'],
 };
 
 // Tables only an admin may write to. `profiles` carries `role` and
@@ -59,6 +62,9 @@ const APPEND_ONLY_TABLES = new Set([
 // Writing these here would skip the history append, so the proxy refuses and
 // names the route that does it properly. Applies to admins too: the rule is
 // about keeping the record, not about who is allowed to change it.
+// Upsert needs a primary key the caller supplies; these have one.
+const UPSERTABLE_TABLES = new Set(['fund_settings']);
+
 const HISTORY_TRACKED_TABLES: Record<string, string> = {
     legal_documents: '/api/legal/tracker',
     investor_rights: '/api/legal/tracker',
@@ -176,6 +182,20 @@ export async function POST(request: NextRequest) {
                 ? db.from(table).insert(data).select()
                 : db.from(table).insert(data).select().single();
             const { data: result, error } = await query;
+            if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+            return NextResponse.json({ data: result });
+        }
+
+        // A settings row that may or may not exist yet. Allowed only where the
+        // table has a natural primary key the caller already holds — anywhere
+        // else an upsert through a generic proxy is an update with no match
+        // clause, which is a table-wide write waiting to happen.
+        if (operation === 'upsert') {
+            if (!data) return NextResponse.json({ error: 'Missing data' }, { status: 400 });
+            if (!UPSERTABLE_TABLES.has(table)) {
+                return NextResponse.json({ error: `${table} cannot be upserted here.` }, { status: 400 });
+            }
+            const { data: result, error } = await db.from(table).upsert(data).select();
             if (error) return NextResponse.json({ error: error.message }, { status: 400 });
             return NextResponse.json({ data: result });
         }

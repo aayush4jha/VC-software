@@ -13,7 +13,7 @@
 // Pure, pinned by scripts/verify-master-import.mjs.
 
 import { parseMoney, parseCount, parsePercent, parseSheetDate, normalizeLabel, type CellMatrix } from './legal-import';
-import { classifyTransaction, rowIssues, type LedgerCategory } from './fund-ledger';
+import { classifyTransaction, rowIssues, type LedgerCategory, type MappingRule } from './fund-ledger';
 
 export type SheetKind =
     | 'bank_statement'
@@ -178,6 +178,8 @@ export function columnFor(headers: string[], names: string[]): number {
 export interface ParsedLedgerRow {
     entity: string;
     bank: string;
+    /** The account number or nickname. Two accounts at one bank are two balances. */
+    accountLabel: string;
     date: string | null;
     description: string;
     /** Signed: negative is money leaving. */
@@ -197,11 +199,15 @@ export interface BankParseContext {
     /** Used when the sheet itself does not name one. */
     defaultEntity?: string;
     defaultBank?: string;
+    /** Used when the sheet has no account column — a statement is one account. */
+    defaultAccount?: string;
     defaultCurrency?: string;
     /** AED to INR, when the sheet gives no conversion of its own. */
     fxRate?: number;
     knownEntities?: string[];
     knownCompanies?: string[];
+    /** Rules from the Mapping page, which outrank every built-in pattern. */
+    rules?: MappingRule[];
 }
 
 /**
@@ -256,13 +262,15 @@ export function parseBankRows(
         const description = String(at(row, col.description) ?? '').trim();
         const entity = String(at(row, col.entity) ?? context.defaultEntity ?? '').trim();
         const bank = String(at(row, col.bank) ?? context.defaultBank ?? '').trim();
+        const accountLabel = String(at(row, col.account) ?? context.defaultAccount ?? '').trim();
         const currency = (String(at(row, col.currency) ?? context.defaultCurrency ?? 'INR').trim() || 'INR').toUpperCase();
         const majorHead = String(at(row, col.head) ?? '').trim();
 
         const classification = classifyTransaction({
-            description, amount, majorHead, entity,
+            description, amount, majorHead, entity, bank,
             knownEntities: context.knownEntities,
             knownCompanies: context.knownCompanies,
+            rules: context.rules,
         });
 
         // "Retain AED and INR values" — the sheet's own conversion first.
@@ -274,7 +282,7 @@ export function parseBankRows(
         else amountInr = null;
 
         const parsed: ParsedLedgerRow = {
-            entity, bank,
+            entity, bank, accountLabel,
             date: parseSheetDate(at(row, col.date)),
             description,
             amount,

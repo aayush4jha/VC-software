@@ -85,6 +85,15 @@ export const CATEGORY_LABELS: Record<LedgerCategory, string> =
 
 // ─── Classification ───────────────────────────────────────────────────────
 
+/** A rule the firm has written, which beats every built-in pattern. */
+export interface MappingRule {
+    field: 'description' | 'major_head' | 'entity' | 'bank';
+    matchText: string;
+    category: LedgerCategory;
+    priority: number;
+    note?: string;
+}
+
 export interface ClassifyInput {
     description: string;
     /** Signed: negative is money leaving the account. */
@@ -97,6 +106,10 @@ export interface ClassifyInput {
     knownEntities?: string[];
     /** Portfolio company names, so an investment can be matched by name. */
     knownCompanies?: string[];
+    /** The bank the line sits on, for a rule that matches on it. */
+    bank?: string;
+    /** Rules from the Mapping page. Applied before anything built in. */
+    rules?: MappingRule[];
 }
 
 export interface Classification {
@@ -143,6 +156,24 @@ const DESCRIPTION_RULES: { pattern: RegExp; category: LedgerCategory; reason: st
  * silently: a line that matches nothing is 'unclassified' and is shown as such.
  */
 export function classifyTransaction(input: ClassifyInput): Classification {
+    // A rule somebody wrote outranks a pattern somebody guessed. Sorted by
+    // priority so a specific rule can be placed ahead of a general one.
+    const rules = [...(input.rules || [])].sort((a, b) => a.priority - b.priority);
+    for (const rule of rules) {
+        const haystack = norm(
+            rule.field === 'description' ? input.description
+                : rule.field === 'major_head' ? (input.majorHead || '')
+                    : rule.field === 'entity' ? (input.entity || '')
+                        : (input.bank || ''),
+        );
+        const needle = norm(rule.matchText);
+        if (!needle || !haystack.includes(needle)) continue;
+        return {
+            category: rule.category,
+            reason: rule.note?.trim() || `Your rule: ${rule.field} contains "${rule.matchText}"`,
+        };
+    }
+
     const head = norm(input.majorHead || '');
     if (head) {
         for (const { pattern, category } of HEAD_MAP) {

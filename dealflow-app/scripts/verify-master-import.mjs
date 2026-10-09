@@ -82,6 +82,7 @@ check('absent', columnFor(['a', 'b'], ['zzz']), -1);
 console.log('— bank rows become one signed amount —');
 const ledger = parseBankRows(BANK, 3, header.headers, {
     defaultEntity: 'Dholakia Ventures LLP', defaultBank: 'HDFC', defaultCurrency: 'INR',
+    defaultAccount: 'HDFC-50200012345678',
     knownEntities: ['Dholakia Ventures LLP', 'Dholakia Ventures FZ LLC'],
     knownCompanies: ['Acme Robotics', 'Flipspaces'],
 });
@@ -99,7 +100,19 @@ check('interest is other income', ledger[4].category, 'other_income');
 check('a clean row carries no flags', ledger[3].issues, []);
 check('the balance is kept', ledger[0].balanceAfter, 10000000);
 check('the source row is kept for the audit trail', ledger[0].sourceRow, 5);
+// P0: balances are wanted by entity, bank AND account.
+check('the account falls back to the sheet', ledger[0].accountLabel, 'HDFC-50200012345678');
 check('INR needs no conversion', ledger[0].amountInr, 10000000);
+
+console.log('— two accounts at one bank stay apart —');
+const TWO = [
+    ['Entity', 'Bank', 'Account', 'Date', 'Narration', 'Amount'],
+    ['DV LLP', 'HDFC', '...5678', '01/04/2026', 'a', 100],
+    ['DV LLP', 'HDFC', '...9012', '01/04/2026', 'b', 200],
+];
+const two = parseBankRows(TWO, 0, ['entity', 'bank', 'account', 'date', 'narration', 'amount'], {});
+check('each row keeps its own account', two.map(r => r.accountLabel), ['...5678', '...9012']);
+check('and the bank is the same', new Set(two.map(r => r.bank)).size, 1);
 
 console.log('— a UAE sheet keeps both currencies —');
 const UAE = [

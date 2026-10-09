@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Loader2, Search, AlertTriangle, FileWarning, Clock, Building2,
-    ShieldAlert, FileCheck2, Plus, ExternalLink, X,
+    ShieldAlert, FileCheck2, Plus, ExternalLink, X, Download,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { getCompanyFinancials } from '@/lib/company-financials';
@@ -14,7 +14,17 @@ import {
     actionAlert, ageingDays, matchesSearch,
     type DocStatus, type RightStatus, type ActionPriority, type ActionStatus, type ActionCategory,
 } from '@/lib/legal-tracker';
+import { toCsv, exportFilename } from '@/lib/csv-export';
 import type { Company } from '@/types/database';
+
+/** Hands the file to the browser; the CSV itself comes from a pure module. */
+function downloadCsv(csv: string, filename: string) {
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+}
 
 interface DocRow {
     id: string; company_id: string; doc_type: string; status: DocStatus;
@@ -287,7 +297,27 @@ export default function LegalTracker() {
                         <X size={13} /> Clear filters
                     </button>
                 )}
-                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
+                <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ marginLeft: 'auto' }}
+                    disabled={visible.length === 0}
+                    title="Downloads exactly the companies this view shows"
+                    onClick={() => downloadCsv(toCsv(visible, [
+                        { header: 'Company', value: m => m.company.companyName },
+                        { header: 'Investment Entity', value: m => m.financials.investmentEntity },
+                        { header: 'Instrument', value: m => m.financials.investmentInstrument || m.company.shareType },
+                        { header: 'Investment Date', value: m => m.financials.entryDateISO },
+                        { header: 'Amount', value: m => m.financials.initialInvestment },
+                        { header: 'Status', value: m => m.company.portfolioStatus },
+                        { header: 'Ownership %', value: m => m.financials.currentOwnership },
+                        { header: 'Round', value: m => m.company.companyRound },
+                        { header: 'Key docs missing', value: m => m.missingDocs.map(d => d.label).join('; ') },
+                        { header: 'Rights needing attention', value: m => m.rightsIssues.map(r => `${r.label} (${r.why})`).join('; ') },
+                    ]), exportFilename('Legal tracker'))}
+                >
+                    <Download size={13} /> Export
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                     {visible.length} of {master.length} companies
                 </span>
             </div>

@@ -36,6 +36,39 @@ check('the head is quoted as the reason', classifyTransaction({
     description: 'x', amount: 100, majorHead: 'Funds Received',
 }).reason, 'Major head: Funds Received');
 
+console.log('— a rule the firm wrote beats every built-in pattern —');
+const rule = (matchText, category, extra = {}) => ({ field: 'description', matchText, category, priority: 100, ...extra });
+check('a rule wins over the description rules', cat({
+    description: 'SALARY OCT 2026', amount: -450000, rules: [rule('salary', 'investment_expense')],
+}), 'investment_expense');
+check('a rule wins over the major head', cat({
+    description: 'x', amount: -100, majorHead: 'Office Expenses', rules: [rule('x', 'investment')],
+}), 'investment');
+check('priority decides between two rules', cat({
+    description: 'ACME legal fee', amount: -100,
+    rules: [rule('legal fee', 'office_expense', { priority: 50 }), rule('acme', 'investment', { priority: 10 })],
+}), 'investment');
+check('a rule on the entity column', cat({
+    description: 'anything', amount: -100, entity: 'DV FZ LLC',
+    rules: [{ field: 'entity', matchText: 'fz llc', category: 'office_expense', priority: 1 }],
+}), 'office_expense');
+check('a rule on the bank column', cat({
+    description: 'anything', amount: -100, bank: 'Emirates NBD',
+    rules: [{ field: 'bank', matchText: 'emirates', category: 'other_income', priority: 1 }],
+}), 'other_income');
+check('a rule that does not match is ignored', cat({
+    description: 'SALARY OCT', amount: -450000, rules: [rule('zzzz', 'investment')],
+}), 'office_expense');
+check('an empty match text never matches everything', cat({
+    description: 'SALARY OCT', amount: -450000, rules: [rule('', 'investment')],
+}), 'office_expense');
+check('the rule explains itself', classifyTransaction({
+    description: 'SALARY OCT', amount: -1, rules: [rule('salary', 'investment_expense')],
+}).reason, 'Your rule: description contains "salary"');
+check('a note replaces the explanation', classifyTransaction({
+    description: 'SALARY OCT', amount: -1, rules: [rule('salary', 'investment_expense', { note: 'Deal team payroll' })],
+}).reason, 'Deal team payroll');
+
 console.log('— an internal transfer is not funding and not an investment —');
 const out = classifyTransaction({
     description: 'RTGS to Dholakia Ventures FZ LLC', amount: -50000000,

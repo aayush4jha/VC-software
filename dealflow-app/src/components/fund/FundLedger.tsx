@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx';
 import {
     Loader2, Upload, AlertTriangle, Check, Wallet, TrendingUp, TrendingDown,
-    Banknote, ChevronRight, X, FileSpreadsheet,
+    Banknote, ChevronRight, X, FileSpreadsheet, Download,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
@@ -16,6 +16,8 @@ import {
     type ParsedLedgerRow, type ParsedAdjustment,
 } from '@/lib/master-import';
 import type { CellMatrix } from '@/lib/legal-import';
+import { toCsv, exportFilename } from '@/lib/csv-export';
+import MappingRules, { type RuleRow, type FundSettings } from '@/components/fund/MappingRules';
 
 interface AccountRow {
     id: string; entity: string; country: string; bank: string; account_label: string;
@@ -27,9 +29,26 @@ interface TxnRow {
     category: LedgerCategory; category_source: string; data_issues: string[];
     source_file: string; source_sheet: string; source_row: number | null; counterparty: string;
 }
+interface ImportRow {
+    id: string; file_name: string; created_at: string;
+    rows_imported: number; rows_skipped: number; rows_flagged: number;
+}
 interface AdjRow {
     id: string; adj_date: string; entity: string; category: string;
     amount: number; currency: string; amount_inr: number | null; reason: string; approved_by: string;
+}
+
+/** Hands the file to the browser. The CSV itself is built by a pure module. */
+function downloadCsv(csv: string, filename: string) {
+    // A BOM, so Excel reads ₹ and names with accents as UTF-8 rather than
+    // as whatever the machine's locale happens to be.
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 const cr = (n: number) => {
@@ -66,16 +85,24 @@ export default function FundLedger() {
     const [needsMigration, setNeedsMigration] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [truncated, setTruncated] = useState(false);
+    const [rules, setRules] = useState<RuleRow[]>([]);
+    const [settings, setSettings] = useState<FundSettings | null>(null);
+    const [imports, setImports] = useState<ImportRow[]>([]);
 
     // E. REQUIRED FILTERS / CONTROLS
     const [fyStart, setFyStart] = useState<FinancialYearStart>('april');
+    const [fyTouched, setFyTouched] = useState(false);
     const [fy, setFy] = useState<string>('all');
     const [entity, setEntity] = useState('all');
     const [bank, setBank] = useState('all');
     const [currency, setCurrency] = useState('all');
     const [view, setView] = useState<'actual' | 'adjusted'>('actual');
     const [asOf, setAsOf] = useState('');
-    const [drill, setDrill] = useState<LedgerCategory | null>(null);
+    // P0: "every dashboard figure must be drillable to the underlying
+    // transaction". A card that opens nothing is a number taken on trust, so
+    // the drawer holds any set of rows rather than one category.
+    const [drill, setDrill] = useState<{ title: string; rows: TxnRow[] } | null>(null);
+    const [section, setSection] = useState<'overview' | 'upload' | 'mapping'>('overview');
 
     const load = useCallback(async () => {
         setLoading(true); setError(null);
@@ -88,6 +115,9 @@ export default function FundLedger() {
             setAccounts(j.accounts || []);
             setTxns(j.transactions || []);
             setAdjustments(j.adjustments || []);
+            setRules(j.rules || []);
+            setSettings(j.settings || null);
+            setImports(j.imports || []);
             setTruncated(!!j.truncated);
         } catch (e) {
             setError((e as Error).message);
@@ -97,6 +127,12 @@ export default function FundLedger() {
     }, []);
 
     useEffect(() => { load(); }, [load]);
+
+    // The saved default applies until the person changes it by hand; after
+    // that their choice stands for the rest of the visit.
+    useEffect(() => {
+        if (!fyTouched && settings?.fy_start) setFyStart(settings.fy_start);
+    }, [settings, fyTouched]);
 
     const entities = useMemo(() => [...new Set([...accounts.map(a => a.entity), ...txns.map(t => t.entity)].filter(Boolean))].sort(), [accounts, txns]);
     const banks = useMemo(() => [...new Set([...accounts.map(a => a.bank), ...txns.map(t => t.bank)].filter(Boolean))].sort(), [accounts, txns]);
@@ -142,20 +178,24 @@ export default function FundLedger() {
         .filter(a => (entity === 'all' || a.entity === entity)
             && (bank === 'all' || a.bank === bank)
             && (currency === 'all' || a.currency === currency))
-        .map(a => accountBalance(
-            {
-                entity: a.entity, bank: a.bank, currency: a.currency,
-                openingBalance: a.opening_balance,
-                statedBalance: a.stated_balance, statedAsOf: a.stated_as_of,
-            },
-            filtered.filter(t => t.account_id === a.id)
-                .map(t => ({ amount: t.amount, category: t.category })),
-        )), [accounts, filtered, entity, bank, currency]);
+        .map(a => ({
+            ...accountBalance(
+                {
+                    entity: a.entity, bank: a.bank, currency: a.currency,
+                    openingBalance: a.opening_balance,
+                    statedBalance: a.stated_balance, statedAsOf: a.stated_as_of,
+                },
+                filtered.filter(t => t.account_id === a.id)
+                    .map(t => ({ amount: t.amount, category: t.category })),
+            ),
+            accountId: a.id,
+            accountLabel: a.account_label,
+        })), [accounts, filtered, entity, bank, currency]);
 
     const cashByCountry = useMemo(() => {
         const byCountry = new Map<string, number>();
         for (const a of accounts) {
-            const b = balances.find(x => x.entity === a.entity && x.bank === a.bank);
+            const b = balances.find(x => x.accountId === a.id);
             if (!b) continue;
             // Consolidated cash is in rupees; an AED balance is converted at
             // the rate its own transactions carried, never at a guess.
@@ -210,18 +250,74 @@ export default function FundLedger() {
         );
     }
 
+    const inCountry = (country: string) => {
+        const ids = new Set(accounts.filter(a => a.country === country).map(a => a.id));
+        return filtered.filter(t => t.account_id && ids.has(t.account_id));
+    };
+
     const cards = [
-        { label: 'Total Cash Balance', value: cr(totalCash), icon: Wallet, hint: `${accounts.length} account${accounts.length === 1 ? '' : 's'}` },
-        { label: 'India Cash', value: cr(cashByCountry.get('India') ?? 0), icon: Banknote, hint: 'INR accounts' },
-        { label: 'UAE Cash', value: cr(cashByCountry.get('UAE') ?? 0), icon: Banknote, hint: 'AED, shown in INR' },
-        { label: 'Total Invested Capital', value: cr(totals.investment), icon: TrendingDown, hint: 'Excludes internal transfers' },
-        { label: 'Total Exits / Realisations', value: cr(totals.exitProceeds), icon: TrendingUp, hint: 'Cash received only' },
-        { label: 'Net Fund Position', value: cr(totals.netFundPosition), icon: Wallet, hint: view === 'adjusted' ? 'Adjusted' : 'Actual' },
+        {
+            label: 'Total Cash Balance', value: cr(totalCash), icon: Wallet,
+            hint: `${accounts.length} account${accounts.length === 1 ? '' : 's'}`,
+            rows: filtered,
+        },
+        {
+            label: 'India Cash', value: cr(cashByCountry.get('India') ?? 0), icon: Banknote,
+            hint: 'INR accounts', rows: inCountry('India'),
+        },
+        {
+            label: 'UAE Cash', value: cr(cashByCountry.get('UAE') ?? 0), icon: Banknote,
+            hint: 'AED, shown in INR', rows: inCountry('UAE'),
+        },
+        {
+            label: 'Total Invested Capital', value: cr(totals.investment), icon: TrendingDown,
+            hint: 'Excludes internal transfers',
+            rows: filtered.filter(t => t.category === 'investment'),
+        },
+        {
+            label: 'Total Exits / Realisations', value: cr(totals.exitProceeds), icon: TrendingUp,
+            hint: 'Cash received only',
+            rows: filtered.filter(t => t.category === 'exit_proceeds'),
+        },
+        {
+            label: 'Net Fund Position', value: cr(totals.netFundPosition), icon: Wallet,
+            hint: view === 'adjusted' ? 'Adjusted' : 'Actual',
+            rows: filtered.filter(t => t.category !== 'internal_transfer'),
+        },
     ];
 
+    if (section === 'mapping') {
+        return (
+            <>
+                <SectionTabs section={section} setSection={setSection} />
+                <MappingRules rules={rules} settings={settings} onChanged={load} />
+            </>
+        );
+    }
+
+    if (section === 'upload') {
+        return (
+            <>
+                <SectionTabs section={section} setSection={setSection} />
+                <div style={{ padding: '18px 24px 40px' }}>
+                    <MasterUpload
+                        companies={companies} entities={entities} rules={rules}
+                        fxRate={settings?.default_fx_rate ?? null} onImported={load}
+                    />
+                    <ImportHistory imports={imports} flagged={filtered.filter(t => t.data_issues.length > 0)} />
+                </div>
+            </>
+        );
+    }
+
     return (
+        <>
+        <SectionTabs section={section} setSection={setSection} />
         <div style={{ padding: '18px 24px 40px' }}>
-            <MasterUpload companies={companies} entities={entities} onImported={load} />
+            <MasterUpload
+                companies={companies} entities={entities} rules={rules}
+                fxRate={settings?.default_fx_rate ?? null} onImported={load}
+            />
 
             {/* ─── E. Filters ───────────────────────────────────────────── */}
             <div style={{
@@ -230,7 +326,7 @@ export default function FundLedger() {
                 background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
             }}>
                 <select className="form-input" style={{ fontSize: 12, width: 'auto' }} value={fyStart}
-                    onChange={e => { setFyStart(e.target.value as FinancialYearStart); setFy('all'); }}>
+                    onChange={e => { setFyStart(e.target.value as FinancialYearStart); setFy('all'); setFyTouched(true); }}>
                     <option value="april">FY April–March</option>
                     <option value="november">FY November–October</option>
                 </select>
@@ -259,7 +355,30 @@ export default function FundLedger() {
                     <input className="form-input" type="date" style={{ fontSize: 12, width: 'auto' }}
                         value={asOf} onChange={e => setAsOf(e.target.value)} />
                 </label>
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ marginLeft: 'auto' }}
+                    disabled={filtered.length === 0}
+                    onClick={() => downloadCsv(toCsv(filtered, [
+                        { header: 'Date', value: r => r.txn_date },
+                        { header: 'Entity', value: r => r.entity },
+                        { header: 'Bank', value: r => r.bank },
+                        { header: 'Description', value: r => r.description },
+                        { header: 'Amount', value: r => r.amount },
+                        { header: 'Currency', value: r => r.currency },
+                        { header: 'Amount (INR)', value: r => r.amount_inr },
+                        { header: 'Category', value: r => CATEGORY_LABELS[r.category] },
+                        { header: 'Why', value: r => r.category_source },
+                        { header: 'Flags', value: r => r.data_issues.join('; ') },
+                        { header: 'Source file', value: r => r.source_file },
+                        { header: 'Source sheet', value: r => r.source_sheet },
+                        { header: 'Source row', value: r => r.source_row },
+                    ]), exportFilename('Fund ledger'))}
+                    title="Downloads exactly the rows these filters show"
+                >
+                    <Download size={13} /> Export
+                </button>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                     {filtered.length.toLocaleString('en-IN')} transactions
                     {flaggedCount > 0 && <span style={{ color: '#b45309' }}> · {flaggedCount} flagged</span>}
                 </span>
@@ -286,16 +405,24 @@ export default function FundLedger() {
                         {cards.map(c => {
                             const Icon = c.icon;
                             return (
-                                <div key={c.label} style={{
-                                    padding: '12px 14px', borderRadius: 10,
-                                    border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
-                                }}>
+                                <button
+                                    key={c.label}
+                                    type="button"
+                                    onClick={() => setDrill({ title: c.label, rows: c.rows })}
+                                    style={{
+                                        textAlign: 'left', padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
+                                        border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
+                                        fontFamily: 'var(--font-sans)',
+                                    }}
+                                >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-tertiary)' }}>
                                         <Icon size={12} /> {c.label}
                                     </div>
-                                    <div style={{ fontSize: 21, fontWeight: 700, marginTop: 2 }}>{c.value}</div>
-                                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{c.hint}</div>
-                                </div>
+                                    <div style={{ fontSize: 21, fontWeight: 700, marginTop: 2, color: 'var(--text-primary)' }}>{c.value}</div>
+                                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                                        {c.hint} · {c.rows.length} txn
+                                    </div>
+                                </button>
                             );
                         })}
                     </div>
@@ -317,9 +444,17 @@ export default function FundLedger() {
                             </thead>
                             <tbody>
                                 {balances.map(b => (
-                                    <tr key={`${b.entity}-${b.bank}`}>
+                                    <tr
+                                        key={`${b.entity}-${b.bank}-${b.accountLabel}`}
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => setDrill({
+                                            title: `${b.entity} · ${b.bank}${b.accountLabel ? ` · ${b.accountLabel}` : ''}`,
+                                            rows: filtered.filter(t => t.account_id === b.accountId),
+                                        })}
+                                    >
                                         <td style={{ fontSize: 12, fontWeight: 600 }}>{b.entity}</td>
                                         <td style={{ fontSize: 12 }}>{b.bank || '—'}</td>
+                                        <td style={{ fontSize: 12 }}>{b.accountLabel || '—'}</td>
                                         <td style={{ fontSize: 12 }}>{b.currency}</td>
                                         <td style={{ fontSize: 12, textAlign: 'right' }}>{plain(b.openingBalance, b.currency)}</td>
                                         <td style={{ fontSize: 12, textAlign: 'right', color: '#047857' }}>{plain(b.totalInflows, b.currency)}</td>
@@ -335,7 +470,7 @@ export default function FundLedger() {
                                     </tr>
                                 ))}
                                 {balances.length === 0 && (
-                                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: 18, fontSize: 13, color: 'var(--text-tertiary)' }}>
+                                    <tr><td colSpan={10} style={{ textAlign: 'center', padding: 18, fontSize: 13, color: 'var(--text-tertiary)' }}>
                                         No accounts yet — upload a master file above and they are created from it.
                                     </td></tr>
                                 )}
@@ -352,7 +487,14 @@ export default function FundLedger() {
                             </thead>
                             <tbody>
                                 {comp.map(row => (
-                                    <tr key={row.category} onClick={() => setDrill(row.category)} style={{ cursor: 'pointer' }}>
+                                    <tr
+                                        key={row.category}
+                                        onClick={() => setDrill({
+                                            title: row.label,
+                                            rows: filtered.filter(t => t.category === row.category),
+                                        })}
+                                        style={{ cursor: 'pointer' }}
+                                    >
                                         <td style={{ fontSize: 12 }}>{row.section}</td>
                                         <td style={{ fontSize: 12, fontWeight: 600 }}>{row.label}</td>
                                         <td style={{ fontSize: 12, textAlign: 'right' }}>{cr(row.amount)}</td>
@@ -363,7 +505,10 @@ export default function FundLedger() {
                                 {(totals.internalTransfer !== 0 || totals.unclassified > 0) && (
                                     <tr style={{ color: 'var(--text-tertiary)' }}>
                                         <td style={{ fontSize: 12 }}>Excluded</td>
-                                        <td style={{ fontSize: 12 }} onClick={() => setDrill('internal_transfer')}>
+                                        <td style={{ fontSize: 12 }} onClick={() => setDrill({
+                                            title: 'Internal transfers',
+                                            rows: filtered.filter(t => t.category === 'internal_transfer'),
+                                        })}>
                                             Internal transfers, kept out of every total
                                         </td>
                                         <td style={{ fontSize: 12, textAlign: 'right' }}>{cr(totals.internalTransfer)}</td>
@@ -419,23 +564,131 @@ export default function FundLedger() {
             )}
 
             {drill && (
-                <DrillDown
-                    category={drill}
-                    rows={filtered.filter(t => t.category === drill)}
-                    onClose={() => setDrill(null)}
-                />
+                <DrillDown title={drill.title} rows={drill.rows} onClose={() => setDrill(null)} />
             )}
+        </div>
+        </>
+    );
+}
+
+/** The views 04_Developer Summary suggests, over one ledger. */
+function SectionTabs({ section, setSection }: {
+    section: 'overview' | 'upload' | 'mapping';
+    setSection: (s: 'overview' | 'upload' | 'mapping') => void;
+}) {
+    const tabs = [
+        { key: 'overview' as const, label: 'Overview & balances' },
+        { key: 'upload' as const, label: 'Data upload' },
+        { key: 'mapping' as const, label: 'Settings & mapping' },
+    ];
+    return (
+        <div style={{ display: 'flex', gap: 14, padding: '10px 24px 0' }}>
+            {tabs.map(t => (
+                <button
+                    key={t.key}
+                    onClick={() => setSection(t.key)}
+                    style={{
+                        padding: '4px 0', fontSize: 12, border: 'none', background: 'none',
+                        cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                        fontWeight: section === t.key ? 700 : 500,
+                        color: section === t.key ? 'var(--primary)' : 'var(--text-tertiary)',
+                        borderBottom: `2px solid ${section === t.key ? 'var(--primary)' : 'transparent'}`,
+                    }}
+                >
+                    {t.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+/** The validation report 04_Developer Summary asks the upload page for. */
+function ImportHistory({ imports, flagged }: { imports: ImportRow[]; flagged: TxnRow[] }) {
+    return (
+        <div style={{ marginTop: 18 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>Recent uploads</h3>
+            <div className="table-container" style={{ marginBottom: 20 }}>
+                <table className="data-table">
+                    <thead><tr><th>File</th><th>When</th><th style={{ textAlign: 'right' }}>Imported</th><th style={{ textAlign: 'right' }}>Already there</th><th style={{ textAlign: 'right' }}>Flagged</th></tr></thead>
+                    <tbody>
+                        {imports.map(i => (
+                            <tr key={i.id}>
+                                <td style={{ fontSize: 12, fontWeight: 600 }}>{i.file_name}</td>
+                                <td style={{ fontSize: 11 }}>{new Date(i.created_at).toLocaleString('en-IN')}</td>
+                                <td style={{ fontSize: 12, textAlign: 'right' }}>{i.rows_imported}</td>
+                                <td style={{ fontSize: 12, textAlign: 'right', color: 'var(--text-tertiary)' }}>{i.rows_skipped}</td>
+                                <td style={{ fontSize: 12, textAlign: 'right', color: i.rows_flagged ? '#b45309' : 'inherit' }}>{i.rows_flagged}</td>
+                            </tr>
+                        ))}
+                        {imports.length === 0 && (
+                            <tr><td colSpan={5} style={{ textAlign: 'center', padding: 16, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                Nothing uploaded yet.
+                            </td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px' }}>
+                Rows needing attention
+                <span style={{ fontWeight: 500, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                    {' '}· imported and counted, but something was missing
+                </span>
+            </h3>
+            <div className="table-container">
+                <table className="data-table">
+                    <thead><tr><th>Date</th><th>Entity</th><th>Description</th><th style={{ textAlign: 'right' }}>Amount</th><th>What is missing</th><th>Source</th></tr></thead>
+                    <tbody>
+                        {flagged.slice(0, 200).map(t => (
+                            <tr key={t.id}>
+                                <td style={{ fontSize: 11 }}>{fmtDate(t.txn_date)}</td>
+                                <td style={{ fontSize: 11 }}>{t.entity || '—'}</td>
+                                <td style={{ fontSize: 11 }}>{t.description || '—'}</td>
+                                <td style={{ fontSize: 11, textAlign: 'right' }}>{plain(t.amount, t.currency)}</td>
+                                <td style={{ fontSize: 11, color: '#b45309' }}>{t.data_issues.join(', ')}</td>
+                                <td style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                                    {t.source_sheet} row {t.source_row}
+                                </td>
+                            </tr>
+                        ))}
+                        {flagged.length === 0 && (
+                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, fontSize: 12, color: '#047857' }}>
+                                Every imported transaction has an entity, a bank, a date, a currency, an amount and a category.
+                            </td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }
 
 // ─── Audit trail: every number reaches its transactions ───────────────────
 
-function DrillDown({ category, rows, onClose }: {
-    category: LedgerCategory;
+function DrillDown({ title, rows, onClose }: {
+    title: string;
     rows: TxnRow[];
     onClose: () => void;
 }) {
+    const download = () => {
+        const csv = toCsv(rows, [
+            { header: 'Date', value: r => r.txn_date },
+            { header: 'Entity', value: r => r.entity },
+            { header: 'Bank', value: r => r.bank },
+            { header: 'Description', value: r => r.description },
+            { header: 'Amount', value: r => r.amount },
+            { header: 'Currency', value: r => r.currency },
+            { header: 'Amount (INR)', value: r => r.amount_inr },
+            { header: 'Category', value: r => CATEGORY_LABELS[r.category] },
+            { header: 'Why', value: r => r.category_source },
+            { header: 'Flags', value: r => r.data_issues.join('; ') },
+            { header: 'Source file', value: r => r.source_file },
+            { header: 'Source sheet', value: r => r.source_sheet },
+            { header: 'Source row', value: r => r.source_row },
+        ]);
+        downloadCsv(csv, exportFilename(title));
+    };
+
     return (
         <div onClick={onClose} style={{
             position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 320,
@@ -450,11 +703,14 @@ function DrillDown({ category, rows, onClose }: {
                     display: 'flex', alignItems: 'center', gap: 10,
                 }}>
                     <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 15, fontWeight: 700 }}>{CATEGORY_LABELS[category]}</div>
+                        <div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
                         <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                             {rows.length} transaction{rows.length === 1 ? '' : 's'} — every one of them, with where it came from
                         </div>
                     </div>
+                    <button className="btn btn-ghost btn-sm" onClick={download} disabled={rows.length === 0}>
+                        <Download size={13} /> CSV
+                    </button>
                     <button className="btn btn-ghost btn-sm" onClick={onClose}><X size={16} /></button>
                 </div>
                 <div className="table-container" style={{ padding: 12 }}>
@@ -504,9 +760,11 @@ interface Prepared {
     rejected: { sheet: string; sourceRow: number; why: string }[];
 }
 
-function MasterUpload({ companies, entities, onImported }: {
+function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
     companies: { companyName: string }[];
     entities: string[];
+    rules: RuleRow[];
+    fxRate: number | null;
     onImported: () => void;
 }) {
     const fileRef = useRef<HTMLInputElement>(null);
@@ -536,8 +794,14 @@ function MasterUpload({ companies, entities, onImported }: {
                     const parsed = parseBankRows(matrix, match.headerRow, match.headers, {
                         defaultEntity: entities[0] || '',
                         defaultBank: sheetName,
+                        defaultAccount: sheetName,
+                        fxRate: fxRate ?? undefined,
                         knownEntities: entities,
                         knownCompanies,
+                        rules: rules.filter(r => r.active).map(r => ({
+                            field: r.field, matchText: r.match_text,
+                            category: r.category, priority: r.priority, note: r.note,
+                        })),
                     });
                     rows.push(...parsed.map(p => ({ ...p, sheetName })));
                     summary.push({
