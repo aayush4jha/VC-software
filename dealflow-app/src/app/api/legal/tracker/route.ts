@@ -46,11 +46,14 @@ export async function GET(request: NextRequest) {
             .order('due_date', { ascending: true, nullsFirst: false }),
     ]);
 
-    for (const r of [docs, rights, actions]) {
-        if (r.error) {
-            if (missingTable(r.error.message)) return NextResponse.json(NEEDS_MIGRATION, { status: 200 });
-            return NextResponse.json({ error: r.error.message }, { status: 500 });
-        }
+    const missing: string[] = [];
+    for (const [name, r] of Object.entries({ legal_documents: docs, investor_rights: rights, legal_actions: actions })) {
+        if (!r.error) continue;
+        if (missingTable(r.error.message)) missing.push(name);
+        else return NextResponse.json({ error: r.error.message }, { status: 500 });
+    }
+    if (missing.length > 0) {
+        return NextResponse.json({ ...NEEDS_MIGRATION, missingTables: missing }, { status: 200 });
     }
 
     return NextResponse.json({

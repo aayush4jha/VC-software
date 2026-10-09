@@ -82,7 +82,8 @@ export default function FundLedger() {
     const [txns, setTxns] = useState<TxnRow[]>([]);
     const [adjustments, setAdjustments] = useState<AdjRow[]>([]);
     const [loading, setLoading] = useState(true);
-    const [needsMigration, setNeedsMigration] = useState(false);
+    const [needsMigration, setNeedsMigration] = useState<string[] | null>(null);
+    const [optionalMissing, setOptionalMissing] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [truncated, setTruncated] = useState(false);
     const [rules, setRules] = useState<RuleRow[]>([]);
@@ -109,9 +110,10 @@ export default function FundLedger() {
         try {
             const res = await fetch('/api/fund/ledger');
             const j = await res.json();
-            if (j.needsMigration) { setNeedsMigration(true); return; }
+            if (j.needsMigration) { setNeedsMigration(j.missingTables || []); return; }
             if (!res.ok) throw new Error(j.error || 'Could not load the ledger');
-            setNeedsMigration(false);
+            setNeedsMigration(null);
+            setOptionalMissing(j.optionalMissing || []);
             setAccounts(j.accounts || []);
             setTxns(j.transactions || []);
             setAdjustments(j.adjustments || []);
@@ -242,8 +244,10 @@ export default function FundLedger() {
                     <strong style={{ color: 'var(--text-primary)' }}>One migration to run first.</strong>
                     <div style={{ marginTop: 6 }}>
                         Paste <code>supabase/legal-fund-master.sql</code> into the Supabase SQL editor and run it.
-                        It creates the fund ledger, the accounts and the adjustment table, and is safe to run
-                        more than once.
+                        It is safe to run more than once.
+                        {needsMigration.length > 0 && (
+                            <> Still absent: <code>{needsMigration.join(', ')}</code>.</>
+                        )}
                     </div>
                 </div>
             </div>
@@ -383,6 +387,21 @@ export default function FundLedger() {
                     {flaggedCount > 0 && <span style={{ color: '#b45309' }}> · {flaggedCount} flagged</span>}
                 </span>
             </div>
+
+            {optionalMissing.length > 0 && (
+                <div style={{
+                    display: 'flex', gap: 8, padding: '9px 12px', borderRadius: 8, marginBottom: 10,
+                    background: 'rgba(234,179,8,0.07)', border: '1px solid rgba(234,179,8,0.22)',
+                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
+                }}>
+                    <AlertTriangle size={14} style={{ color: '#b45309', flexShrink: 0, marginTop: 1 }} />
+                    <span>
+                        The ledger is working. {optionalMissing.join(', ')} {optionalMissing.length === 1 ? 'is' : 'are'} not
+                        there yet — re-run <code>supabase/legal-fund-master.sql</code> to switch on the mapping
+                        rules and saved defaults. Classification uses the built-in patterns until then.
+                    </span>
+                </div>
+            )}
 
             {truncated && (
                 <div style={{ fontSize: 12, color: '#b45309', marginBottom: 10 }}>
