@@ -10,7 +10,7 @@ import {
     parseShaGrid, findRightsHeader, readColumns, readLegend, readBlocks,
     normalizeFill, trackerKeyFor, statusFromCell, thresholdFromText, trackerUpdatesFrom,
     headlineFigures, rightsByLegend, versionColumns, columnLetter, rightsRowRange,
-    compactRupees,
+    compactRupees, scoreGrid, rankSheets,
 } from '../.shagrid-test/sha-grid.mjs';
 
 let pass = 0, fail = 0;
@@ -286,6 +286,28 @@ check('a grid with no colours counts nothing', rightsByLegend({ ...grid, rights:
 console.log('— the amendment columns —');
 check('four of them', versionColumns(grid).length, 4);
 check('the newest is last', versionColumns(grid)[3].label, 'EMBER');
+
+console.log('— choosing the right sheet out of twelve —');
+// Exactly what went wrong: a two-column snapshot named after a date, with one
+// MORE right than the real grid, won because rights were all that was counted.
+const realGrid = grid;                                  // 14 rights, 8 cols, legend, 3 blocks, title
+const snapshot = {
+    ...grid, title: '', columns: grid.columns.slice(0, 2), legend: [], blocks: [],
+    rights: [...grid.rights, { sNo: '15', name: 'Inspection Rights', remarks: '', cells: {} }],
+};
+check('the real grid scores higher', scoreGrid(realGrid, 'SHA Rights Grid') > scoreGrid(snapshot, '19-12-2023'), true);
+check('and is chosen', rankSheets([
+    { sheetName: '19-12-2023', grid: snapshot },
+    { sheetName: 'SHA Rights Grid', grid: realGrid },
+])[0].sheetName, 'SHA Rights Grid');
+check('more rights alone does not win', snapshot.rights.length > realGrid.rights.length, true);
+check('every candidate is kept, so the choice can be changed', rankSheets([
+    { sheetName: 'a', grid: snapshot }, { sheetName: 'b', grid: realGrid },
+]).length, 2);
+check('a sheet named like the grid is favoured',
+      scoreGrid(realGrid, 'SHA Rights Grid') > scoreGrid(realGrid, 'Sheet12'), true);
+check('but furniture outweighs the name', scoreGrid(realGrid, 'Sheet12') > scoreGrid(snapshot, 'SHA Rights Grid'), true);
+check('nothing to rank', rankSheets([]), []);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

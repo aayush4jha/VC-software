@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 import {
     parseShaGrid, normalizeFill, headlineFigures, rightsByLegend, versionColumns,
-    statusFromCell, compactRupees,
-    type ShaGrid, type FillMatrix, type CellMeta, type GridCell,
+    statusFromCell, compactRupees, rankSheets,
+    type ShaGrid, type FillMatrix, type CellMeta, type GridCell, type SheetCandidate,
 } from '@/lib/sha-grid';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 import type { CellMatrix } from '@/lib/legal-import';
@@ -113,6 +113,10 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
     const [busy, setBusy] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
     const [result, setResult] = useState<string | null>(null);
+    // Every sheet that parsed, so a wrong guess can be corrected on the spot
+    // rather than being the end of it.
+    const [candidates, setCandidates] = useState<SheetCandidate[]>([]);
+    const [pendingFile, setPendingFile] = useState<string>('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -132,22 +136,42 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
 
     useEffect(() => { load(); }, [load]);
 
+    const store = useCallback(async (grid: ShaGrid, sheetName: string, fileName: string) => {
+        const res = await fetch('/api/legal/sha-grid', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyId, grid, fileName, sheetName }),
+        });
+        const j = await res.json();
+        if (j.needsMigration) { setNeedsMigration(true); return; }
+        if (!res.ok) throw new Error(j.error || 'Could not store the grid');
+
+        setResult(
+            `Read "${sheetName}": ${grid.rights.length} rights, ${grid.columns.length} columns, `
+            + `${grid.blocks.length} section${grid.blocks.length === 1 ? '' : 's'}. `
+            + `${j.tracked} rights matched the tracker`
+            + (j.unmatched?.length ? `; ${j.unmatched.length} are shown here only.` : '.'),
+        );
+        await load();
+        onImported?.();
+    }, [companyId, load, onImported]);
+
     const upload = async (file: File) => {
-        setBusy(true); setProblem(null); setResult(null);
+        setBusy(true); setProblem(null); setResult(null); setCandidates([]);
         try {
             const book = XLSX.read(await file.arrayBuffer(), {
                 type: 'array', cellDates: true, cellStyles: true, cellNF: true,
             });
 
-            let best: { grid: ShaGrid; sheet: string } | null = null;
+            // Every sheet is parsed, then ranked. A workbook holds a dozen of
+            // them and more than one will have a column of rights in it.
+            const parsed: { sheetName: string; grid: ShaGrid }[] = [];
             for (const name of book.SheetNames) {
                 const { matrix, fills, meta } = readSheet(book.Sheets[name]);
                 const grid = parseShaGrid(matrix, fills, meta);
-                if (grid && (!best || grid.rights.length > best.grid.rights.length)) {
-                    best = { grid, sheet: name };
-                }
+                if (grid && grid.rights.length > 0) parsed.push({ sheetName: name, grid });
             }
-            if (!best) {
+
+            if (parsed.length === 0) {
                 setProblem(
                     'No rights grid was found in that file. One sheet needs a heading row with "Rights" on '
                     + 'it — the columns beside it can be anything at all, and everything below is read as laid out.',
@@ -155,22 +179,10 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
                 return;
             }
 
-            const res = await fetch('/api/legal/sha-grid', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ companyId, grid: best.grid, fileName: file.name, sheetName: best.sheet }),
-            });
-            const j = await res.json();
-            if (j.needsMigration) { setNeedsMigration(true); return; }
-            if (!res.ok) throw new Error(j.error || 'Could not store the grid');
-
-            setResult(
-                `Read "${best.sheet}": ${best.grid.rights.length} rights, ${best.grid.columns.length} columns, `
-                + `${best.grid.blocks.length} section${best.grid.blocks.length === 1 ? '' : 's'}. `
-                + `${j.tracked} rights matched the tracker`
-                + (j.unmatched?.length ? `; ${j.unmatched.length} are shown here only.` : '.'),
-            );
-            await load();
-            onImported?.();
+            const ranked = rankSheets(parsed);
+            setCandidates(ranked);
+            setPendingFile(file.name);
+            await store(ranked[0].grid, ranked[0].sheetName, file.name);
         } catch (e) {
             setProblem(`Could not read that file: ${(e as Error).message}`);
         } finally {
@@ -252,6 +264,38 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
             {result && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12, fontSize: 12, color: '#047857', fontWeight: 600, lineHeight: 1.65 }}>
                     <Check size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {result}
+                </div>
+            )}
+
+            {candidates.length > 1 && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap',
+                    padding: '9px 12px', borderRadius: 9, marginBottom: 12,
+                    background: 'var(--bg-tertiary)', border: '1px solid var(--border-light)',
+                    fontSize: 11.5, color: 'var(--text-secondary)',
+                }}>
+                    <Layers size={13} />
+                    <span>{candidates.length} sheets in that workbook have rights on them. Reading:</span>
+                    <select
+                        className="form-input"
+                        style={{ fontSize: 11.5, width: 'auto', padding: '3px 7px' }}
+                        value={stored?.sheet_name ?? candidates[0].sheetName}
+                        disabled={busy}
+                        onChange={async e => {
+                            const pick = candidates.find(c => c.sheetName === e.target.value);
+                            if (!pick) return;
+                            setBusy(true);
+                            try { await store(pick.grid, pick.sheetName, pendingFile); }
+                            catch (err) { setProblem((err as Error).message); }
+                            finally { setBusy(false); }
+                        }}
+                    >
+                        {candidates.map(c => (
+                            <option key={c.sheetName} value={c.sheetName}>
+                                {c.sheetName} — {c.grid.rights.length} rights, {c.grid.columns.length} columns
+                            </option>
+                        ))}
+                    </select>
                 </div>
             )}
 

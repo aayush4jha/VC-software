@@ -719,3 +719,41 @@ export function compactRupees(raw: string | number | null): string | null {
 export function versionColumns(grid: ShaGrid): GridColumn[] {
     return grid.columns.filter(c => c.kind === 'version');
 }
+
+// ─── Choosing the sheet ───────────────────────────────────────────────────
+
+/**
+ * How much this sheet looks like THE rights grid.
+ *
+ * A workbook holds a dozen sheets and several of them have a column of rights
+ * in them: an addendum, a working copy, a dated snapshot. Picking the one with
+ * the most rights chose a two-column snapshot named "19-12-2023" over the real
+ * grid, which had one fewer right and everything else — eight columns, the
+ * legend, the sections, the cap table.
+ *
+ * So the count of rights is the weakest signal here, and weighted accordingly.
+ * What marks the real grid is its furniture: the investor columns, the colour
+ * key, the blocks beneath it, a title, and a sheet named like what it is.
+ */
+export function scoreGrid(grid: ShaGrid, sheetName = ''): number {
+    const named = /\bsha\b|\brights?\b|\bgrid\b/i.test(sheetName) ? 25 : 0;
+    return grid.rights.length
+        + grid.columns.length * 3
+        + grid.legend.length * 5
+        + grid.blocks.length * 4
+        + (grid.title ? 10 : 0)
+        + named;
+}
+
+export interface SheetCandidate {
+    sheetName: string;
+    grid: ShaGrid;
+    score: number;
+}
+
+/** Every sheet that parsed, best first, so the choice can also be overridden. */
+export function rankSheets(candidates: { sheetName: string; grid: ShaGrid }[]): SheetCandidate[] {
+    return candidates
+        .map(c => ({ ...c, score: scoreGrid(c.grid, c.sheetName) }))
+        .sort((a, b) => b.score - a.score);
+}
