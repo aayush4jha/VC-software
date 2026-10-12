@@ -162,8 +162,16 @@ export function readColumns(
     matrix: CellMatrix,
     headerRow: number,
     afterCol: number,
-    options: { fills?: FillMatrix; rightsRows?: [number, number] } = {},
+    options: { fills?: FillMatrix; rightsRows?: [number, number]; meta?: CellMeta } = {},
 ): GridColumn[] {
+    // A heading like "1-3-24" is a date to Excel, and printing its ISO form
+    // renames the column to something nobody in the firm would recognise.
+    const shown = (r: number, c: number) => {
+        const display = options.meta?.display?.[r]?.[c];
+        return display !== null && display !== undefined && String(display).trim() !== ''
+            ? String(display).trim()
+            : text(matrix[r]?.[c]);
+    };
     const header = matrix[headerRow] || [];
     const above = headerRow > 0 ? (matrix[headerRow - 1] || []) : [];
 
@@ -179,8 +187,8 @@ export function readColumns(
 
     const columns: GridColumn[] = [];
     for (let c = afterCol + 1; c < width; c++) {
-        const label = text(header[c]);
-        const sub = text(above[c]);
+        const label = shown(headerRow, c);
+        const sub = headerRow > 0 ? shown(headerRow - 1, c) : '';
 
         // Does anything in the grid use this column, value or colour?
         let used = false;
@@ -190,8 +198,12 @@ export function readColumns(
         }
         if (!label && !sub && !used) continue;
 
-        const primary = label || sub;
-        const secondary = label && sub ? sub : '';
+        // A header cell holding a value rather than a name — "YES" over the
+        // EMBER column — is the amendment's answer, not its title. The name
+        // written above it is the title.
+        const headerIsValue = /^(?:yes|no|y|n|na|n a|require|required)$/.test(normalizeLabel(label));
+        const primary = (headerIsValue && sub) ? sub : (label || sub);
+        const secondary = (headerIsValue && sub) ? label : (label && sub ? sub : '');
         const kind: GridColumn['kind'] = TIER_WORDS.test(normalizeLabel(primary)) ? 'tier' : 'version';
         columns.push({
             key: `c${c}`,
@@ -437,7 +449,7 @@ export function parseShaGrid(matrix: CellMatrix, fills: FillMatrix, meta?: CellM
     if (!header) return null;
 
     const rightsRows = rightsRowRange(matrix, header.row, header.nameCol);
-    const columns = readColumns(matrix, header.row, header.remarksCol, { fills, rightsRows });
+    const columns = readColumns(matrix, header.row, header.remarksCol, { fills, rightsRows, meta });
     const rights = readRights(matrix, fills, header, columns, meta);
     const afterRights = rightsRows[1];
 
@@ -446,7 +458,11 @@ export function parseShaGrid(matrix: CellMatrix, fills: FillMatrix, meta?: CellM
     if (rights.length === 0) warnings.push('The Rights heading was found but no rights were listed under it.');
 
     const legend = readLegend(matrix, fills, afterRights);
-    const blocks = readBlocks(matrix, fills, afterRights, meta);
+    const legendLabels = new Set(legend.map(l => normalizeLabel(l.label)));
+    const blocks = readBlocks(matrix, fills, afterRights, meta)
+        // The key is already shown as the key; repeating it as a nameless
+        // block of three rows above the sections helps nobody.
+        .filter(b => b.title || !b.rows.every(r => legendLabels.has(normalizeLabel(r.label))));
 
     // Colours used in the grid that the legend does not explain.
     const legendFills = new Set(legend.map(l => l.fill));

@@ -106,9 +106,13 @@ check('eight columns', cols.length, 8);
 check('the four tiers', cols.filter(c => c.kind === 'tier').map(c => c.label),
       ['Lead Investor', 'Large Investor', 'Angel Investor', 'Investor']);
 check('the amendment columns', cols.filter(c => c.kind === 'version').map(c => c.label),
-      ['19-12-2023', '1-3-24', '26-8-24', 'YES']);
+      ['19-12-2023', '1-3-24', '26-8-24', 'EMBER']);
+// The EMBER column's header cell holds "YES" — the amendment's answer, not
+// its name. The name written above it is the name.
+check('a header cell holding a value is not the column name',
+      cols.find(c => c.index === 11).subLabel, 'YES');
 check('a heading from the row above is kept', cols.find(c => c.label === '26-8-24').subLabel, '4th addendum');
-check('and so is EMBER', cols.find(c => c.subLabel === 'EMBER').label, 'YES');
+check('and so is EMBER', cols.find(c => c.index === 11).label, 'EMBER');
 
 const grid = parseShaGrid(M, F);
 
@@ -191,7 +195,7 @@ check('the unmatched are named, not dropped', unmatched,
       ["Founder's Exit ROFR", 'Founders Vesting', 'ESOP  dilution safeguard', 'More Favoured Terms Safeguard']);
 const seat = updates.find(u => u.rightKey === 'board_seat');
 check('the newest column wins', seat.status, 'available');
-check('and is cited', seat.documentRef, 'EMBER');
+check('and is cited', seat.documentRef, 'YES');
 check('the threshold comes from the remark', seat.thresholdPct, 5);
 check('the condition keeps the sentence', seat.conditionText.includes('Fall away if we go below 5% equity'), true);
 
@@ -267,7 +271,7 @@ check('a grid with no colours counts nothing', rightsByLegend({ ...grid, rights:
 
 console.log('— the amendment columns —');
 check('four of them', versionColumns(grid).length, 4);
-check('the newest is last', versionColumns(grid)[3].subLabel, 'EMBER');
+check('the newest is last', versionColumns(grid)[3].label, 'EMBER');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
