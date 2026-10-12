@@ -23,10 +23,14 @@ import RightsMatrix from '@/components/legal/RightsMatrix';
 import RightsChanges from '@/components/legal/RightsChanges';
 import DocumentManager from '@/components/legal/DocumentManager';
 import ExcelImport from '@/components/legal/ExcelImport';
+import CompanyLegalDashboard from '@/components/legal/CompanyLegalDashboard';
 
-type LegalTabId = 'dashboard' | 'rights' | 'changes' | 'documents' | 'import';
+type LegalTabId = 'sheet' | 'dashboard' | 'rights' | 'changes' | 'documents' | 'import';
 
 const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+    // The uploaded sheet leads, because it is the record everything else
+    // summarises.
+    { id: 'sheet', label: 'SHA Grid', icon: FileSpreadsheet },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'rights', label: 'Rights', icon: ShieldCheck },
     { id: 'changes', label: 'Changes', icon: GitCompareArrows },
@@ -37,7 +41,7 @@ const TABS: { id: LegalTabId; label: string; icon: React.ComponentType<{ size?: 
 function LegalDetailContent({ companyId }: { companyId: string }) {
     const router = useRouter();
     const { companies, getIndustryById, setSelectedCompany } = useAppContext();
-    const [activeTab, setActiveTab] = useState<LegalTabId>('dashboard');
+    const [activeTab, setActiveTab] = useState<LegalTabId>('sheet');
     const [tick, setTick] = useState(0);
 
     const company = useMemo(() => companies.find(c => c.id === companyId), [companies, companyId]);
@@ -198,6 +202,9 @@ function LegalDetailContent({ companyId }: { companyId: string }) {
                 </div>
 
                 <div className="legal-tab-content">
+                    {activeTab === 'sheet' && (
+                        <CompanyLegalDashboard companyId={company.id} companyName={company.companyName} />
+                    )}
                     {activeTab === 'dashboard' && (
                         <LegalDashboard company={company} record={record} onUpdate={updateRecord} />
                     )}

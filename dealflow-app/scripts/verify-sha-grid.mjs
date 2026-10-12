@@ -9,6 +9,7 @@
 import {
     parseShaGrid, findRightsHeader, readColumns, readLegend, readBlocks,
     normalizeFill, trackerKeyFor, statusFromCell, thresholdFromText, trackerUpdatesFrom,
+    headlineFigures, rightsByLegend, versionColumns,
 } from '../.shagrid-test/sha-grid.mjs';
 
 let pass = 0, fail = 0;
@@ -193,6 +194,44 @@ check('the newest column wins', seat.status, 'available');
 check('and is cited', seat.documentRef, 'EMBER');
 check('the threshold comes from the remark', seat.thresholdPct, 5);
 check('the condition keeps the sentence', seat.conditionText.includes('Fall away if we go below 5% equity'), true);
+
+console.log('— the page shows what Excel shows —');
+// 0.06028 reads as "6.028%" in the sheet; re-deciding that here would produce
+// a page that disagrees with the file it claims to mirror.
+const DISPLAY = M.map(() => []);
+DISPLAY[31] = [];
+DISPLAY[31][2] = '528,856,570';
+const LINKS = M.map(() => []);
+LINKS[29] = [];
+LINKS[29][2] = 'https://drive.google.com/file/d/1Mhnr/view';
+const rich = parseShaGrid(M, F, { display: DISPLAY, links: LINKS });
+const richAnnex = rich.blocks.find(b => b.title === 'Annexures');
+check('the formatted text is used', richAnnex.rows.find(r => r.label === 'ROUND SIZE').cells[0].value, '528,856,570');
+check('the number underneath is kept', richAnnex.rows.find(r => r.label === 'ROUND SIZE').cells[0].raw, 528856570);
+check('a hyperlink survives', richAnnex.rows[0].cells[0].link, 'https://drive.google.com/file/d/1Mhnr/view');
+check('a row with nothing beside its label has no cells', richAnnex.rows[1].cells.length, 0);
+check('without display text the raw value is shown', grid.blocks.find(b => b.title === 'Annexures')
+      .rows.find(r => r.label === 'ROUND SIZE').cells[0].value, '528856570');
+
+console.log('— the figures the dashboard leads with —');
+const heads = headlineFigures(grid);
+check('they are recognised by name wherever they sit', heads.map(h => h.key),
+      ['investment', 'valuation', 'shares', 'price', 'round', 'date']);
+check('one found in a later block still counts', heads.find(h => h.key === 'date').source, 'After Ember Captable');
+check('our investment', heads.find(h => h.key === 'investment').value, '34793235');
+check('the leftmost column wins, not the next round', heads.find(h => h.key === 'round').value, '528856570');
+check('each says where it came from', heads[0].source, 'Annexures');
+check('an empty grid has no headlines', headlineFigures({ ...grid, blocks: [] }), []);
+
+console.log('— the summary of colours —');
+const byLegend = rightsByLegend(grid);
+check('every counted colour is in the legend', byLegend.every(b => grid.legend.some(l => l.fill === b.fill)), true);
+check('and none is counted zero', byLegend.every(b => b.count > 0), true);
+check('a grid with no colours counts nothing', rightsByLegend({ ...grid, rights: [] }), []);
+
+console.log('— the amendment columns —');
+check('four of them', versionColumns(grid).length, 4);
+check('the newest is last', versionColumns(grid)[3].subLabel, 'EMBER');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

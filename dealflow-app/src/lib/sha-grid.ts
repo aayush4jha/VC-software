@@ -21,8 +21,25 @@ import { normalizeLabel, type CellMatrix } from './legal-import';
 export type FillMatrix = (string | null)[][];
 
 export interface GridCell {
+    /** What Excel shows in the cell: "577,206,845", "6.028%", "Sep 2022". */
     value: string;
+    /** The underlying value, kept so a figure can be totalled or compared. */
+    raw: string | number | null;
     fill: string | null;
+    link: string | null;
+}
+
+/**
+ * The display text and links a spreadsheet reader can give alongside values.
+ *
+ * Passing the formatted text is what makes the dashboard match the sheet
+ * exactly: Excel has already decided that 0.06028 reads as "6.028%" and
+ * 577206845 as "577,206,845", and re-deciding it here would produce a page
+ * that disagrees with the file it claims to mirror.
+ */
+export interface CellMeta {
+    display?: (string | null)[][];
+    links?: (string | null)[][];
 }
 
 export interface GridColumn {
@@ -94,6 +111,21 @@ export function normalizeFill(raw: string | null | undefined): string | null {
 const fillAt = (fills: FillMatrix, r: number, c: number): string | null =>
     normalizeFill(fills?.[r]?.[c] ?? null);
 
+function cellAt(
+    matrix: CellMatrix, fills: FillMatrix, meta: CellMeta | undefined, r: number, c: number,
+): GridCell {
+    const cell: unknown = matrix[r]?.[c] ?? null;
+    const shown = meta?.display?.[r]?.[c];
+    return {
+        value: shown !== null && shown !== undefined && shown !== '' ? String(shown).trim() : text(cell),
+        raw: cell instanceof Date
+            ? cell.toISOString().slice(0, 10)
+            : (typeof cell === 'number' || typeof cell === 'string' ? cell : null),
+        fill: fillAt(fills, r, c),
+        link: meta?.links?.[r]?.[c] ?? null,
+    };
+}
+
 // ─── The rights grid ──────────────────────────────────────────────────────
 
 const TIER_WORDS = /\b(?:lead|large|angel|investor|founder|strategic)\b/;
@@ -163,6 +195,7 @@ export function readRights(
     fills: FillMatrix,
     header: { row: number; nameCol: number; remarksCol: number },
     columns: GridColumn[],
+    meta?: CellMeta,
 ): GridRight[] {
     const rights: GridRight[] = [];
     const sNoCol = header.nameCol > 0 ? header.nameCol - 1 : -1;
@@ -181,9 +214,12 @@ export function readRights(
                 const value = text(row[col.index]);
                 if (!value) continue;
                 const existing = previous.cells[col.key];
+                const cell = cellAt(matrix, fills, meta, r, col.index);
                 previous.cells[col.key] = {
-                    value: existing?.value ? `${existing.value} ${value}` : value,
-                    fill: existing?.fill ?? fillAt(fills, r, col.index),
+                    ...cell,
+                    value: existing?.value ? `${existing.value} ${cell.value}` : cell.value,
+                    fill: existing?.fill ?? cell.fill,
+                    link: existing?.link ?? cell.link,
                 };
             }
             continue;
@@ -192,12 +228,11 @@ export function readRights(
 
         const cells: Record<string, GridCell> = {};
         for (const col of columns) {
-            const value = text(row[col.index]);
-            const fill = fillAt(fills, r, col.index);
+            const cell = cellAt(matrix, fills, meta, r, col.index);
             // A cell with only a colour still says something: the colour IS
             // the requirement level, and dropping it loses the whole legend.
-            if (!value && !fill) continue;
-            cells[col.key] = { value, fill };
+            if (!cell.value && !cell.fill) continue;
+            cells[col.key] = cell;
         }
 
         rights.push({
@@ -266,7 +301,7 @@ function isBannerRow(row: unknown[], fills: FillMatrix, r: number): boolean {
  * No block is named in advance, so SHA Sections, Annexures, the round
  * arithmetic and anything added next quarter all arrive the same way.
  */
-export function readBlocks(matrix: CellMatrix, fills: FillMatrix, fromRow: number): GridBlock[] {
+export function readBlocks(matrix: CellMatrix, fills: FillMatrix, fromRow: number, meta?: CellMeta): GridBlock[] {
     const blocks: GridBlock[] = [];
     let current: GridBlock | null = null;
     let labelColumn = 1;
@@ -303,10 +338,9 @@ export function readBlocks(matrix: CellMatrix, fills: FillMatrix, fromRow: numbe
 
         const cells: GridCell[] = [];
         for (let c = labelIndex + 1; c < row.length; c++) {
-            const value = text(row[c]);
-            const fill = fillAt(fills, r, c);
-            if (!value && !fill) continue;
-            cells.push({ value, fill });
+            const cell = cellAt(matrix, fills, meta, r, c);
+            if (!cell.value && !cell.fill) continue;
+            cells.push(cell);
         }
         current.rows.push({ prefix, label, cells });
     }
@@ -338,12 +372,12 @@ function readTitle(matrix: CellMatrix, beforeRow: number): string {
     return strong || weak;
 }
 
-export function parseShaGrid(matrix: CellMatrix, fills: FillMatrix): ShaGrid | null {
+export function parseShaGrid(matrix: CellMatrix, fills: FillMatrix, meta?: CellMeta): ShaGrid | null {
     const header = findRightsHeader(matrix);
     if (!header) return null;
 
     const columns = readColumns(matrix, header.row, header.remarksCol);
-    const rights = readRights(matrix, fills, header, columns);
+    const rights = readRights(matrix, fills, header, columns, meta);
     const afterRights = header.row + 1 + rights.length;
 
     const warnings: string[] = [];
@@ -351,7 +385,7 @@ export function parseShaGrid(matrix: CellMatrix, fills: FillMatrix): ShaGrid | n
     if (rights.length === 0) warnings.push('The Rights heading was found but no rights were listed under it.');
 
     const legend = readLegend(matrix, fills, afterRights);
-    const blocks = readBlocks(matrix, fills, afterRights);
+    const blocks = readBlocks(matrix, fills, afterRights, meta);
 
     // Colours used in the grid that the legend does not explain.
     const legendFills = new Set(legend.map(l => l.fill));
@@ -498,4 +532,92 @@ export function trackerUpdatesFrom(grid: ShaGrid): { updates: TrackerUpdate[]; u
     }
 
     return { updates, unmatched };
+}
+
+// ─── What the dashboard leads with ────────────────────────────────────────
+
+export interface HeadlineFigure {
+    key: string;
+    label: string;
+    /** As the sheet displays it, so the page and the file agree exactly. */
+    value: string;
+    /** Which block it came from, so a figure can be traced back. */
+    source: string;
+}
+
+/**
+ * The figures worth putting at the top of a company's legal page.
+ *
+ * Recognised by what the sheet calls them rather than by position, because
+ * these blocks are written by hand and the same number appears two rows apart
+ * in two different companies' files. The FIRST match wins: these sheets put
+ * the current round on the left and the next round beside it, and the current
+ * one is what a dashboard should lead with.
+ *
+ * Anything not recognised is not lost — it is still shown in its own block
+ * further down the page.
+ */
+const HEADLINE_LABELS: { key: string; label: string; match: RegExp }[] = [
+    { key: 'investment', label: 'Our investment', match: /^our investment$|^amount investment$|^investment amount$/ },
+    { key: 'valuation', label: 'Valuation', match: /^valuation$|^valuation when invested$/ },
+    { key: 'holding', label: 'Our holding', match: /^percent holding amt$|^percent holding$|^percent holding no shares$|^holding$|^our holding rights$/ },
+    { key: 'shares', label: 'Shares held', match: /^no shares$|^number shares$|^no of shares$/ },
+    { key: 'price', label: 'Issue price', match: /^issue price$|^price acquisition$|^per share value$/ },
+    { key: 'round', label: 'Round size', match: /^round size$|^new round size$/ },
+    { key: 'date', label: 'Invested', match: /^date investment$|^investment date$/ },
+    { key: 'dilution', label: 'Dilution', match: /^dilution$/ },
+];
+
+export function headlineFigures(grid: ShaGrid): HeadlineFigure[] {
+    const found = new Map<string, HeadlineFigure>();
+
+    for (const block of grid.blocks) {
+        for (const row of block.rows) {
+            const label = normalizeLabel(row.label);
+            if (!label) continue;
+            const match = HEADLINE_LABELS.find(h => h.match.test(label));
+            if (!match || found.has(match.key)) continue;
+            // The leftmost cell with something in it: the current column.
+            const cell = row.cells.find(c => c.value !== '');
+            if (!cell) continue;
+            found.set(match.key, {
+                key: match.key,
+                label: match.label,
+                value: cell.value,
+                source: block.title || 'Sheet',
+            });
+        }
+    }
+
+    // Kept in the order they are declared, not the order the sheet happens to
+    // list them, so two companies' pages read the same way.
+    return HEADLINE_LABELS.map(h => found.get(h.key)).filter((f): f is HeadlineFigure => !!f);
+}
+
+/**
+ * How many rights sit in each legend colour, for the summary row.
+ * Counted on the newest column that has any colour at all, which is the
+ * firm's current position rather than what it wanted at the first round.
+ */
+export function rightsByLegend(grid: ShaGrid): { label: string; fill: string; count: number }[] {
+    const counts = new Map<string, number>();
+
+    for (const right of grid.rights) {
+        let fill: string | null = null;
+        for (const col of grid.columns) {
+            const cell = right.cells[col.key];
+            if (cell?.fill) fill = cell.fill;
+        }
+        if (!fill) continue;
+        counts.set(fill, (counts.get(fill) ?? 0) + 1);
+    }
+
+    return grid.legend
+        .map(l => ({ label: l.label, fill: l.fill, count: counts.get(l.fill) ?? 0 }))
+        .filter(l => l.count > 0);
+}
+
+/** The amendment columns, newest last — the SHA versions the grid tracks. */
+export function versionColumns(grid: ShaGrid): GridColumn[] {
+    return grid.columns.filter(c => c.kind === 'version');
 }

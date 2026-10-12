@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Loader2, Search, AlertTriangle, FileWarning, Clock, Building2,
-    ShieldAlert, FileCheck2, Plus, ExternalLink, X, Download,
+    ShieldAlert, FileCheck2, Plus, ExternalLink, X, Download, FileSpreadsheet,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { getCompanyFinancials } from '@/lib/company-financials';
@@ -15,7 +15,7 @@ import {
     type DocStatus, type RightStatus, type ActionPriority, type ActionStatus, type ActionCategory,
 } from '@/lib/legal-tracker';
 import { toCsv, exportFilename } from '@/lib/csv-export';
-import ShaGridView from '@/components/legal/ShaGridView';
+
 import type { Company } from '@/types/database';
 
 /** Hands the file to the browser; the CSV itself comes from a pure module. */
@@ -791,18 +791,19 @@ function CompanyLegalDrawer({ company, documents, rights, actions, onClose, onSa
                         </table>
                     </div>
 
-                    <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 8px' }}>
-                        SHA rights grid
-                        <span style={{ fontWeight: 500, fontSize: 11, color: 'var(--text-tertiary)' }}>
-                            {' '}· uploaded from the spreadsheet, shown as it is kept there
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                        padding: '11px 13px', borderRadius: 10, marginBottom: 22,
+                        border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
+                    }}>
+                        <FileSpreadsheet size={15} style={{ color: 'var(--text-tertiary)' }} />
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
+                            The SHA grid spreadsheet, with its columns, colours and cap table, has a page of
+                            its own.
                         </span>
-                    </h4>
-                    <div style={{ marginBottom: 22 }}>
-                        <ShaGridView
-                            companyId={company.id}
-                            companyName={company.companyName}
-                            onImported={onSaved}
-                        />
+                        <a href={`/legal/${company.id}`} className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>
+                            Open the SHA grid <ExternalLink size={12} />
+                        </a>
                     </div>
 
                     <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 8px' }}>Open actions</h4>
