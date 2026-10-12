@@ -10,6 +10,7 @@ import {
     parseShaGrid, findRightsHeader, readColumns, readLegend, readBlocks,
     normalizeFill, trackerKeyFor, statusFromCell, thresholdFromText, trackerUpdatesFrom,
     headlineFigures, rightsByLegend, versionColumns, columnLetter, rightsRowRange,
+    compactRupees,
 } from '../.shagrid-test/sha-grid.mjs';
 
 let pass = 0, fail = 0;
@@ -262,6 +263,19 @@ check('our investment', heads.find(h => h.key === 'investment').value, '34793235
 check('the leftmost column wins, not the next round', heads.find(h => h.key === 'round').value, '528856570');
 check('each says where it came from', heads[0].source, 'Annexures');
 check('an empty grid has no headlines', headlineFigures({ ...grid, blocks: [] }), []);
+
+console.log('— a long figure said the short way, beside the sheet\'s own —');
+check('crores', compactRupees(34793235), '\u20b93.48 Cr');
+check('from formatted text too', compactRupees('577,206,845'), '\u20b957.72 Cr');
+check('lakhs', compactRupees(528856), '\u20b95.29 L');
+check('a readable figure is left alone', compactRupees(99999), null);
+check('shares are not money, but the caller decides that', compactRupees(161829), '\u20b91.62 L');
+check('zero', compactRupees(0), null);
+check('text', compactRupees('Sep 2022'), null);
+check('nothing', compactRupees(null), null);
+check('a percentage is not a rupee figure', compactRupees('6.028%'), null);
+check('the headline keeps the sheet text as well',
+      headlineFigures(grid).find(h => h.key === 'investment').value, '34793235');
 
 console.log('— the summary of colours —');
 const byLegend = rightsByLegend(grid);

@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import {
     parseShaGrid, normalizeFill, headlineFigures, rightsByLegend, versionColumns,
-    statusFromCell, type ShaGrid, type FillMatrix, type CellMeta, type GridCell,
+    statusFromCell, compactRupees,
+    type ShaGrid, type FillMatrix, type CellMeta, type GridCell,
 } from '@/lib/sha-grid';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 import type { CellMatrix } from '@/lib/legal-import';
@@ -58,6 +59,9 @@ function readSheet(ws: XLSX.WorkSheet): { matrix: CellMatrix; fills: FillMatrix;
     }
     return { matrix, fills, meta: { display, links } };
 }
+
+/** Which headline figures are rupee amounts. Shares and percentages are not. */
+const MONEY_KEYS = new Set(['investment', 'valuation', 'price', 'round']);
 
 const readableOn = (fill: string | null) => {
     if (!fill) return undefined;
@@ -289,19 +293,29 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
                             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
                             gap: 10, marginBottom: 16,
                         }}>
-                            {headlines.map(h => (
-                                <div key={h.key} style={{
-                                    padding: '11px 13px', borderRadius: 10,
-                                    border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
-                                }}>
-                                    <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.03em' }}>
-                                        {h.label}
+                            {headlines.map(h => {
+                                // The sheet's own text is the figure; the short
+                                // form is an aid beside it, never instead of it.
+                                const compact = MONEY_KEYS.has(h.key) ? compactRupees(h.raw ?? h.value) : null;
+                                return (
+                                    <div key={h.key} style={{
+                                        padding: '11px 13px', borderRadius: 10,
+                                        border: '1px solid var(--border-light)', background: 'var(--bg-secondary)',
+                                    }}>
+                                        <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+                                            {h.label}
+                                        </div>
+                                        <div style={{ fontSize: compact ? 18 : 16, fontWeight: 700, marginTop: 3, wordBreak: 'break-word' }}>
+                                            {compact ?? h.value}
+                                        </div>
+                                        {compact && (
+                                            <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 1 }}>
+                                                {h.value}
+                                            </div>
+                                        )}
                                     </div>
-                                    <div style={{ fontSize: 17, fontWeight: 700, marginTop: 3, wordBreak: 'break-word' }}>
-                                        {h.value}
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
@@ -450,6 +464,18 @@ function Block({ block }: { block: { title: string; rows: { prefix: string; labe
 
     if (block.rows.length === 0) return null;
 
+    // A first row of words above rows of figures is a header, not a record:
+    // "NEXT ROUND | Current | After right issue" names the columns beneath it.
+    const looksNumeric = (c: GridCell) => /^[₹$]?[\d,.\-()%]+$/.test(c.value.trim());
+    const [first, ...rest] = block.rows;
+    const headerRow = !isList
+        && first && first.cells.length > 0
+        && first.cells.every(c => !looksNumeric(c))
+        && rest.length >= 2
+        && rest.some(r => r.cells.some(looksNumeric))
+        ? first : null;
+    const bodyRows = headerRow ? rest : block.rows;
+
     return (
         <div style={{ marginBottom: 22 }}>
             <SectionHeading icon={block.title ? Layers : CalendarClock} title={block.title || 'Also in the sheet'} />
@@ -477,10 +503,23 @@ function Block({ block }: { block: { title: string; rows: { prefix: string; labe
             ) : (
                 <div className="table-container" style={{ overflowX: 'auto' }}>
                     <table className="data-table">
+                        {headerRow && (
+                            <thead>
+                                <tr>
+                                    {bodyRows.some(r => r.prefix) && <th style={{ width: 64 }} />}
+                                    <th style={{ minWidth: 210 }}>{headerRow.label}</th>
+                                    {Array.from({ length: widest }).map((_, c) => (
+                                        <th key={c} style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                            {headerRow.cells[c]?.value ?? ''}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                        )}
                         <tbody>
-                            {block.rows.map((row, i) => (
+                            {bodyRows.map((row, i) => (
                                 <tr key={i}>
-                                    {block.rows.some(r => r.prefix) && (
+                                    {bodyRows.some(r => r.prefix) && (
                                         <td style={{ fontSize: 10.5, color: 'var(--text-tertiary)', width: 64 }}>{row.prefix}</td>
                                     )}
                                     <td style={{ fontSize: 12, fontWeight: 600, minWidth: 210 }}>{row.label}</td>

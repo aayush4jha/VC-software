@@ -618,6 +618,8 @@ export interface HeadlineFigure {
     label: string;
     /** As the sheet displays it, so the page and the file agree exactly. */
     value: string;
+    /** The number underneath, when there is one. */
+    raw: string | number | null;
     /** Which block it came from, so a figure can be traced back. */
     source: string;
 }
@@ -661,6 +663,7 @@ export function headlineFigures(grid: ShaGrid): HeadlineFigure[] {
                 key: match.key,
                 label: match.label,
                 value: cell.value,
+                raw: cell.raw,
                 source: block.title || 'Sheet',
             });
         }
@@ -692,6 +695,24 @@ export function rightsByLegend(grid: ShaGrid): { label: string; fill: string; co
     return grid.legend
         .map(l => ({ label: l.label, fill: l.fill, count: counts.get(l.fill) ?? 0 }))
         .filter(l => l.count > 0);
+}
+
+/**
+ * A long rupee figure said the short way: 34793235 reads as ₹3.48 Cr.
+ *
+ * Offered ALONGSIDE the sheet's own text, never instead of it. The sheet
+ * writes some of these formatted and some bare, and quietly reformatting them
+ * would make the page disagree with the file it mirrors — but "34793235" is
+ * not a number anybody reads at a glance either.
+ */
+export function compactRupees(raw: string | number | null): string | null {
+    const n = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(/[,\s₹]/g, ''));
+    if (!isFinite(n) || n === 0) return null;
+    const abs = Math.abs(n);
+    // Below a lakh the plain figure is already readable.
+    if (abs < 100000) return null;
+    if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
+    return `₹${(n / 100000).toFixed(2)} L`;
 }
 
 /** The amendment columns, newest last — the SHA versions the grid tracks. */
