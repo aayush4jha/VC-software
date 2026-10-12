@@ -15,6 +15,7 @@ import {
     type DocStatus, type RightStatus, type ActionPriority, type ActionStatus, type ActionCategory,
 } from '@/lib/legal-tracker';
 import { toCsv, exportFilename } from '@/lib/csv-export';
+import ShaGridView from '@/components/legal/ShaGridView';
 import type { Company } from '@/types/database';
 
 /** Hands the file to the browser; the CSV itself comes from a pure module. */
@@ -788,6 +789,20 @@ function CompanyLegalDrawer({ company, documents, rights, actions, onClose, onSa
                                 })}
                             </tbody>
                         </table>
+                    </div>
+
+                    <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 8px' }}>
+                        SHA rights grid
+                        <span style={{ fontWeight: 500, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            {' '}· uploaded from the spreadsheet, shown as it is kept there
+                        </span>
+                    </h4>
+                    <div style={{ marginBottom: 22 }}>
+                        <ShaGridView
+                            companyId={company.id}
+                            companyName={company.companyName}
+                            onImported={onSaved}
+                        />
                     </div>
 
                     <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 8px' }}>Open actions</h4>

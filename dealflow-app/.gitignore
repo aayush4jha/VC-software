@@ -62,3 +62,4 @@ next-env.d.ts
 .legaltracker-test
 .masterimport-test
 .csv-test
+.shagrid-test
