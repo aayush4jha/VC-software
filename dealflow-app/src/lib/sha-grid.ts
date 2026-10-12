@@ -158,29 +158,89 @@ export function findRightsHeader(matrix: CellMatrix): { row: number; nameCol: nu
  * that is dropped for not being recognised is exactly the data the upload is
  * supposed to preserve.
  */
-export function readColumns(matrix: CellMatrix, headerRow: number, afterCol: number): GridColumn[] {
+export function readColumns(
+    matrix: CellMatrix,
+    headerRow: number,
+    afterCol: number,
+    options: { fills?: FillMatrix; rightsRows?: [number, number] } = {},
+): GridColumn[] {
     const header = matrix[headerRow] || [];
     const above = headerRow > 0 ? (matrix[headerRow - 1] || []) : [];
-    const width = Math.max(header.length, above.length);
-    const columns: GridColumn[] = [];
 
+    // Width is taken from the rights rows too, not just the two header rows.
+    // A heading can be blank, merged away or sitting three rows up; the data
+    // underneath it cannot. Measuring only the header is how four columns of
+    // this grid — two investor tiers and every amendment — were dropped.
+    const [rightsStart, rightsEnd] = options.rightsRows ?? [headerRow + 1, matrix.length];
+    let width = Math.max(header.length, above.length);
+    for (let r = rightsStart; r < Math.min(rightsEnd, matrix.length); r++) {
+        width = Math.max(width, (matrix[r] || []).length);
+    }
+
+    const columns: GridColumn[] = [];
     for (let c = afterCol + 1; c < width; c++) {
         const label = text(header[c]);
         const sub = text(above[c]);
-        if (!label && !sub) continue;
+
+        // Does anything in the grid use this column, value or colour?
+        let used = false;
+        for (let r = rightsStart; r < Math.min(rightsEnd, matrix.length) && !used; r++) {
+            if (text(matrix[r]?.[c]) !== '') used = true;
+            else if (options.fills && fillAt(options.fills, r, c)) used = true;
+        }
+        if (!label && !sub && !used) continue;
 
         const primary = label || sub;
         const secondary = label && sub ? sub : '';
         const kind: GridColumn['kind'] = TIER_WORDS.test(normalizeLabel(primary)) ? 'tier' : 'version';
         columns.push({
             key: `c${c}`,
-            label: primary,
+            // A column with data but no heading still has to be called
+            // something, and its spreadsheet letter is what the person
+            // looking at the file will recognise.
+            label: primary || columnLetter(c),
             subLabel: secondary,
             index: c,
             kind,
         });
     }
     return columns;
+}
+
+/** 0 → A, 25 → Z, 26 → AA: the name the spreadsheet gives a column. */
+export function columnLetter(index: number): string {
+    let n = index;
+    let out = '';
+    do {
+        out = String.fromCharCode(65 + (n % 26)) + out;
+        n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return out;
+}
+
+/**
+ * Where the rights block starts and ends.
+ *
+ * Found before the columns are, because which columns exist is decided by what
+ * the rights rows actually use — and that cannot be known until the rows are.
+ */
+export function rightsRowRange(matrix: CellMatrix, headerRow: number, nameCol: number): [number, number] {
+    const start = headerRow + 1;
+    let end = start;
+    for (let r = start; r < matrix.length; r++) {
+        const row = matrix[r];
+        if (!Array.isArray(row)) break;
+        const name = text(row[nameCol]);
+        if (name) { end = r + 1; continue; }
+        // A row with no name but values in it is the tail of the right above,
+        // where a long condition has wrapped. A row with neither is the end of
+        // the block — the legend sits directly below, and its labels are in
+        // the same column as the rights, so anything looser swallows it.
+        const hasValues = row.some((c, i) => i > nameCol && text(c) !== '');
+        if (!hasValues) break;
+        end = r + 1;
+    }
+    return [start, end];
 }
 
 /**
@@ -376,9 +436,10 @@ export function parseShaGrid(matrix: CellMatrix, fills: FillMatrix, meta?: CellM
     const header = findRightsHeader(matrix);
     if (!header) return null;
 
-    const columns = readColumns(matrix, header.row, header.remarksCol);
+    const rightsRows = rightsRowRange(matrix, header.row, header.nameCol);
+    const columns = readColumns(matrix, header.row, header.remarksCol, { fills, rightsRows });
     const rights = readRights(matrix, fills, header, columns, meta);
-    const afterRights = header.row + 1 + rights.length;
+    const afterRights = rightsRows[1];
 
     const warnings: string[] = [];
     if (columns.length === 0) warnings.push('No columns were found to the right of Remarks.');

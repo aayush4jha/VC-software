@@ -9,7 +9,7 @@
 import {
     parseShaGrid, findRightsHeader, readColumns, readLegend, readBlocks,
     normalizeFill, trackerKeyFor, statusFromCell, thresholdFromText, trackerUpdatesFrom,
-    headlineFigures, rightsByLegend, versionColumns,
+    headlineFigures, rightsByLegend, versionColumns, columnLetter, rightsRowRange,
 } from '../.shagrid-test/sha-grid.mjs';
 
 let pass = 0, fail = 0;
@@ -194,6 +194,42 @@ check('the newest column wins', seat.status, 'available');
 check('and is cited', seat.documentRef, 'EMBER');
 check('the threshold comes from the remark', seat.thresholdPct, 5);
 check('the condition keeps the sentence', seat.conditionText.includes('Fall away if we go below 5% equity'), true);
+
+console.log('— a column is never lost for having an awkward heading —');
+// What went wrong on the real file: only the two columns with plain headings
+// survived, so two investor tiers and every amendment column disappeared.
+const SPARSE = [
+    [null, null, null, null, null, null, null, null, '4th addendum', null, 'EMBER'],
+    ['S No.', 'Rights', 'Remarks', 'Lead Investor', 'Large Investor', null, null, null, null, null, null],
+    [1, 'Board Seat', 'Fall away below 5%', null, 'YES', 'YES', 'Require', 'yes', '4.74%', null, 'YES'],
+    [2, 'Board Observer', '', null, 'YES', null, null, 'yes', null, null, 'YES'],
+];
+const SPARSE_F = SPARSE.map(() => []);
+SPARSE_F[2][3] = GREEN;
+const sparse = parseShaGrid(SPARSE, SPARSE_F);
+check('every column with data is kept', sparse.columns.length, 7);
+check('a blank heading falls back to its spreadsheet letter',
+      sparse.columns.map(c => c.label),
+      ['Lead Investor', 'Large Investor', 'F', 'G', 'H', '4th addendum', 'EMBER']);
+check('the values under them survive', sparse.rights[0].cells.c6.value, 'Require');
+check('and the amendment figure', sparse.rights[0].cells.c8.value, '4.74%');
+check('a heading only in the row above is used', sparse.columns.find(c => c.index === 10).label, 'EMBER');
+check('a column that is empty everywhere is not invented',
+      sparse.columns.some(c => c.index === 9), false);
+check('a column used only by a colour is kept',
+      parseShaGrid(SPARSE, SPARSE_F).columns.some(c => c.index === 3), true);
+
+console.log('— spreadsheet column letters —');
+check('the first', columnLetter(0), 'A');
+check('the twenty-sixth', columnLetter(25), 'Z');
+check('and the one after', columnLetter(26), 'AA');
+check('deep into the sheet', columnLetter(27), 'AB');
+
+console.log('— where the rights block ends —');
+check('it stops before the legend', rightsRowRange(M, 3, 1), [4, 18]);
+check('a wrapped row stays inside it', rightsRowRange([
+    ['Rights'], ['Board Seat', 'yes'], [null, 'continued'], [], ['Needed'],
+], 0, 0), [1, 3]);
 
 console.log('— the page shows what Excel shows —');
 // 0.06028 reads as "6.028%" in the sheet; re-deciding that here would produce
