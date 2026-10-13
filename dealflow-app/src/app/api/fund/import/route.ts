@@ -65,8 +65,9 @@ export async function POST(request: NextRequest) {
     const adjustments: IncomingAdjustment[] = Array.isArray(body.adjustments) ? body.adjustments : [];
     const sheetSummary = body.sheetSummary && typeof body.sheetSummary === 'object' ? body.sheetSummary : {};
     const portfolio: PortfolioIncoming[] = Array.isArray(body.portfolio) ? body.portfolio : [];
+    const dashboard = body.dashboard && typeof body.dashboard === 'object' ? body.dashboard : null;
 
-    if (rows.length === 0 && adjustments.length === 0 && portfolio.length === 0) {
+    if (rows.length === 0 && adjustments.length === 0 && portfolio.length === 0 && !dashboard) {
         return NextResponse.json({ error: 'Nothing to import from that file.' }, { status: 400 });
     }
     if (rows.length > MAX_ROWS) {
@@ -220,11 +221,14 @@ export async function POST(request: NextRequest) {
         portfolioSaved = (data || []).length;
     }
 
+    // Sheet1's own yearly table, kept on the import record. It holds figures
+    // no other sheet does — a market value for a past year, most of all — and
+    // the tracker lays them over what it computes.
     const flagged = rows.filter(r => (r.issues || []).length > 0).length;
     await client.from('fund_imports').insert({
         organization_id: ORGANIZATION_ID,
         file_name: fileName.slice(0, 200),
-        sheet_summary: sheetSummary,
+        sheet_summary: dashboard ? { ...sheetSummary, __dashboard: dashboard } : sheetSummary,
         rows_imported: imported,
         rows_skipped: duplicates,
         rows_flagged: flagged,

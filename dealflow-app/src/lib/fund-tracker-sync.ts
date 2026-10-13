@@ -22,6 +22,12 @@ export interface LedgerEntity {
     transactionCount: number;
     /** The latest transaction date seen for this entity. */
     asOfDate: string | null;
+    /**
+     * Only when the file states it. A bank statement cannot know a payment
+     * that has not happened, but the firm's own balance grid does — and when
+     * it is in the file, it is better than what somebody typed last month.
+     */
+    paymentDue?: number;
 }
 
 /** A cost the ledger recognised, for the tracker's expense list. */
@@ -74,7 +80,9 @@ export function syncTrackerFromLedger(record: FundRecord, summary: LedgerSummary
         if (existing) {
             const updated = entities.find(e => e.id === existing.id)!;
             updated.bankBalance = led.closingBalance;
-            // currency, paymentDue, pendingFund and notes are left alone.
+            // A due is written only when the file actually states one;
+            // otherwise it stays as typed. pendingFund and notes always do.
+            if (led.paymentDue !== undefined) updated.paymentDue = led.paymentDue;
             touched.set(key(led.name), updated);
         } else {
             const created: FundEntity = {
@@ -82,8 +90,8 @@ export function syncTrackerFromLedger(record: FundRecord, summary: LedgerSummary
                 name: led.name.trim(),
                 currency: asCurrency(led.currency),
                 bankBalance: led.closingBalance,
-                // Not zero because they are zero — zero because nobody has said.
-                paymentDue: 0,
+                // Zero because nobody has said, unless the file said.
+                paymentDue: led.paymentDue ?? 0,
                 pendingFund: 0,
             };
             entities.push(created);

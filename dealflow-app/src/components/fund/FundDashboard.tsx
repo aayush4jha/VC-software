@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Wallet, TrendingDown, TrendingUp, Plus, Upload, Trash2, Pencil, Check, X, Calendar, ArrowUpRight, ArrowDownRight,
+    Wallet, TrendingDown, TrendingUp, Plus, Trash2, Pencil, Check, X, Calendar, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import {
     type FundRecord,
@@ -18,13 +18,11 @@ import {
     yearMonthKey,
 } from '@/lib/fund-data';
 import InvestmentEntitySelect from '@/components/common/InvestmentEntitySelect';
-import BankStatementUpload from './BankStatementUpload';
 
 const CURRENCY_TONE: Record<Currency, string> = { INR: 'inr', AED: 'aed', USD: 'usd' };
 
 export default function FundDashboard() {
     const [tick, setTick] = useState(0);
-    const [showUpload, setShowUpload] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [showAddEntity, setShowAddEntity] = useState(false);
     const [showAddExpense, setShowAddExpense] = useState(false);
@@ -70,11 +68,13 @@ export default function FundDashboard() {
                     <p className="fund-hero-sub">
                         As of {record.asOfDate} · {record.entities.length} entities · {record.expenses.length} expenses logged
                     </p>
+                    <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+                        Balances and expenses come from the master file uploaded under{' '}
+                        <strong>Fund Ledger → Data upload</strong>. Entities and one-off expenses can still be
+                        added here.
+                    </p>
                 </div>
                 <div className="fund-hero-actions">
-                    <button className="btn btn-outline btn-sm" onClick={() => setShowUpload(true)}>
-                        <Upload size={14} /> Upload bank statement
-                    </button>
                     <button className="btn btn-outline btn-sm" onClick={() => setShowAddExpense(true)}>
                         <Plus size={14} /> Add expense
                     </button>
@@ -176,34 +176,6 @@ export default function FundDashboard() {
             )}
 
             {/* ─── Modals ─────────────────────────────── */}
-            {showUpload && (
-                <BankStatementUpload
-                    entities={record.entities}
-                    onCancel={() => setShowUpload(false)}
-                    onApply={(entityId, balance, asOfDate, fileName, expenses) => {
-                        update(r => ({
-                            ...r,
-                            asOfDate,
-                            entities: r.entities.map(e => e.id === entityId ? { ...e, bankBalance: balance } : e),
-                            expenses: [...r.expenses, ...expenses],
-                            statements: [
-                                ...r.statements,
-                                {
-                                    id: genId('stmt'),
-                                    entityId,
-                                    fileName,
-                                    uploadedAt: new Date().toISOString(),
-                                    asOfDate,
-                                    closingBalance: balance,
-                                    transactionCount: expenses.length,
-                                },
-                            ],
-                        }));
-                        setShowUpload(false);
-                    }}
-                />
-            )}
-
             {showAddEntity && (
                 <AddEntityModal
                     onCancel={() => setShowAddEntity(false)}

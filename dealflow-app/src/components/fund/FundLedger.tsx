@@ -15,7 +15,10 @@ import {
     detectSheetKind, parseBankRows, parseAdjustmentRows, describeSheet,
     type ParsedLedgerRow, type ParsedAdjustment,
 } from '@/lib/master-import';
-import { parsePortfolioInvestments, parsePortfolioExits } from '@/lib/fund-portfolio';
+import {
+    parsePortfolioInvestments, parsePortfolioExits, parseDashboardSheet,
+    type DashboardSheet,
+} from '@/lib/fund-portfolio';
 import type { CellMatrix } from '@/lib/legal-import';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 import MappingRules, { type RuleRow, type FundSettings } from '@/components/fund/MappingRules';
@@ -82,9 +85,18 @@ function syncManualTracker(prepared: Prepared): string | null {
                 description: r.description,
             }));
 
+        // The firm's own grid wins over anything derived from the statements:
+        // it is what they reconcile to, and it names the entities properly.
+        const stated = (prepared.dashboard?.entities ?? []).map(e => ({
+            name: e.name, currency: e.currency,
+            closingBalance: e.bankBalance, transactionCount: 0,
+            asOfDate: e.asOf,
+            paymentDue: e.paymentDue,
+        }));
+
         const before = loadFundRecord();
         const after = syncTrackerFromLedger(before, {
-            entities: [...byEntity.values()],
+            entities: stated.length > 0 ? stated : [...byEntity.values()],
             expenses,
             fileName: prepared.fileName,
             importedAt: new Date().toISOString(),
@@ -850,6 +862,7 @@ interface Prepared {
     rows: (ParsedLedgerRow & { sheetName: string })[];
     adjustments: ParsedAdjustment[];
     portfolio: Record<string, unknown>[];
+    dashboard: DashboardSheet | null;
     summary: { sheet: string; description: string }[];
     rejected: { sheet: string; sourceRow: number; why: string }[];
 }
@@ -876,6 +889,7 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
             const rows: (ParsedLedgerRow & { sheetName: string })[] = [];
             const adjustments: ParsedAdjustment[] = [];
             const portfolio: Prepared['portfolio'] = [];
+            let dashboard: DashboardSheet | null = null;
             const summary: Prepared['summary'] = [];
             const rejected: Prepared['rejected'] = [];
 
@@ -915,6 +929,16 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                     adjustments.push(...adjRows);
                     rejected.push(...adjRejected.map(r => ({ sheet: sheetName, ...r })));
                     summary.push({ sheet: sheetName, description: describeSheet(match, adjRows.length, adjRejected.length) });
+                } else if (dashboard === null && parseDashboardSheet(matrix)) {
+                    // Sheet1 carries the firm's own yearly table and its
+                    // entity balances. Those are authoritative: a market value
+                    // for a past year exists nowhere else in the workbook.
+                    dashboard = parseDashboardSheet(matrix);
+                    summary.push({
+                        sheet: sheetName,
+                        description: `Dashboard sheet: ${dashboard!.years.length} years, `
+                            + `${dashboard!.entities.length} entity balance${dashboard!.entities.length === 1 ? '' : 's'}.`,
+                    });
                 } else if (match.kind === 'investment_master') {
                     const rows = parsePortfolioInvestments(matrix, match.headerRow, match.headers);
                     portfolio.push(...rows.map(r => ({
@@ -956,11 +980,11 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                 }
             }
 
-            if (rows.length === 0 && adjustments.length === 0 && portfolio.length === 0) {
+            if (rows.length === 0 && adjustments.length === 0 && portfolio.length === 0 && !dashboard) {
                 setProblem('No bank statement or adjustment sheet was recognised in that file. '
                     + 'A bank sheet needs a heading row with a date, a description and either a debit/credit pair or an amount.');
             } else {
-                setPrepared({ fileName: file.name, rows, adjustments, portfolio, summary, rejected });
+                setPrepared({ fileName: file.name, rows, adjustments, portfolio, dashboard, summary, rejected });
             }
         } catch (e) {
             setProblem(`Could not read that file: ${(e as Error).message}`);
@@ -980,6 +1004,7 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                     rows: prepared.rows,
                     adjustments: prepared.adjustments,
                     portfolio: prepared.portfolio,
+                    dashboard: prepared.dashboard,
                     sheetSummary: Object.fromEntries(prepared.summary.map(s => [s.sheet, s.description])),
                 }),
             });

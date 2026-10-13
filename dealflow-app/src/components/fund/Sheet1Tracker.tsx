@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertTriangle, Download, Pencil } from 'lucide-react';
 import {
-    yearlySummary, summaryTotals,
-    type PortfolioInvestment, type PortfolioExit, type FundType,
+    yearlySummary, summaryTotals, mergeDashboardYears,
+    type PortfolioInvestment, type PortfolioExit, type FundType, type DashboardYearRow,
 } from '@/lib/fund-portfolio';
 import { loadFundRecord, saveFundRecord, type FundRecord, type FundEntity } from '@/lib/fund-data';
 import { toCsv, exportFilename } from '@/lib/csv-export';
@@ -52,6 +52,7 @@ export default function Sheet1Tracker() {
     const [loading, setLoading] = useState(true);
     const [needsMigration, setNeedsMigration] = useState(false);
     const [record, setRecord] = useState<FundRecord | null>(null);
+    const [stated, setStated] = useState<DashboardYearRow[]>([]);
     const [editing, setEditing] = useState(false);
 
     const load = useCallback(async () => {
@@ -64,6 +65,16 @@ export default function Sheet1Tracker() {
             const j = await res.json();
             if (j.error && /does not exist|schema cache/i.test(j.error)) { setNeedsMigration(true); return; }
             setRows(j.data || []);
+
+            // Sheet1's table, as stored by the most recent upload that had one.
+            const imports = await fetch('/api/db', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: 'fund_imports', operation: 'select' }),
+            }).then(r => r.json()).catch(() => ({ data: [] }));
+            const newest = (imports.data || [])
+                .filter((i: { sheet_summary?: { __dashboard?: { years?: DashboardYearRow[] } } }) => i.sheet_summary?.__dashboard?.years?.length)
+                .sort((a: { created_at: string }, b: { created_at: string }) => b.created_at.localeCompare(a.created_at))[0];
+            setStated(newest?.sheet_summary?.__dashboard?.years ?? []);
         } catch { /* the grid below still works without it */ }
         finally { setLoading(false); }
     }, []);
@@ -90,7 +101,12 @@ export default function Sheet1Tracker() {
             multiple: r.multiple, sourceRow: 0,
         })), [rows]);
 
-    const years = useMemo(() => yearlySummary(investments, exits), [investments, exits]);
+    const years = useMemo(() => {
+        const computed = yearlySummary(investments, exits);
+        // Sheet1's own figures where it states them; the computed ones where
+        // it is silent. Market value and NAV for a past year exist only there.
+        return stated.length > 0 ? mergeDashboardYears(computed, stated) : computed;
+    }, [investments, exits, stated]);
     const totals = useMemo(() => summaryTotals(years), [years]);
 
     const saveEntity = (id: string, patch: Partial<FundEntity>) => {

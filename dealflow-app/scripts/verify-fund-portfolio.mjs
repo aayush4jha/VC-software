@@ -7,6 +7,7 @@
 import {
     normalizeFundType, financialYearFor, parsePortfolioInvestments,
     parsePortfolioExits, yearlySummary, summaryTotals,
+    parseDashboardSheet, mergeDashboardYears,
 } from '../.fundportfolio-test/fund-portfolio.mjs';
 
 let pass = 0, fail = 0;
@@ -153,6 +154,61 @@ console.log('— the edges —');
 check('no rows, no years', yearlySummary([], []), []);
 check('an investment with no year is left out of the table',
       yearlySummary([{ ...investments[0], financialYear: '' }], []), []);
+
+console.log('— Sheet1 read as data, not as a brief —');
+// Its layout: the yearly table to the right, the balance grid below, with the
+// as-of date two rows above the entity names and the currency one row above.
+const SHEET1 = [
+    ['Step', null, null, null, null, null, null, null, 'dashboard should give me', 'as below'],
+    [null, null, null, null, null, null, null, null, 'fund approved with yearly data'],
+    [null, 'head will be', 'Fund for investment', null, null, null, null, null, 'fund received', 'india nd uae'],
+    [null, null, 'office expense', null, null, null, null, null, null, 'type of investment'],
+    [null, null, 'investment', null, null, null, null, null, 'Year', 'Direct', 'Fund', 'Syndicate',
+     'Total Investment', 'Exits', 'Writeoffs', 'Net Investment', 'Cumulative Investment as of today',
+     'Profit/loss', 'Market Value', 'NAV'],
+    [null, null, 'investment exit', null, null, null, null, null, '2020-21', '168571886', '', '2800272',
+     '171372158', '0', '0', '171372158', '171372158', '0', '188525092', '1.1'],
+    [null, null, null, null, null, null, null, null, '2021-22', '327651558', '7815065', '1500000',
+     '336966623', '3011316', '', '333955307', '505327465', '8428684', '1180850654', '2.34'],
+    [null, null, null, null, null, null, null, null, null, '1159607782', '100609564', '14772272', '1274989618'],
+    [],
+    [null, null, null, '1/28/26', '1/28/26', '1/28/26', '1/28/26'],
+    [null, null, null, 'INR', 'INR', 'INR', 'INR'],
+    [null, 'Particular', null, 'DVLLP', 'DRAVYA', 'RAK', 'NBF'],
+    [null, 'Bank Balance', null, '-34863766', '64233480', '15478350', '5475002'],
+    [null, 'Payment due', null, '0', '3370384', '8000000', '50000000'],
+    [null, 'Closing Balance', null, '-36156126', '60863096', '7478350', '-44524998'],
+    [null, 'so this will show balance'],
+];
+const dash = parseDashboardSheet(SHEET1);
+check('it is recognised', !!dash, true);
+check('two years, not the totals line', dash.years.map(y => y.year), ['2020-21', '2021-22']);
+check('direct', dash.years[0].direct, 168571886);
+check('a blank cell is null, not zero', dash.years[0].fund, null);
+check('the market value a past year has', dash.years[0].marketValue, 188525092);
+check('and its NAV', dash.years[0].nav, 1.1);
+check('four entities', dash.entities.map(e => e.name), ['DVLLP', 'DRAVYA', 'RAK', 'NBF']);
+check('a negative bank balance', dash.entities[0].bankBalance, -34863766);
+check('a payment due', dash.entities[3].paymentDue, 50000000);
+check('its currency, from the row above', dash.entities[0].currency, 'INR');
+check('its as-of date, from two rows above', dash.entities[0].asOf, '2026-01-28');
+check('the closing balance the sheet states', dash.entities[0].closingBalance, -36156126);
+check('a sheet with neither table', parseDashboardSheet([['nothing', 'here']]), null);
+
+console.log('— the firm\'s figures laid over the computed ones —');
+const computed = yearlySummary(investments, exits);
+const mergedYears = mergeDashboardYears(computed, dash.years);
+const m1 = mergedYears.find(y => y.year === '2020-21');
+check("a market value no other sheet holds now appears", m1.marketValue, 188525092);
+check('and its NAV', m1.nav, 1.1);
+check('a stated figure wins', m1.direct, 168571886);
+check('a year only the other sheets have survives',
+      mergedYears.some(y => y.year === '2022-23'), true);
+check('a year only Sheet1 has is added', mergeDashboardYears([], dash.years).length, 2);
+check('and the years stay in order', mergedYears.map(y => y.year),
+      [...mergedYears.map(y => y.year)].sort());
+check('nothing stated leaves the computed table alone',
+      mergeDashboardYears(computed, []).length, computed.length);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

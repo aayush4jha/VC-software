@@ -333,3 +333,195 @@ export function summaryTotals(rows: YearRow[]): Omit<YearRow, 'year' | 'nav' | '
         nav: last?.nav ?? null,
     };
 }
+
+// ─── Sheet1 itself ────────────────────────────────────────────────────────
+
+export interface DashboardYearRow {
+    year: string;
+    direct: number | null;
+    fund: number | null;
+    syndicate: number | null;
+    totalInvestment: number | null;
+    exits: number | null;
+    writeoffs: number | null;
+    netInvestment: number | null;
+    cumulative: number | null;
+    profitLoss: number | null;
+    marketValue: number | null;
+    nav: number | null;
+}
+
+export interface DashboardEntity {
+    name: string;
+    currency: string;
+    asOf: string | null;
+    bankBalance: number;
+    paymentDue: number;
+    closingBalance: number | null;
+}
+
+export interface DashboardSheet {
+    years: DashboardYearRow[];
+    entities: DashboardEntity[];
+}
+
+const norm = (c: unknown) => text(c).toLowerCase().replace(/[^a-z0-9%\/ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * Sheet1 of the requirements, read as data rather than as a brief.
+ *
+ * It carries the firm's own yearly table AND its entity balances, which are
+ * the two things the tracker shows. Those figures are authoritative in a way a
+ * computed one is not: market value and NAV for a past year exist nowhere else
+ * — the investment sheet holds one current valuation per holding and no
+ * history of them — so without reading this sheet those columns can only ever
+ * be blank.
+ */
+export function parseDashboardSheet(matrix: CellMatrix): DashboardSheet | null {
+    let yearHeader = -1;
+    let particularRow = -1;
+
+    for (let r = 0; r < matrix.length; r++) {
+        const row = matrix[r];
+        if (!Array.isArray(row)) continue;
+        const cells = row.map(norm);
+        if (yearHeader === -1 && cells.includes('year') && cells.includes('direct')) yearHeader = r;
+        if (particularRow === -1 && cells.some(c => c === 'particular')) particularRow = r;
+    }
+    if (yearHeader === -1 && particularRow === -1) return null;
+
+    const years: DashboardYearRow[] = [];
+    if (yearHeader !== -1) {
+        const head = matrix[yearHeader].map(norm);
+        const at = (name: string[]) => {
+            for (const n of name) {
+                const i = head.findIndex(h => h === n);
+                if (i !== -1) return i;
+            }
+            for (const n of name) {
+                const i = head.findIndex(h => h.includes(n));
+                if (i !== -1) return i;
+            }
+            return -1;
+        };
+        const col = {
+            year: at(['year']), direct: at(['direct']), fund: at(['fund']),
+            syndicate: at(['syndicate']), total: at(['total investment']),
+            exits: at(['exits']), writeoffs: at(['writeoffs', 'write offs']),
+            net: at(['net investment']), cumulative: at(['cumulative']),
+            profit: at(['profit loss', 'profit/loss', 'profit']),
+            market: at(['market value']), nav: at(['nav']),
+        };
+        const num = (row: unknown[], i: number) => i >= 0 ? parseMoney(row[i]) : null;
+
+        for (let r = yearHeader + 1; r < matrix.length; r++) {
+            const row = matrix[r];
+            if (!Array.isArray(row)) break;
+            const year = text(row[col.year]);
+            // The totals line under the table has no year; stop rather than
+            // adding a row whose "year" is a blank.
+            if (!/^\d{4}\s*-\s*\d{2,4}$/.test(year.replace(/\s/g, ''))) {
+                if (years.length > 0) break;
+                continue;
+            }
+            years.push({
+                year: year.replace(/\s/g, ''),
+                direct: num(row, col.direct), fund: num(row, col.fund),
+                syndicate: num(row, col.syndicate), totalInvestment: num(row, col.total),
+                exits: num(row, col.exits), writeoffs: num(row, col.writeoffs),
+                netInvestment: num(row, col.net), cumulative: num(row, col.cumulative),
+                profitLoss: num(row, col.profit), marketValue: num(row, col.market),
+                nav: num(row, col.nav),
+            });
+        }
+    }
+
+    const entities: DashboardEntity[] = [];
+    if (particularRow !== -1) {
+        const header = matrix[particularRow];
+        const labelCol = header.findIndex(c => norm(c) === 'particular');
+        // The two rows above the names usually hold the as-of date and the
+        // currency; neither is required.
+        const dateRow = particularRow >= 2 ? matrix[particularRow - 2] : [];
+        const ccyRow = particularRow >= 1 ? matrix[particularRow - 1] : [];
+
+        const rowFor = (name: RegExp): unknown[] | null => {
+            for (let r = particularRow + 1; r < Math.min(particularRow + 8, matrix.length); r++) {
+                const row = matrix[r];
+                if (!Array.isArray(row)) continue;
+                if (name.test(norm(row[labelCol]) || norm(row.find(c => text(c) !== '')))) return row;
+            }
+            return null;
+        };
+        const bank = rowFor(/^bank balance/);
+        const due = rowFor(/^payment due/);
+        const closing = rowFor(/^closing balance/);
+
+        for (let c = labelCol + 1; c < header.length; c++) {
+            const name = text(header[c]);
+            if (!name) continue;
+            const bankValue = bank ? parseMoney(bank[c]) : null;
+            const dueValue = due ? parseMoney(due[c]) : null;
+            if (bankValue === null && dueValue === null) continue;
+            entities.push({
+                name,
+                currency: text(ccyRow?.[c]) || 'INR',
+                // "1/28/26" is month-first; reading it day-first gives month
+                // 28 and no date at all. The cell settles its own order.
+                asOf: parseDateWith(dateRow?.[c], detectDateOrder([dateRow?.[c]])),
+                bankBalance: bankValue ?? 0,
+                paymentDue: dueValue ?? 0,
+                closingBalance: closing ? parseMoney(closing[c]) : null,
+            });
+        }
+    }
+
+    if (years.length === 0 && entities.length === 0) return null;
+    return { years, entities };
+}
+
+/**
+ * The firm's own figures laid over the computed ones.
+ *
+ * Where Sheet1 states a number it wins, because it is the firm's record and
+ * may include things the other sheets do not — a market value for a past year,
+ * most of all. Where it is silent the computed figure stands, so a year added
+ * to the investment sheet but not yet to Sheet1 still appears.
+ */
+export function mergeDashboardYears(computed: YearRow[], stated: DashboardYearRow[]): YearRow[] {
+    const byYear = new Map(stated.map(s => [s.year, s]));
+    const merged = computed.map(c => {
+        const s = byYear.get(c.year);
+        if (!s) return c;
+        const pick = (a: number | null, b: number) => (a === null || a === undefined ? b : a);
+        return {
+            ...c,
+            direct: pick(s.direct, c.direct),
+            fund: pick(s.fund, c.fund),
+            syndicate: pick(s.syndicate, c.syndicate),
+            totalInvestment: pick(s.totalInvestment, c.totalInvestment),
+            exits: pick(s.exits, c.exits),
+            writeoffs: pick(s.writeoffs, c.writeoffs),
+            netInvestment: pick(s.netInvestment, c.netInvestment),
+            cumulative: pick(s.cumulative, c.cumulative),
+            profitLoss: pick(s.profitLoss, c.profitLoss),
+            marketValue: s.marketValue ?? c.marketValue,
+            nav: s.nav ?? c.nav,
+        };
+    });
+
+    // A year Sheet1 has and the other sheets do not.
+    for (const s of stated) {
+        if (merged.some(m => m.year === s.year)) continue;
+        merged.push({
+            year: s.year,
+            direct: s.direct ?? 0, fund: s.fund ?? 0, syndicate: s.syndicate ?? 0, other: 0,
+            totalInvestment: s.totalInvestment ?? 0,
+            exits: s.exits ?? 0, writeoffs: s.writeoffs ?? 0,
+            netInvestment: s.netInvestment ?? 0, cumulative: s.cumulative ?? 0,
+            profitLoss: s.profitLoss ?? 0,
+            marketValue: s.marketValue, nav: s.nav,
+        });
+    }
+    return merged.sort((a, b) => a.year.localeCompare(b.year));
+}
