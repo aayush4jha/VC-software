@@ -110,7 +110,7 @@ export const IMPORT_FIELDS: ImportField[] = [
  * having none of the fields it plainly has.
  */
 export function normalizeLabel(raw: unknown): string {
-    return String(raw ?? '')
+    const base = String(raw ?? '')
         .toLowerCase()
         // A parenthesised unit is a note about the value, not part of the name.
         .replace(/\([^)]*\)/g, ' ')
@@ -119,9 +119,18 @@ export function normalizeLabel(raw: unknown): string {
         .replace(/%/g, ' percent ')
         .replace(/\b(?:inr|usd|rs|rupees?|crores?|cr|lakhs?|lacs?|mn|million|amount in|figures in)\b/g, ' ')
         .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    // A heading that is nothing BUT filler keeps its words. The firm's fund
+    // sheet heads its entity column "To", and dropping filler left it blank —
+    // so the column could not be found and no account was ever created from
+    // that file.
+    const stripped = base
         .replace(/\b(?:the|of|a|an|for|to|in|at|on|is|as|per)\b/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+    return stripped || base;
 }
 
 /**

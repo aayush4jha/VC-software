@@ -292,7 +292,11 @@ export function parseBankRows(
         credit: columnFor(headers, ['credit', 'deposit', 'deposit amount', 'cr']),
         amount: columnFor(headers, ['amount']),
         balance: columnFor(headers, ['balance', 'closing balance', 'running balance']),
-        entity: columnFor(headers, ['entity', 'company', 'firm']),
+        // "To" is what the firm's own fund sheet heads its entity column with.
+        // Matched exactly and never loosely: "to" appears inside "total".
+        entity: columnFor(headers, ['entity', 'firm']) !== -1
+            ? columnFor(headers, ['entity', 'firm'])
+            : headers.indexOf('to'),
         bank: columnFor(headers, ['bank', 'bank name']),
         account: columnFor(headers, ['account', 'account number', 'account no']),
         acName: columnFor(headers, ['ac name', 'account name', 'party', 'counterparty']),
@@ -302,6 +306,16 @@ export function parseBankRows(
         inr: columnFor(headers, ['inr equivalent', 'inr value', 'amount inr', 'inr conversion', 'inr']),
         head: columnFor(headers, ['major head', 'category', 'head']),
     };
+
+    // A sheet with no currency column often says it in the amount heading
+    // instead — "Net Amount AED". Without this every UAE row reads as rupees
+    // and the UAE balance is wrong by a factor of twenty-three.
+    const amountHeading = [col.amount, col.debit, col.credit]
+        .filter(i => i >= 0).map(i => headers[i] || '').join(' ');
+    const sheetCurrency = context.defaultCurrency
+        ?? (/\baed\b/.test(amountHeading) ? 'AED'
+            : /\busd\b/.test(amountHeading) ? 'USD'
+                : undefined);
 
     // Settled once for the whole column, not guessed per row.
     const dateOrder = detectDateOrder(
@@ -330,7 +344,7 @@ export function parseBankRows(
         const entity = String(at(row, col.entity) ?? context.defaultEntity ?? '').trim();
         const bank = String(at(row, col.bank) ?? context.defaultBank ?? '').trim();
         const accountLabel = String(at(row, col.account) ?? context.defaultAccount ?? '').trim();
-        const currency = (String(at(row, col.currency) ?? context.defaultCurrency ?? 'INR').trim() || 'INR').toUpperCase();
+        const currency = (String(at(row, col.currency) ?? sheetCurrency ?? 'INR').trim() || 'INR').toUpperCase();
         const majorHead = String(at(row, col.head) ?? '').trim();
 
         const classification = classifyTransaction({

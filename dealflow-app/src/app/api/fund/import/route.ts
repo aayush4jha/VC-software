@@ -111,7 +111,11 @@ export async function POST(request: NextRequest) {
                 entity: a.entity,
                 bank: a.bank,
                 account_label: a.accountLabel,
-                country: /fz|llc|dubai|uae/i.test(a.entity) || a.currency === 'AED' ? 'UAE' : 'India',
+                // The firm's UAE entities: FZ LLC, DMCC, RAK, and anything
+                // holding dirhams. Getting this wrong puts a UAE balance in
+                // the India card, where it reads as a figure nobody recognises.
+                country: /\b(?:fz|llc|dmcc|rak|dubai|uae)\b/i.test(a.entity) || a.currency === 'AED'
+                    ? 'UAE' : 'India',
                 currency: a.currency,
             })),
         ).select();

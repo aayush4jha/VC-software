@@ -901,7 +901,10 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
 
                 if (match.kind === 'bank_statement') {
                     const parsed = parseBankRows(matrix, match.headerRow, match.headers, {
-                        defaultEntity: entities[0] || '',
+                        // The sheet is the account when the file does not name
+                        // one; without this no account is created at all, and
+                        // every cash figure on the page stays at zero.
+                        defaultEntity: sheetName,
                         defaultBank: sheetName,
                         defaultAccount: sheetName,
                         fxRate: fxRate ?? undefined,
