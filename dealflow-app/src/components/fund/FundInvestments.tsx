@@ -223,7 +223,7 @@ export default function FundInvestments() {
     }, [investments]);
 
     if (investments === null) {
-        return <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading fund investments…</div>;
+        return <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading syndicate investments…</div>;
     }
 
     return (
@@ -250,7 +250,7 @@ export default function FundInvestments() {
                 <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Funds we invest in</h2>
                 {editingId === null && !unavailable && (
                     <button className="btn btn-primary btn-sm" onClick={() => { setDraft(emptyDraft()); setEditingId('new'); setError(null); }}>
-                        <Plus size={14} /> Add a fund
+                        <Plus size={14} /> Add a syndicate
                     </button>
                 )}
             </div>
@@ -377,8 +377,8 @@ export default function FundInvestments() {
             {investments.length === 0 && !unavailable && editingId === null && (
                 <div className="empty-state" style={{ height: 220 }}>
                     <div className="empty-state-icon"><TrendingUp size={24} /></div>
-                    <div className="empty-state-title">No fund investments yet</div>
-                    <div className="empty-state-text">Add a fund to track its drawdowns and NAV.</div>
+                    <div className="empty-state-title">No syndicate investments yet</div>
+                    <div className="empty-state-text">Add a syndicate to track its drawdowns and NAV.</div>
                 </div>
             )}
 

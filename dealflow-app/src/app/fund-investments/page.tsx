@@ -12,7 +12,7 @@ export default function FundInvestmentsPage() {
         <div className="app-layout">
             <Sidebar />
             <main className="main-content">
-                <TopHeader title="Fund Investments" subtitle="Funds we invest in — drawdowns and NAV" />
+                <TopHeader title="Syndicate Investments" subtitle="Syndicates and funds we invest in — drawdowns and NAV" />
                 <div className="page-content page-enter">
                     <FundInvestments />
                 </div>
