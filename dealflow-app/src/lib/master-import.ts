@@ -30,6 +30,17 @@ export interface SheetSignature {
     required: string[][];
     /** Headings that make the match more certain but are not needed. */
     helpful: string[];
+    /**
+     * Headings that belong to this sheet and to no other.
+     *
+     * A bank statement is the loosest shape there is — a date, a description
+     * and an amount — so almost any finance sheet satisfies it, and the exits
+     * sheet did: its company column is headed "Investment", so nothing in the
+     * exit signature matched while the bank one matched easily. "Date of Sale"
+     * and "Consideration" appear on no bank statement ever written, and one of
+     * them settles the question outright.
+     */
+    decisive?: string[];
 }
 
 // Each `required` entry is a set of synonyms; one of each set must be present.
@@ -51,15 +62,19 @@ const SIGNATURES: SheetSignature[] = [
             ['date', 'investment date', 'date investment'],
         ],
         helpful: ['round', 'ownership', 'type', 'entity', 'status', 'instrument'],
+        decisive: ['type of fund', 'current value of investment', 'our reporting period', 'writeoff year'],
     },
     {
         kind: 'exit_master', label: 'Exit / write-off master',
         required: [
-            ['company', 'company name', 'investee'],
-            ['exit amount', 'exit value', 'proceeds', 'realisation', 'amount'],
-            ['exit date', 'date exit', 'date'],
+            // "Investment" because that is what this sheet heads its company
+            // column with — the name of the thing invested in.
+            ['company', 'company name', 'investee', 'investment'],
+            ['exit amount', 'exit value', 'proceeds', 'realisation', 'consideration', 'amount'],
+            ['exit date', 'date sale', 'date exit', 'date'],
         ],
-        helpful: ['exit type', 'status', 'write off', 'entity'],
+        helpful: ['exit type', 'status', 'write off', 'entity', 'multiple'],
+        decisive: ['date of sale', 'consideration', 'valuation on exit', 'no of share sold'],
     },
     {
         kind: 'adjustments', label: 'Adjustments',
@@ -151,7 +166,10 @@ export function detectSheetKind(matrix: CellMatrix): SheetMatch {
         const met = sig.required.filter(has).length;
         if (met < sig.required.length) continue;
         const bonus = sig.helpful.filter(h => has([h])).length;
-        const confidence = met + bonus / (sig.helpful.length + 1);
+        // A heading that belongs to this sheet and no other outranks every
+        // loose match, however many helpful columns the loose one has.
+        const decisive = (sig.decisive || []).filter(h => has([h])).length;
+        const confidence = met + bonus / (sig.helpful.length + 1) + decisive * 10;
         if (confidence > best.confidence) {
             best = { kind: sig.kind, label: sig.label, confidence, headerRow: header.index, headers: header.headers };
         }
@@ -349,7 +367,12 @@ export function parseBankRows(
             issues: [],
             sourceRow: r + 1,
         };
-        parsed.issues = rowIssues(parsed);
+        parsed.issues = rowIssues(parsed, {
+            // A column the sheet does not have at all is reported once, in the
+            // summary, rather than against every line in it.
+            entity: col.entity === -1 && !context.defaultEntity,
+            bank: col.bank === -1 && !context.defaultBank,
+        });
         out.push(parsed);
     }
     return out;
@@ -543,12 +566,15 @@ export function importKey(fileName: string, sheetName: string, sourceRow: number
 }
 
 /** A plain-language summary of one sheet, for the review screen. */
-export function describeSheet(match: SheetMatch, rowCount: number, flagged: number): string {
+export function describeSheet(
+    match: SheetMatch, rowCount: number, flagged: number, notes: string[] = [],
+): string {
     if (!match.kind) {
         return `Not recognised — no heading row that looks like a bank statement, an investment master, exits, adjustments, documents or rights.`;
     }
     const flaggedNote = flagged > 0 ? `, ${flagged} needing attention` : '';
-    return `${match.label}: ${rowCount} row${rowCount === 1 ? '' : 's'}${flaggedNote}.`;
+    const extra = notes.length > 0 ? ` ${notes.join(' ')}` : '';
+    return `${match.label}: ${rowCount} row${rowCount === 1 ? '' : 's'}${flaggedNote}.${extra}`;
 }
 
 export { parseMoney, parseCount, parseSheetDate };

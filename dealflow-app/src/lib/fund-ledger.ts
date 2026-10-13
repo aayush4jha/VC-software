@@ -253,10 +253,17 @@ export interface LedgerRow {
  * a number that is quietly missing a transaction is worse than one that says
  * which of its transactions are doubtful.
  */
-export function rowIssues(row: Partial<LedgerRow>): string[] {
+export function rowIssues(
+    row: Partial<LedgerRow>,
+    // Columns the whole sheet lacks. Flagging every row for a column that is
+    // simply not in the file is noise: 673 of 673 rows "needing attention"
+    // tells nobody which rows need attention. It is one fact about the sheet,
+    // reported once, not a fault in each line.
+    absentColumns: { entity?: boolean; bank?: boolean } = {},
+): string[] {
     const issues: string[] = [];
-    if (!row.entity?.trim()) issues.push('no entity');
-    if (!row.bank?.trim()) issues.push('no bank');
+    if (!absentColumns.entity && !row.entity?.trim()) issues.push('no entity');
+    if (!absentColumns.bank && !row.bank?.trim()) issues.push('no bank');
     if (!row.date) issues.push('no date');
     if (!row.currency?.trim()) issues.push('no currency');
     if (row.amount === undefined || row.amount === null || !isFinite(row.amount)) issues.push('no amount');

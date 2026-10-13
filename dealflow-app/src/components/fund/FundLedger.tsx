@@ -899,9 +899,16 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                         })),
                     });
                     rows.push(...parsed.map(p => ({ ...p, sheetName })));
+                    // Said once about the sheet, not once per row in it.
+                    const notes: string[] = [];
+                    if (parsed.length > 0 && parsed.every(p => !p.entity)) {
+                        notes.push('No entity column — everything in this sheet is grouped under one account.');
+                    }
                     summary.push({
                         sheet: sheetName,
-                        description: describeSheet(match, parsed.length, parsed.filter(p => p.issues.length > 0).length),
+                        description: describeSheet(
+                            match, parsed.length, parsed.filter(p => p.issues.length > 0).length, notes,
+                        ),
                     });
                 } else if (match.kind === 'adjustments') {
                     const { rows: adjRows, rejected: adjRejected } = parseAdjustmentRows(matrix, match.headerRow, match.headers);

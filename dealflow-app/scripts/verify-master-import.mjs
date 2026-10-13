@@ -185,7 +185,20 @@ const GAPPY = [
 ];
 const gappy = parseBankRows(GAPPY, 0, ['date', 'narration', 'amount'], {});
 check('it is still imported', gappy.length, 1);
-check('and says what is wrong', gappy[0].issues.sort(), ['no bank', 'no date', 'no entity']);
+// The sheet has no entity or bank column at all. That is one fact about the
+// file, reported once in the summary — flagging it on all 673 rows tells
+// nobody which rows need attention.
+check('a column the sheet lacks is not a fault in every row', gappy[0].issues, ['no date']);
+
+const PARTIAL = [
+    ['Entity', 'Bank', 'Date', 'Narration', 'Amount'],
+    ['DV LLP', 'HDFC', '01/04/2026', 'a', '-100'],
+    ['', '', '02/04/2026', 'b', '-200'],
+];
+const partial = parseBankRows(PARTIAL, 0, ['entity', 'bank', 'date', 'narration', 'amount'], {});
+check('a row missing what its sheet does have is still flagged',
+      partial[1].issues.sort(), ['no bank', 'no entity']);
+check('and its complete neighbour is not', partial[0].issues, []);
 
 console.log('— adjustments need a reason and an approver —');
 const adj = parseAdjustmentRows(ADJUSTMENTS, 0,
