@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Pencil } from 'lucide-react';
 
 type Kind = 'text' | 'number' | 'money' | 'date' | 'select';
 
@@ -85,20 +85,15 @@ export default function EditableCell({
     return (
         <span
             onClick={start}
-            title={title || (disabled ? undefined : 'Click to edit')}
-            style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                cursor: disabled ? 'default' : 'text',
-                opacity: saving ? 0.5 : 1,
-                borderBottom: disabled ? 'none' : '1px dotted var(--border)',
-                minWidth: 24,
-            }}
+            className={`editable-cell${disabled ? ' is-locked' : ''}${edited ? ' is-edited' : ''}`}
+            title={title || (disabled ? undefined : 'Click to change this value')}
+            style={{ opacity: saving ? 0.5 : 1 }}
         >
             {display ?? (value === null || value === undefined || value === '' ? '—' : String(value))}
             {edited && (
                 <>
                     <span
-                        title="Edited by hand — the next upload will leave this alone"
+                        title="Changed by hand — the next upload will leave this alone"
                         style={{
                             width: 5, height: 5, borderRadius: '50%',
                             background: 'var(--primary)', flexShrink: 0,
@@ -119,6 +114,7 @@ export default function EditableCell({
                     )}
                 </>
             )}
+            {!disabled && !edited && <Pencil size={9} className="editable-pencil" />}
         </span>
     );
 }

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx';
 import {
     Loader2, Upload, AlertTriangle, Check, Wallet, TrendingUp, TrendingDown,
-    Banknote, ChevronRight, X, FileSpreadsheet, Download,
+    Banknote, ChevronRight, X, FileSpreadsheet, Download, Pencil,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import {
@@ -544,7 +544,13 @@ export default function FundLedger() {
                     </div>
 
                     {/* ─── B. Bank & entity balances ─────────────────────── */}
-                    <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>Bank &amp; entity balances</h3>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, margin: '0 0 8px' }}>
+                        <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Bank &amp; entity balances</h3>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Pencil size={10} /> click any value to change it — the opening balance especially,
+                            without which a closing balance is only the movement since the first imported row
+                        </span>
+                    </div>
                     <div className="table-container" style={{ marginBottom: 20 }}>
                         <table className="data-table">
                             <thead>

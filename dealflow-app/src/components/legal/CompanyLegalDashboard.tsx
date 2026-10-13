@@ -417,7 +417,8 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
                     )}
 
                     {/* ─── The grid ─────────────────────────────────────── */}
-                    <SectionHeading icon={ShieldCheck} title="Rights" sub="As the sheet has them, colours and all" />
+                    <SectionHeading icon={ShieldCheck} title="Rights"
+                        sub="as the sheet has them, colours and all — click any cell to change it" />
                     <div className="table-container" style={{ marginBottom: 24, overflowX: 'auto' }}>
                         <table className="data-table" style={{ minWidth: 820 }}>
                             <thead>

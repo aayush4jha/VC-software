@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Loader2, Search, AlertTriangle, FileWarning, Clock, Building2,
-    ShieldAlert, FileCheck2, Plus, ExternalLink, X, Download, FileSpreadsheet,
+    ShieldAlert, FileCheck2, Plus, ExternalLink, X, Download, FileSpreadsheet, Pencil,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { getCompanyFinancials } from '@/lib/company-financials';
@@ -327,6 +327,9 @@ export default function LegalTracker() {
                 >
                     <Download size={13} /> Export
                 </button>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Pencil size={10} /> click any value to change it
+                </span>
                 <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                     {visible.length} of {master.length} companies
                 </span>

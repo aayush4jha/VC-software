@@ -178,8 +178,8 @@ export default function Sheet1Tracker() {
             {/* ─── Yearly investment summary ─────────────────────────────── */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Fund deployed, by year</h3>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                    from the investment and exit sheets in the master file
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    from the investment and exit sheets · <Pencil size={10} /> click any figure to change it
                 </span>
                 {years.length > 0 && (
                     <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }}

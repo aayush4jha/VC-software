@@ -6142,3 +6142,50 @@ textarea.inline-input {
   25% { transform: translateX(-5px); }
   75% { transform: translateX(5px); }
 }
+
+/* ─── Editable cells ─────────────────────────────────────
+   A value that can be corrected has to LOOK like one. The first version
+   marked them with a 1px dotted border in the border colour, under 11px
+   text — invisible in practice, so the pages read as fixed and nobody
+   clicked anything. */
+.editable-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 26px;
+  padding: 1px 5px;
+  margin: -1px -5px;
+  border-radius: 5px;
+  border-bottom: 1px dashed var(--text-tertiary);
+  cursor: text;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.editable-cell:hover {
+  background: rgba(99, 102, 241, 0.09);
+  border-bottom-color: var(--primary);
+}
+
+.editable-cell .editable-pencil {
+  opacity: 0;
+  flex-shrink: 0;
+  color: var(--primary);
+  transition: opacity 0.12s ease;
+}
+
+.editable-cell:hover .editable-pencil { opacity: 1; }
+
+.editable-cell.is-locked {
+  border-bottom: none;
+  cursor: default;
+  padding: 0;
+  margin: 0;
+}
+
+.editable-cell.is-locked:hover { background: none; }
+
+/* An edited value keeps its mark whether or not the cursor is on it. */
+.editable-cell.is-edited {
+  border-bottom-color: var(--primary);
+  border-bottom-style: solid;
+}

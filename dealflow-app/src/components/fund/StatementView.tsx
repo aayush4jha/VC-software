@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Search, Download, X } from 'lucide-react';
+import { Search, Download, X, Pencil } from 'lucide-react';
 import { CATEGORY_LABELS, LEDGER_CATEGORIES, type LedgerCategory } from '@/lib/fund-ledger';
 import EditableCell from '@/components/common/EditableCell';
 import { toCsv, exportFilename } from '@/lib/csv-export';
@@ -174,7 +174,10 @@ export default function StatementView({ rows, onChanged }: {
                         <X size={12} /> Reset
                     </button>
                 )}
-                <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={exportRows} disabled={visible.length === 0}>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Pencil size={10} /> Click any value to change it
+                </span>
+                <button className="btn btn-ghost btn-sm" onClick={exportRows} disabled={visible.length === 0}>
                     <Download size={13} /> CSV
                 </button>
             </div>
