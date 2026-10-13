@@ -63,3 +63,4 @@ next-env.d.ts
 .masterimport-test
 .csv-test
 .shagrid-test
+.trackersync-test

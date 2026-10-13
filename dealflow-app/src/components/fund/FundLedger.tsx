@@ -19,6 +19,11 @@ import type { CellMatrix } from '@/lib/legal-import';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 import MappingRules, { type RuleRow, type FundSettings } from '@/components/fund/MappingRules';
 import StatementView, { type StatementRow } from '@/components/fund/StatementView';
+import { loadFundRecord, saveFundRecord } from '@/lib/fund-data';
+import {
+    syncTrackerFromLedger, describeSync,
+    type LedgerEntity, type LedgerExpense,
+} from '@/lib/fund-tracker-sync';
 
 interface AccountRow {
     id: string; entity: string; country: string; bank: string; account_label: string;
@@ -38,6 +43,58 @@ interface ImportRow {
 interface AdjRow {
     id: string; adj_date: string; entity: string; category: string;
     amount: number; currency: string; amount_inr: number | null; reason: string; approved_by: string;
+}
+
+/**
+ * Rolls an imported file into the hand-kept tracker.
+ *
+ * Summarised here from the rows that were just sent: a closing balance per
+ * entity, the costs the ledger recognised, and the latest date seen. The merge
+ * itself is pure and tested — this only gathers what it needs and saves the
+ * result where the tracker reads it.
+ */
+function syncManualTracker(prepared: Prepared): string | null {
+    try {
+        const byEntity = new Map<string, LedgerEntity>();
+        for (const row of prepared.rows) {
+            const name = (row.entity || '').trim();
+            if (!name) continue;
+            const current = byEntity.get(name) ?? {
+                name, currency: row.currency || 'INR',
+                closingBalance: 0, transactionCount: 0, asOfDate: null as string | null,
+            };
+            // Internal transfers move an account's balance even though they
+            // move nothing into or out of the firm, so they count here.
+            current.closingBalance += row.amountInr ?? row.amount;
+            current.transactionCount += 1;
+            if (row.date && (!current.asOfDate || row.date > current.asOfDate)) current.asOfDate = row.date;
+            byEntity.set(name, current);
+        }
+
+        const expenses: LedgerExpense[] = prepared.rows
+            .filter(r => r.category === 'office_expense' || r.category === 'investment_expense')
+            .map(r => ({
+                date: r.date,
+                entity: (r.entity || '').trim(),
+                head: r.majorHead || r.dashboardHead || '',
+                amount: r.amount,
+                description: r.description,
+            }));
+
+        const before = loadFundRecord();
+        const after = syncTrackerFromLedger(before, {
+            entities: [...byEntity.values()],
+            expenses,
+            fileName: prepared.fileName,
+            importedAt: new Date().toISOString(),
+        });
+        saveFundRecord(after);
+        return describeSync(before, after);
+    } catch {
+        // The ledger import has already succeeded; a tracker that could not be
+        // updated is worth saying nothing about rather than failing the upload.
+        return null;
+    }
 }
 
 /** Hands the file to the browser. The CSV itself is built by a pure module. */
@@ -890,11 +947,19 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
             });
             const j = await res.json();
             if (!res.ok) throw new Error(j.error || 'The import failed');
+
+            // The manual tracker is brought up with the same file. It holds
+            // payment dues and pending capital that no statement can know, so
+            // this writes the balances, the costs and the statement record and
+            // leaves every commitment somebody typed exactly as it was.
+            const trackerNote = syncManualTracker(prepared);
+
             setResult(
                 `${j.imported} transaction${j.imported === 1 ? '' : 's'} imported`
                 + (j.adjustments ? `, ${j.adjustments} adjustment${j.adjustments === 1 ? '' : 's'}` : '')
                 + (j.flagged ? `, ${j.flagged} flagged for attention` : '')
-                + '.' + (j.note ? ` ${j.note}` : ''),
+                + '.' + (j.note ? ` ${j.note}` : '')
+                + (trackerNote ? ` ${trackerNote}` : ''),
             );
             setPrepared(null);
             onImported();

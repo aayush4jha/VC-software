@@ -22,6 +22,10 @@ export interface FundExpense {
     amount: number;
     entityId: string;
     description?: string;
+    // Where it came from. An import replaces its own rows on the next upload
+    // and must never touch one somebody typed, so the two have to be told
+    // apart. Absent means typed, which is what every existing row is.
+    source?: 'import';
 }
 
 export interface BankStatement {
