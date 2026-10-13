@@ -19,6 +19,7 @@ export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: bo
     const [numbers, setNumbers] = useState<LinkedNumber[]>([]);
     const [configured, setConfigured] = useState(true);
     const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+    const [isAdminView, setIsAdminView] = useState(false);
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; hint?: string } | null>(null);
     const [missing, setMissing] = useState<string[]>([]);
@@ -44,6 +45,8 @@ export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: bo
             setNumbers(j.numbers || []);
             setConfigured(!!j.configured);
             setWebhookUrl(j.webhookUrl ?? null);
+            // Only an admin is given these, so receiving them IS the signal.
+            setIsAdminView(!!j.webhookUrl || Array.isArray(j.missingConfig));
             setMissing(j.missingConfig || []);
             setBotNumber(j.botNumber || null);
             setUnavailable(j.unavailable || null);
@@ -101,7 +104,7 @@ export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: bo
                                 <strong>The bot has no number yet</strong> — there is nothing to forward a deck to until
                                 an admin finishes the WhatsApp setup. You can link your number now; it will start working
                                 the moment the bot is connected.
-                                {showSetupStatus && (
+                                {(showSetupStatus || isAdminView) && (
                                     <div style={{ marginTop: 8, lineHeight: 1.75 }}>
                                         <div><strong>To finish the setup:</strong></div>
                                         <div>1. Create a Meta app at developers.facebook.com and add the WhatsApp product.</div>
