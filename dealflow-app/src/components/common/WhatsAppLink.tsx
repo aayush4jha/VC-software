@@ -18,6 +18,9 @@ function pretty(digits: string): string {
 export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: boolean }) {
     const [numbers, setNumbers] = useState<LinkedNumber[]>([]);
     const [configured, setConfigured] = useState(true);
+    const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+    const [testing, setTesting] = useState(false);
+    const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; hint?: string } | null>(null);
     const [missing, setMissing] = useState<string[]>([]);
     const [botNumber, setBotNumber] = useState<string | null>(null);
     const [unavailable, setUnavailable] = useState<string | null>(null);
@@ -40,6 +43,7 @@ export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: bo
             if (!ok) { setError(j.error || 'Could not load'); setLoaded(true); return; }
             setNumbers(j.numbers || []);
             setConfigured(!!j.configured);
+            setWebhookUrl(j.webhookUrl ?? null);
             setMissing(j.missingConfig || []);
             setBotNumber(j.botNumber || null);
             setUnavailable(j.unavailable || null);
@@ -98,16 +102,64 @@ export default function WhatsAppLink({ showSetupStatus }: { showSetupStatus?: bo
                                 an admin finishes the WhatsApp setup. You can link your number now; it will start working
                                 the moment the bot is connected.
                                 {showSetupStatus && (
-                                    <div style={{ marginTop: 6 }}>
-                                        Admin: create a Meta app with the WhatsApp product, point its webhook at{' '}
-                                        <code>/api/whatsapp/webhook</code>, then set these in Vercel → Environment Variables
-                                        and redeploy:{' '}
-                                        <code>{(missing.length ? missing : ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN']).join(', ')}</code>
+                                    <div style={{ marginTop: 8, lineHeight: 1.75 }}>
+                                        <div><strong>To finish the setup:</strong></div>
+                                        <div>1. Create a Meta app at developers.facebook.com and add the WhatsApp product.</div>
+                                        <div>
+                                            2. Under WhatsApp → Configuration, set the Callback URL to{' '}
+                                            {webhookUrl
+                                                ? <code style={{ userSelect: 'all' }}>{webhookUrl}</code>
+                                                : <code>/api/whatsapp/webhook</code>}
+                                            {' '}and the Verify token to whatever you put in{' '}
+                                            <code>WHATSAPP_VERIFY_TOKEN</code>. Then subscribe to <code>messages</code>.
+                                        </div>
+                                        <div>
+                                            3. Set these in Vercel → Environment Variables and redeploy:{' '}
+                                            <code>{(missing.length ? missing : ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN']).join(', ')}</code>
+                                        </div>
+                                        <div style={{ marginTop: 4, opacity: 0.85 }}>
+                                            The access token from the Getting Started page lasts 24 hours. Use a
+                                            permanent one from a System User, or the bot stops tomorrow.
+                                        </div>
                                     </div>
                                 )}
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Proves the outbound half on its own. Inbound and outbound fail
+                for unrelated reasons — the webhook versus the token and
+                WhatsApp's 24-hour rule — and this says which. */}
+            {configured && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={testing}
+                        onClick={async () => {
+                            setTesting(true); setTestResult(null);
+                            try {
+                                const r = await fetch('/api/whatsapp/test', { method: 'POST' });
+                                setTestResult(await r.json());
+                            } catch (e) {
+                                setTestResult({ ok: false, error: (e as Error).message });
+                            }
+                            setTesting(false);
+                        }}
+                    >
+                        {testing ? 'Sending…' : 'Send me a test message'}
+                    </button>
+                    {testResult && (
+                        <span style={{
+                            fontSize: 11.5, lineHeight: 1.6,
+                            color: testResult.ok ? '#047857' : 'var(--danger, #b91c1c)',
+                        }}>
+                            {testResult.ok
+                                ? 'Sent — check WhatsApp on your phone.'
+                                : <>{testResult.error}{testResult.hint && <div style={{ color: 'var(--text-secondary)' }}>{testResult.hint}</div>}</>}
+                        </span>
+                    )}
                 </div>
             )}
 

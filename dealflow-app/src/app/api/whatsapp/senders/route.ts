@@ -16,6 +16,15 @@ function db() {
  * The signed-in person's own linked WhatsApp numbers. Each person manages only
  * their own: a number linked here is how the bot knows a message is from them.
  */
+/** Where Meta should send webhooks, for the deployment actually serving this. */
+function appUrl(request: NextRequest): string {
+    const configured = process.env.NEXT_PUBLIC_APP_URL
+        || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
+    if (configured) return configured.replace(/\/$/, '');
+    const host = request.headers.get('host');
+    return host ? `https://${host}` : '';
+}
+
 export async function GET(request: NextRequest) {
     const auth = await requireMember(request);
     if (auth.response) return auth.response;
@@ -31,6 +40,10 @@ export async function GET(request: NextRequest) {
         configured: config.ok,
         missingConfig: auth.actor.isAdmin ? config.missing : undefined,
         botNumber: process.env.WHATSAPP_DISPLAY_NUMBER || null,
+        // Meta needs an absolute URL, and the one thing nobody can guess from
+        // the dashboard is which deployment this is. Shown to admins only,
+        // alongside the variables they have to set.
+        webhookUrl: auth.actor.isAdmin ? `${appUrl(request)}/api/whatsapp/webhook` : undefined,
     });
 }
 
