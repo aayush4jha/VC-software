@@ -153,17 +153,30 @@ export async function POST(request: NextRequest) {
 
     // In chunks: one statement with twenty thousand rows is refused.
     let imported = 0;
-    let duplicates = 0;
+    // How many of those were already on record, for the message.
+    const existingKeys = new Set<string>();
+    {
+        const keys = toInsert.map(r => r.import_key);
+        for (let i = 0; i < keys.length; i += 500) {
+            const { data } = await client.from('fund_transactions')
+                .select('import_key').in('import_key', keys.slice(i, i + 500));
+            for (const row of data || []) existingKeys.add(row.import_key as string);
+        }
+    }
+    const duplicates = existingKeys.size;
     for (let i = 0; i < toInsert.length; i += 500) {
         const chunk = toInsert.slice(i, i + 500);
+        // A row already seen is REFRESHED, not skipped. Uploading the same
+        // file twice must not double the ledger — hence the key — but it must
+        // be able to correct it: when the parser improves, re-uploading is the
+        // only way the existing rows ever get the better reading. Skipping
+        // them left 895 transactions with no entity after the fix that found
+        // their entity, and every balance on the page at zero.
         const { data, error } = await client.from('fund_transactions')
-            // Already-seen rows are left exactly as they are rather than
-            // overwritten: a re-upload must change nothing.
-            .upsert(chunk, { onConflict: 'organization_id,import_key', ignoreDuplicates: true })
+            .upsert(chunk, { onConflict: 'organization_id,import_key' })
             .select('id');
         if (error) return NextResponse.json({ error: `Import failed partway: ${error.message}` }, { status: 500 });
         imported += (data || []).length;
-        duplicates += chunk.length - (data || []).length;
     }
 
     let adjustmentsSaved = 0;
@@ -242,7 +255,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
         imported, duplicates, flagged, adjustments: adjustmentsSaved, portfolio: portfolioSaved,
         note: duplicates > 0
-            ? `${duplicates} row${duplicates === 1 ? ' was' : 's were'} already imported and left untouched.`
+            ? `${duplicates} row${duplicates === 1 ? ' was' : 's were'} already on record and have been refreshed.`
             : null,
     });
 }

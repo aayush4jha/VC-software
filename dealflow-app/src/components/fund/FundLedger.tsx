@@ -537,7 +537,7 @@ export default function FundLedger() {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>Entity</th><th>Bank</th><th>Ccy</th>
+                                    <th>Entity</th><th>Bank</th><th>Account</th><th>Ccy</th>
                                     <th style={{ textAlign: 'right' }}>Opening</th>
                                     <th style={{ textAlign: 'right' }}>Inflows</th>
                                     <th style={{ textAlign: 'right' }}>Outflows</th>
@@ -1021,7 +1021,7 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
             const trackerNote = syncManualTracker(prepared);
 
             setResult(
-                `${j.imported} transaction${j.imported === 1 ? '' : 's'} imported`
+                `${j.imported} transaction${j.imported === 1 ? '' : 's'} read`
                 + (j.adjustments ? `, ${j.adjustments} adjustment${j.adjustments === 1 ? '' : 's'}` : '')
                 + (j.portfolio ? `, ${j.portfolio} investment and exit row${j.portfolio === 1 ? '' : 's'}` : '')
                 + (j.flagged ? `, ${j.flagged} flagged for attention` : '')
