@@ -100,6 +100,8 @@ export interface ClassifyInput {
     amount: number;
     /** The "Major Head" or "Dashboard Head" column, when the sheet has one. */
     majorHead?: string;
+    /** The second head these statements carry, naming the purpose. */
+    dashboardHead?: string;
     /** The account this line sits on. */
     entity?: string;
     /** Every entity we own, so a transfer to one of them is recognisable. */
@@ -125,6 +127,19 @@ const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ')
 // "Use Major Head / Dashboard Head / entity / bank / account mapping to
 // classify transactions" — an explicit head in the file always wins.
 const HEAD_MAP: { pattern: RegExp; category: LedgerCategory }[] = [
+    // The heads the firm's own bookkeeping actually uses, read off her files
+    // rather than imagined. They come first because they are specific: "FUND
+    // FOR INVESTMENT" is money moved in order to invest, not an investment,
+    // and a looser rule matching the word "investment" would file it as one
+    // and double-count every rupee on its way to the company.
+    { pattern: /^(?:dvllp )?fund received$|^fund received for investment$|^personal income$/, category: 'funds_received' },
+    { pattern: /^fund for investment$|^fund transfer dv for investment$|^fund for dv$|^fund transfer dv$/, category: 'internal_transfer' },
+    { pattern: /^investment exit$|^exit proceeds?$|^investment income$/, category: 'exit_proceeds' },
+    { pattern: /^(?:upstox |personal )?investment$/, category: 'investment' },
+    { pattern: /^investment expense$/, category: 'investment_expense' },
+    { pattern: /^office(?: expense)?$|^expense personal$|^personal expense$/, category: 'office_expense' },
+    { pattern: /^transfer(?: .*)?$|^.* to (?:dr|dv|llp)$|^bank transfer (?:cr|dr)$|^trasnfer$|^transfer family internally$/, category: 'internal_transfer' },
+
     { pattern: /\b(?:funds?|capital|contribution)s? received\b|\bcapital introduced\b|\bpromoter (?:contribution|funding)\b/, category: 'funds_received' },
     { pattern: /\bexit proceeds?\b|\bexit realisation\b|\bsale proceeds?\b|\bredemption\b/, category: 'exit_proceeds' },
     { pattern: /\bother income\b|\binterest\b|\brefund\b|\bdividend\b/, category: 'other_income' },
@@ -156,6 +171,9 @@ const DESCRIPTION_RULES: { pattern: RegExp; category: LedgerCategory; reason: st
  * silently: a line that matches nothing is 'unclassified' and is shown as such.
  */
 export function classifyTransaction(input: ClassifyInput): Classification {
+    // Both heads are consulted, the more specific one first. These statements
+    // carry a MAJOR HEAD saying what the money is and a DASHBOARD HEAD saying
+    // what it is for, and either can be the one that settles it.
     // A rule somebody wrote outranks a pattern somebody guessed. Sorted by
     // priority so a specific rule can be placed ahead of a general one.
     const rules = [...(input.rules || [])].sort((a, b) => a.priority - b.priority);
@@ -174,11 +192,12 @@ export function classifyTransaction(input: ClassifyInput): Classification {
         };
     }
 
-    const head = norm(input.majorHead || '');
-    if (head) {
+    for (const [label, value] of [['Major head', input.majorHead], ['Dashboard head', input.dashboardHead]] as const) {
+        const head = norm(value || '');
+        if (!head) continue;
         for (const { pattern, category } of HEAD_MAP) {
             if (pattern.test(head)) {
-                return { category, reason: `Major head: ${input.majorHead}` };
+                return { category, reason: `${label}: ${value}` };
             }
         }
     }

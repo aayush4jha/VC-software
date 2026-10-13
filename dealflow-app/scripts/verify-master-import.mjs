@@ -6,7 +6,9 @@
 // headings, debit and credit in separate columns, an exit master that shares
 // most of its columns with the investment master.
 
+import { classifyTransaction } from '../.masterimport-test/fund-ledger.mjs';
 import {
+    detectDateOrder, parseDateWith,
     findHeaderRow, detectSheetKind, columnFor,
     parseBankRows, parseAdjustmentRows, parseInvestmentRows, parseExitRows,
     importKey, describeSheet,
@@ -78,6 +80,53 @@ check('exact', columnFor(['date', 'narration', 'debit'], ['debit']), 2);
 check('the longer synonym wins', columnFor(['date', 'exit date', 'amount'], ['exit date', 'date']), 1);
 check('loose match', columnFor(['transaction date value'], ['date']), 0);
 check('absent', columnFor(['a', 'b'], ['zzz']), -1);
+
+console.log('— which way round a column of dates is written —');
+// "9/11/20" is 9 November to the bookkeeper and 11 September to Excel's US
+// locale. One value cannot say; the column can.
+check('a day above twelve settles it day-first',
+      detectDateOrder(['9/11/20', '27/11/2020', '5/4/21']), 'day_first');
+check('a month above twelve settles it month-first',
+      detectDateOrder(['9/11/20', '9/25/2020', '11/27/2020']), 'month_first');
+check('all ambiguous falls back to Indian order', detectDateOrder(['9/11/20', '5/4/21']), 'day_first');
+check('nothing to go on', detectDateOrder([]), 'day_first');
+check('text is ignored', detectDateOrder(['opening balance', '9/25/2020']), 'month_first');
+check('day-first reading', parseDateWith('11/27/2020', 'day_first'), null);
+check('month-first reading', parseDateWith('11/27/2020', 'month_first'), '2020-11-27');
+check('and the ambiguous one follows the column', parseDateWith('9/11/20', 'month_first'), '2020-09-11');
+check('the same value day-first', parseDateWith('9/11/20', 'day_first'), '2020-11-09');
+check('an ISO date is unaffected', parseDateWith('2026-04-01', 'month_first'), '2026-04-01');
+
+console.log('— the bookkeeper\'s own columns —');
+const CA = [
+    [null, null, '519,431,950'],
+    ['FINANCIAL YEAR', 'HISAB YR', 'Net Amount', 'TXN DATE', 'AC NAME', 'DETAILS', 'MAJOR HEAD', 'DASHBOARD HEAD'],
+    ['2020-21', '2020-21', '3,300,000', '3/11/20', 'RD-DSD', 'LOAN REC', 'DVLLP FUND RECEIVED', 'FUND FOR INVESTMENT'],
+    ['2020-21', '2020-21', '-3,298,558', '11/18/20', 'INVESTMENT', 'BIDDANO INVESTMENT', 'INVESTMENT', 'INVESTMENT'],
+    ['2022-23', '2022-23', '-37,000', '9/25/2020', 'OWN', 'OFFICE RENT', 'OFFICE', 'OFFICE EXPENSE'],
+];
+const caMatch = detectSheetKind(CA);
+check('her statement is recognised', caMatch.kind, 'bank_statement');
+const caRows = parseBankRows(CA, 1, caMatch.headers, { defaultEntity: 'Dravya', defaultBank: 'SBI' });
+check('every row', caRows.length, 3);
+check('the month-first dates are right', caRows.map(r => r.date), ['2020-03-11', '2020-11-18', '2020-09-25']);
+check('her financial year is kept', caRows[0].financialYear, '2020-21');
+check('her AC NAME is kept', caRows[1].acName, 'INVESTMENT');
+check('her MAJOR HEAD is kept', caRows[1].majorHead, 'INVESTMENT');
+check('her DASHBOARD HEAD is kept', caRows[0].dashboardHead, 'FUND FOR INVESTMENT');
+check('an investment is one', caRows[1].category, 'investment');
+// The MAJOR HEAD says what the money is, the DASHBOARD HEAD what it is for.
+// "DVLLP FUND RECEIVED / FUND FOR INVESTMENT" is money received in order to
+// invest, so it is funds received — the purpose does not change the nature.
+check('what the money is outranks what it is for', caRows[0].category, 'funds_received');
+check('and it says which head decided', caRows[0].categoryReason, 'Major head: DVLLP FUND RECEIVED');
+check('a dashboard head decides when there is no major head',
+      classifyTransaction({ description: 'x', amount: -100, dashboardHead: 'FUND TRANSFER DV FOR INVESTMENT' }).category,
+      'internal_transfer');
+check('moving money out to invest is not itself the investment',
+      classifyTransaction({ description: 'x', amount: -100, majorHead: 'FUND FOR INVESTMENT' }).category,
+      'internal_transfer');
+check('office costs', caRows[2].category, 'office_expense');
 
 console.log('— bank rows become one signed amount —');
 const ledger = parseBankRows(BANK, 3, header.headers, {

@@ -173,11 +173,52 @@ export function columnFor(headers: string[], names: string[]): number {
     return -1;
 }
 
+// ─── Which way round the dates are ────────────────────────────────────────
+
+export type DateOrder = 'day_first' | 'month_first';
+
+/**
+ * Whether a column of dates is written day-first or month-first.
+ *
+ * "9/11/20" is the 9th of November to an Indian bookkeeper and the 11th of
+ * September to Excel's US locale, and no amount of staring at one value will
+ * say which. A whole column will: the moment any row has a first number above
+ * twelve the column must be day-first, and a second number above twelve makes
+ * it month-first. Guessing per cell is how a statement ends up with a third of
+ * its dates missing and the rest silently wrong.
+ */
+export function detectDateOrder(values: unknown[]): DateOrder {
+    let dayFirst = 0;
+    let monthFirst = 0;
+    for (const v of values) {
+        const m = String(v ?? '').trim().match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+        if (!m) continue;
+        const a = +m[1], b = +m[2];
+        if (a > 12 && b <= 12) dayFirst++;
+        else if (b > 12 && a <= 12) monthFirst++;
+    }
+    // Indian bookkeeping is day-first, so that is the tie-break.
+    return monthFirst > dayFirst ? 'month_first' : 'day_first';
+}
+
+/** A date read with the column's convention applied. */
+export function parseDateWith(value: unknown, order: DateOrder): string | null {
+    if (order === 'day_first') return parseSheetDate(value);
+    const m = String(value ?? '').trim().match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+    if (!m) return parseSheetDate(value);
+    // Hand it back day-first so one parser does the validation.
+    return parseSheetDate(`${m[2]}/${m[1]}/${m[3]}`);
+}
+
 // ─── Bank statements ──────────────────────────────────────────────────────
 
 export interface ParsedLedgerRow {
     entity: string;
     bank: string;
+    /** The bookkeeper's own heads, kept verbatim — they are how she files. */
+    dashboardHead: string;
+    acName: string;
+    financialYear: string;
     /** The account number or nickname. Two accounts at one bank are two balances. */
     accountLabel: string;
     date: string | null;
@@ -236,10 +277,18 @@ export function parseBankRows(
         entity: columnFor(headers, ['entity', 'company', 'firm']),
         bank: columnFor(headers, ['bank', 'bank name']),
         account: columnFor(headers, ['account', 'account number', 'account no']),
+        acName: columnFor(headers, ['ac name', 'account name', 'party', 'counterparty']),
+        dashboardHead: columnFor(headers, ['dashboard head', 'dashboard']),
+        financialYear: columnFor(headers, ['financial year', 'hisab yr', 'hisab year', 'year']),
         currency: columnFor(headers, ['currency', 'ccy']),
         inr: columnFor(headers, ['inr equivalent', 'inr value', 'amount inr', 'inr conversion', 'inr']),
-        head: columnFor(headers, ['major head', 'dashboard head', 'category', 'head']),
+        head: columnFor(headers, ['major head', 'category', 'head']),
     };
+
+    // Settled once for the whole column, not guessed per row.
+    const dateOrder = detectDateOrder(
+        matrix.slice(headerRow + 1).map(r => (Array.isArray(r) && col.date >= 0 ? r[col.date] : null)),
+    );
 
     const out: ParsedLedgerRow[] = [];
     const at = (row: unknown[], i: number) => i >= 0 ? row[i] : undefined;
@@ -268,6 +317,7 @@ export function parseBankRows(
 
         const classification = classifyTransaction({
             description, amount, majorHead, entity, bank,
+            dashboardHead: String(at(row, col.dashboardHead) ?? '').trim(),
             knownEntities: context.knownEntities,
             knownCompanies: context.knownCompanies,
             rules: context.rules,
@@ -283,7 +333,10 @@ export function parseBankRows(
 
         const parsed: ParsedLedgerRow = {
             entity, bank, accountLabel,
-            date: parseSheetDate(at(row, col.date)),
+            dashboardHead: String(at(row, col.dashboardHead) ?? '').trim(),
+            acName: String(at(row, col.acName) ?? '').trim(),
+            financialYear: String(at(row, col.financialYear) ?? '').trim(),
+            date: parseDateWith(at(row, col.date), dateOrder),
             description,
             amount,
             currency,

@@ -18,6 +18,7 @@ import {
 import type { CellMatrix } from '@/lib/legal-import';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 import MappingRules, { type RuleRow, type FundSettings } from '@/components/fund/MappingRules';
+import StatementView, { type StatementRow } from '@/components/fund/StatementView';
 
 interface AccountRow {
     id: string; entity: string; country: string; bank: string; account_label: string;
@@ -28,6 +29,7 @@ interface TxnRow {
     description: string; amount: number; currency: string; amount_inr: number | null;
     category: LedgerCategory; category_source: string; data_issues: string[];
     source_file: string; source_sheet: string; source_row: number | null; counterparty: string;
+    major_head: string; dashboard_head: string; ac_name: string; financial_year: string;
 }
 interface ImportRow {
     id: string; file_name: string; created_at: string;
@@ -103,7 +105,7 @@ export default function FundLedger() {
     // transaction". A card that opens nothing is a number taken on trust, so
     // the drawer holds any set of rows rather than one category.
     const [drill, setDrill] = useState<{ title: string; rows: TxnRow[] } | null>(null);
-    const [section, setSection] = useState<'overview' | 'upload' | 'mapping'>('overview');
+    const [section, setSection] = useState<'overview' | 'statements' | 'upload' | 'mapping'>('overview');
 
     const load = useCallback(async () => {
         setLoading(true); setError(null);
@@ -154,6 +156,8 @@ export default function FundLedger() {
         amount: a.amount, currency: a.currency, amount_inr: a.amount_inr ?? a.amount,
         category: 'adjustment' as LedgerCategory, category_source: 'Adjustment table',
         data_issues: [], source_file: '', source_sheet: '', source_row: null, counterparty: '',
+        major_head: 'ADJUSTMENT', dashboard_head: a.category, ac_name: a.approved_by,
+        financial_year: '',
     })), [adjustments]);
 
     const filtered = useMemo(() => {
@@ -289,6 +293,17 @@ export default function FundLedger() {
             rows: filtered.filter(t => t.category !== 'internal_transfer'),
         },
     ];
+
+    if (section === 'statements') {
+        return (
+            <>
+                <SectionTabs section={section} setSection={setSection} />
+                <div style={{ padding: '18px 24px 40px' }}>
+                    <StatementView rows={filtered as unknown as StatementRow[]} />
+                </div>
+            </>
+        );
+    }
 
     if (section === 'mapping') {
         return (
@@ -592,11 +607,12 @@ export default function FundLedger() {
 
 /** The views 04_Developer Summary suggests, over one ledger. */
 function SectionTabs({ section, setSection }: {
-    section: 'overview' | 'upload' | 'mapping';
-    setSection: (s: 'overview' | 'upload' | 'mapping') => void;
+    section: 'overview' | 'statements' | 'upload' | 'mapping';
+    setSection: (s: 'overview' | 'statements' | 'upload' | 'mapping') => void;
 }) {
     const tabs = [
         { key: 'overview' as const, label: 'Overview & balances' },
+        { key: 'statements' as const, label: 'Statements' },
         { key: 'upload' as const, label: 'Data upload' },
         { key: 'mapping' as const, label: 'Settings & mapping' },
     ];

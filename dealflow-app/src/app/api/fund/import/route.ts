@@ -19,6 +19,7 @@ const VALID_CATEGORY = new Set<string>(LEDGER_CATEGORIES);
 
 interface IncomingRow {
     entity: string; bank: string; accountLabel: string; date: string | null; description: string;
+    dashboardHead?: string; acName?: string; financialYear?: string;
     amount: number; currency: string; amountInr: number | null;
     balanceAfter: number | null; category: string; categoryReason: string;
     majorHead: string; issues: string[]; sourceRow: number; sheetName: string;
@@ -120,6 +121,11 @@ export async function POST(request: NextRequest) {
         category: VALID_CATEGORY.has(r.category) ? r.category : 'unclassified',
         category_source: (r.categoryReason || 'rule').slice(0, 200),
         major_head: (r.majorHead || '').slice(0, 120),
+        // Her own words, kept verbatim: the platform's category is a summary
+        // of these, not a replacement for them.
+        dashboard_head: (r.dashboardHead || '').slice(0, 120),
+        ac_name: (r.acName || '').slice(0, 120),
+        financial_year: (r.financialYear || '').slice(0, 20),
         counterparty: (r.companyName || '').slice(0, 160),
         data_issues: Array.isArray(r.issues) ? r.issues.slice(0, 10) : [],
         source_file: fileName.slice(0, 200),
