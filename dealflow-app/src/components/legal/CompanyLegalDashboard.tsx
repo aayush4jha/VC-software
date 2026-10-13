@@ -12,12 +12,17 @@ import {
     type ShaGrid, type FillMatrix, type CellMeta, type GridCell, type SheetCandidate,
 } from '@/lib/sha-grid';
 import { toCsv, exportFilename } from '@/lib/csv-export';
+import EditableCell from '@/components/common/EditableCell';
 import type { CellMatrix } from '@/lib/legal-import';
 
 interface StoredGrid {
     id: string; grid: ShaGrid; file_name: string; sheet_name: string;
     rights_count: number; column_count: number; warnings: string[]; created_at: string;
+    overrides?: Record<string, string>;
 }
+
+/** One cell's address in the grid: which right, which column. */
+const cellKey = (rightName: string, columnKey: string) => `${rightName}::${columnKey}`;
 
 /**
  * A workbook read in full: values, the text Excel displays, hyperlinks and
@@ -189,6 +194,37 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
             setBusy(false);
             if (fileRef.current) fileRef.current.value = '';
         }
+    };
+
+    const overrides = stored?.overrides ?? {};
+
+    /**
+     * Corrects one cell of the mirrored grid.
+     *
+     * Kept beside the grid rather than inside it, so the sheet as uploaded
+     * stays intact and the correction survives the same sheet being uploaded
+     * again. The sheet is still the record; this is what the firm says the
+     * sheet should have said.
+     */
+    const editCell = async (rightName: string, columnKey: string, value: string) => {
+        if (!stored) return;
+        const next = { ...overrides, [cellKey(rightName, columnKey)]: value };
+        await fetch('/api/legal/sha-grid', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: stored.id, overrides: next }),
+        });
+        await load();
+    };
+
+    const revertCell = async (rightName: string, columnKey: string) => {
+        if (!stored) return;
+        const next = { ...overrides };
+        delete next[cellKey(rightName, columnKey)];
+        await fetch('/api/legal/sha-grid', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: stored.id, overrides: next }),
+        });
+        await load();
     };
 
     const grid = stored?.grid;
@@ -411,24 +447,35 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
                                             const cell = right.cells[c.key];
                                             const fill = cell?.fill ?? null;
                                             const meaning = grid.legend.find(l => l.fill === fill)?.label;
-                                            const short = (cell?.value ?? '').length <= 12;
+                                            const override = overrides[cellKey(right.name, c.key)];
+                                            const shown = override ?? cell?.value ?? '';
+                                            const short = shown.length <= 12;
                                             return (
                                                 <td
                                                     key={c.key}
-                                                    title={meaning ? `${meaning}${cell?.value ? ` — ${cell.value}` : ''}` : (cell?.value || '')}
+                                                    title={meaning ? `${meaning}${shown ? ` — ${shown}` : ''}` : (shown || '')}
                                                     style={{
                                                         fontSize: 11,
                                                         background: fill ? `#${fill}` : undefined,
                                                         color: fill ? readableOn(fill) : undefined,
                                                         textAlign: short ? 'center' : 'left',
-                                                        fontWeight: short && cell?.value ? 600 : 400,
+                                                        fontWeight: short && shown ? 600 : 400,
                                                         minWidth: short ? 72 : 150,
                                                         maxWidth: 260,
                                                         verticalAlign: 'middle',
                                                         lineHeight: 1.45,
                                                     }}
                                                 >
-                                                    {cell ? <CellText cell={cell} /> : ''}
+                                                    <EditableCell
+                                                        value={shown}
+                                                        edited={override !== undefined}
+                                                        display={cell && override === undefined
+                                                            ? <CellText cell={cell} />
+                                                            : (shown || '')}
+                                                        onSave={v => editCell(right.name, c.key, v)}
+                                                        onRevert={override !== undefined
+                                                            ? () => revertCell(right.name, c.key) : undefined}
+                                                    />
                                                 </td>
                                             );
                                         })}

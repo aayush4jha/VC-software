@@ -153,19 +153,28 @@ export async function POST(request: NextRequest) {
 
     // In chunks: one statement with twenty thousand rows is refused.
     let imported = 0;
-    // How many of those were already on record, for the message.
+    // Which rows are already on record, and which of those somebody has
+    // corrected by hand. An edited row is left exactly as it is: an edit the
+    // next upload silently reverses is worse than no edit at all, because the
+    // number changes back and nobody is told.
     const existingKeys = new Set<string>();
+    const editedKeys = new Set<string>();
     {
         const keys = toInsert.map(r => r.import_key);
         for (let i = 0; i < keys.length; i += 500) {
             const { data } = await client.from('fund_transactions')
-                .select('import_key').in('import_key', keys.slice(i, i + 500));
-            for (const row of data || []) existingKeys.add(row.import_key as string);
+                .select('import_key, edited').in('import_key', keys.slice(i, i + 500));
+            for (const row of data || []) {
+                existingKeys.add(row.import_key as string);
+                if (row.edited) editedKeys.add(row.import_key as string);
+            }
         }
     }
     const duplicates = existingKeys.size;
-    for (let i = 0; i < toInsert.length; i += 500) {
-        const chunk = toInsert.slice(i, i + 500);
+    const protectedRows = editedKeys.size;
+    const refreshable = toInsert.filter(r => !editedKeys.has(r.import_key));
+    for (let i = 0; i < refreshable.length; i += 500) {
+        const chunk = refreshable.slice(i, i + 500);
         // A row already seen is REFRESHED, not skipped. Uploading the same
         // file twice must not double the ledger — hence the key — but it must
         // be able to correct it: when the parser improves, re-uploading is the
@@ -254,8 +263,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
         imported, duplicates, flagged, adjustments: adjustmentsSaved, portfolio: portfolioSaved,
-        note: duplicates > 0
-            ? `${duplicates} row${duplicates === 1 ? ' was' : 's were'} already on record and have been refreshed.`
-            : null,
+        protectedRows,
+        note: [
+            duplicates > 0 ? `${duplicates} row${duplicates === 1 ? ' was' : 's were'} already on record and have been refreshed.` : '',
+            protectedRows > 0 ? `${protectedRows} edited by hand and left alone.` : '',
+        ].filter(Boolean).join(' ') || null,
     });
 }

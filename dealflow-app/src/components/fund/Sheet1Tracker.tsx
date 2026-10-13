@@ -7,6 +7,7 @@ import {
     type PortfolioInvestment, type PortfolioExit, type FundType, type DashboardYearRow,
 } from '@/lib/fund-portfolio';
 import { loadFundRecord, saveFundRecord, type FundRecord, type FundEntity } from '@/lib/fund-data';
+import EditableCell from '@/components/common/EditableCell';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 
 interface PortfolioDbRow {
@@ -53,7 +54,10 @@ export default function Sheet1Tracker() {
     const [needsMigration, setNeedsMigration] = useState(false);
     const [record, setRecord] = useState<FundRecord | null>(null);
     const [stated, setStated] = useState<DashboardYearRow[]>([]);
-    const [editing, setEditing] = useState(false);
+    // Figures set by hand on the yearly table. They override a TOTAL rather
+    // than any one transaction, so they live apart from the rows.
+    const [overrides, setOverrides] = useState<Record<string, Record<string, number>>>({});
+
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -75,6 +79,16 @@ export default function Sheet1Tracker() {
                 .filter((i: { sheet_summary?: { __dashboard?: { years?: DashboardYearRow[] } } }) => i.sheet_summary?.__dashboard?.years?.length)
                 .sort((a: { created_at: string }, b: { created_at: string }) => b.created_at.localeCompare(a.created_at))[0];
             setStated(newest?.sheet_summary?.__dashboard?.years ?? []);
+
+            const ov = await fetch('/api/db', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: 'fund_year_overrides', operation: 'select' }),
+            }).then(r => r.json()).catch(() => ({ data: [] }));
+            const grouped: Record<string, Record<string, number>> = {};
+            for (const o of (ov.data || []) as { financial_year: string; field: string; value: number }[]) {
+                (grouped[o.financial_year] ??= {})[o.field] = Number(o.value);
+            }
+            setOverrides(grouped);
         } catch { /* the grid below still works without it */ }
         finally { setLoading(false); }
     }, []);
@@ -105,9 +119,46 @@ export default function Sheet1Tracker() {
         const computed = yearlySummary(investments, exits);
         // Sheet1's own figures where it states them; the computed ones where
         // it is silent. Market value and NAV for a past year exist only there.
-        return stated.length > 0 ? mergeDashboardYears(computed, stated) : computed;
-    }, [investments, exits, stated]);
+        const base = stated.length > 0 ? mergeDashboardYears(computed, stated) : computed;
+        // A figure set by hand outranks both — it is the most recent statement
+        // anyone has made about that year.
+        return base.map(r => {
+            const o = overrides[r.year];
+            if (!o) return r;
+            const next: Record<string, unknown> = { ...r };
+            for (const [field, value] of Object.entries(o)) next[field] = value;
+            return next as unknown as typeof r;
+        });
+    }, [investments, exits, stated, overrides]);
     const totals = useMemo(() => summaryTotals(years), [years]);
+
+    const setYear = async (year: string, field: string, value: string) => {
+        const n = value === '' ? null : Number(value);
+        await fetch('/api/db', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                table: 'fund_year_overrides', operation: 'upsert',
+                data: {
+                    organization_id: '00000000-0000-0000-0000-000000000001',
+                    financial_year: year, field,
+                    value: n !== null && isFinite(n) ? n : null,
+                    updated_at: new Date().toISOString(),
+                },
+            }),
+        });
+        load();
+    };
+
+    const clearYear = async (year: string, field: string) => {
+        await fetch('/api/db', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                table: 'fund_year_overrides', operation: 'delete',
+                match: { financial_year: year, field },
+            }),
+        });
+        load();
+    };
 
     const saveEntity = (id: string, patch: Partial<FundEntity>) => {
         if (!record) return;
@@ -195,27 +246,44 @@ export default function Sheet1Tracker() {
                             </tr>
                         </thead>
                         <tbody>
-                            {years.map(r => (
-                                <tr key={r.year}>
-                                    <td style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.year}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(r.direct)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(r.fund)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(r.syndicate)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right', fontWeight: 600 }}>{cr(r.totalInvestment)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(r.exits)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(r.writeoffs)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right', fontWeight: 600 }}>{cr(r.netInvestment)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(r.cumulative)}</td>
+                            {years.map(r => {
+                                const cell = (field: keyof typeof r, bold = false) => (
                                     <td style={{
                                         fontSize: 11.5, textAlign: 'right',
-                                        color: r.profitLoss >= 0 ? '#047857' : '#b91c1c',
-                                    }}>{cr(r.profitLoss)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(r.marketValue)}</td>
-                                    <td style={{ fontSize: 11.5, textAlign: 'right', fontWeight: 700 }}>
-                                        {r.nav === null ? '—' : `${r.nav.toFixed(2)}x`}
+                                        fontWeight: bold ? 600 : 400,
+                                        color: field === 'profitLoss'
+                                            ? ((r.profitLoss ?? 0) >= 0 ? '#047857' : '#b91c1c') : undefined,
+                                    }}>
+                                        <EditableCell
+                                            value={r[field] as number | null}
+                                            kind="money" align="right"
+                                            display={cr(r[field] as number | null)}
+                                            edited={overrides[r.year]?.[field as string] !== undefined}
+                                            onSave={v => setYear(r.year, field as string, v)}
+                                            onRevert={() => clearYear(r.year, field as string)}
+                                        />
                                     </td>
-                                </tr>
-                            ))}
+                                );
+                                return (
+                                    <tr key={r.year}>
+                                        <td style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.year}</td>
+                                        {cell('direct')}{cell('fund')}{cell('syndicate')}
+                                        {cell('totalInvestment', true)}
+                                        {cell('exits')}{cell('writeoffs')}
+                                        {cell('netInvestment', true)}
+                                        {cell('cumulative')}{cell('profitLoss')}{cell('marketValue')}
+                                        <td style={{ fontSize: 11.5, textAlign: 'right', fontWeight: 700 }}>
+                                            <EditableCell
+                                                value={r.nav} kind="number" align="right"
+                                                display={r.nav === null ? '—' : `${r.nav.toFixed(2)}x`}
+                                                edited={overrides[r.year]?.nav !== undefined}
+                                                onSave={v => setYear(r.year, 'nav', v)}
+                                                onRevert={() => clearYear(r.year, 'nav')}
+                                            />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                             <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
                                 <td style={{ fontSize: 12 }}>Total</td>
                                 <td style={{ fontSize: 11.5, textAlign: 'right' }}>{cr(totals.direct)}</td>
@@ -252,9 +320,9 @@ export default function Sheet1Tracker() {
                 <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                     bank balances come from the uploaded statements; dues are kept here
                 </span>
-                <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setEditing(v => !v)}>
-                    <Pencil size={12} /> {editing ? 'Done' : 'Edit dues'}
-                </button>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Pencil size={11} /> every figure here can be clicked and changed
+                </span>
             </div>
 
             <div className="table-container">
@@ -276,21 +344,24 @@ export default function Sheet1Tracker() {
                         <tr>
                             <td style={{ fontSize: 12, fontWeight: 600 }}>Bank Balance</td>
                             {entities.map(e => (
-                                <td key={e.id} style={{ fontSize: 11.5, textAlign: 'right' }}>{exact(e.bankBalance)}</td>
+                                <td key={e.id} style={{ fontSize: 11.5, textAlign: 'right' }}>
+                                    <EditableCell
+                                        value={e.bankBalance} kind="money" align="right"
+                                        display={exact(e.bankBalance)}
+                                        onSave={v => saveEntity(e.id, { bankBalance: Number(v) || 0 })}
+                                    />
+                                </td>
                             ))}
                         </tr>
                         <tr>
                             <td style={{ fontSize: 12, fontWeight: 600 }}>Payment due</td>
                             {entities.map(e => (
                                 <td key={e.id} style={{ fontSize: 11.5, textAlign: 'right' }}>
-                                    {editing ? (
-                                        <input
-                                            className="form-input" type="number"
-                                            style={{ fontSize: 11, padding: '2px 6px', width: 120, textAlign: 'right' }}
-                                            defaultValue={e.paymentDue}
-                                            onBlur={ev => saveEntity(e.id, { paymentDue: Number(ev.target.value) || 0 })}
-                                        />
-                                    ) : exact(e.paymentDue)}
+                                    <EditableCell
+                                        value={e.paymentDue} kind="money" align="right"
+                                        display={exact(e.paymentDue)}
+                                        onSave={v => saveEntity(e.id, { paymentDue: Number(v) || 0 })}
+                                    />
                                 </td>
                             ))}
                         </tr>
@@ -314,14 +385,11 @@ export default function Sheet1Tracker() {
                             </td>
                             {entities.map(e => (
                                 <td key={e.id} style={{ fontSize: 11.5, textAlign: 'right', color: 'var(--text-secondary)' }}>
-                                    {editing ? (
-                                        <input
-                                            className="form-input" type="number"
-                                            style={{ fontSize: 11, padding: '2px 6px', width: 120, textAlign: 'right' }}
-                                            defaultValue={e.pendingFund}
-                                            onBlur={ev => saveEntity(e.id, { pendingFund: Number(ev.target.value) || 0 })}
-                                        />
-                                    ) : exact(e.pendingFund)}
+                                    <EditableCell
+                                        value={e.pendingFund} kind="money" align="right"
+                                        display={exact(e.pendingFund)}
+                                        onSave={v => saveEntity(e.id, { pendingFund: Number(v) || 0 })}
+                                    />
                                 </td>
                             ))}
                         </tr>

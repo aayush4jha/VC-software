@@ -40,6 +40,39 @@ export async function GET(request: NextRequest) {
 }
 
 /**
+ * PATCH { id, overrides } — corrections to a stored grid's cells.
+ *
+ * Kept beside the grid rather than written into it, so the sheet as uploaded
+ * stays exactly as uploaded and a correction survives the same sheet being
+ * uploaded again. The sheet remains the record; these are what the firm says
+ * it should have said.
+ */
+export async function PATCH(request: NextRequest) {
+    const auth = await requireMember(request);
+    if (auth.response) return auth.response;
+    const client = db();
+    if (!client) return NextResponse.json({ error: 'Server config missing' }, { status: 500 });
+
+    const { id, overrides } = await request.json();
+    if (!id || typeof overrides !== 'object' || overrides === null) {
+        return NextResponse.json({ error: 'id and overrides are required' }, { status: 400 });
+    }
+    const trimmed = Object.fromEntries(
+        Object.entries(overrides as Record<string, unknown>)
+            .slice(0, 2000)
+            .map(([k, v]) => [k.slice(0, 300), String(v ?? '').slice(0, 2000)]),
+    );
+
+    const { data, error } = await client.from('company_sha_grids')
+        .update({ overrides: trimmed }).eq('id', id).select().single();
+    if (error) {
+        if (missingTable(error.message)) return NextResponse.json(NEEDS_MIGRATION);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ grid: data });
+}
+
+/**
  * POST { companyId, grid, fileName, sheetName } — store a parsed grid.
  *
  * The grid is stored whole and the tracker is updated from it in the same

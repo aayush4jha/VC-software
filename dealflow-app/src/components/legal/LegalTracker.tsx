@@ -15,6 +15,7 @@ import {
     type DocStatus, type RightStatus, type ActionPriority, type ActionStatus, type ActionCategory,
 } from '@/lib/legal-tracker';
 import { toCsv, exportFilename } from '@/lib/csv-export';
+import EditableCell from '@/components/common/EditableCell';
 
 import type { Company } from '@/types/database';
 
@@ -62,7 +63,7 @@ const date = (iso: string | null) => {
  */
 export default function LegalTracker() {
     const router = useRouter();
-    const { companies, getIndustryById } = useAppContext();
+    const { companies, getIndustryById, updateCompany } = useAppContext();
 
     const [docs, setDocs] = useState<DocRow[]>([]);
     const [rights, setRights] = useState<RightRowDb[]>([]);
@@ -75,6 +76,14 @@ export default function LegalTracker() {
     const [window, setWindow] = useState(30);
     const [openCompanyId, setOpenCompanyId] = useState<string | null>(null);
     const [kpiFilter, setKpiFilter] = useState<null | 'missing_docs' | 'rights' | 'overdue'>(null);
+
+    // The master table edits the company itself, which is the same record the
+    // Portfolio page reads — so a correction here shows there too, rather than
+    // the two screens disagreeing about one company.
+    const stop = (e: React.MouseEvent) => e.stopPropagation();
+    const saveCompany = async (id: string, patch: Record<string, unknown>) => {
+        await updateCompany(id, patch);
+    };
 
     const load = useCallback(async () => {
         setLoading(true); setError(null);
@@ -359,20 +368,44 @@ export default function LegalTracker() {
                                         style={{ cursor: 'pointer' }}
                                     >
                                         <td style={{ fontWeight: 600 }}>{m.company.companyName}</td>
-                                        <td style={{ fontSize: 12 }}>{m.financials.investmentEntity || '—'}</td>
-                                        <td style={{ fontSize: 12 }}>
-                                            {m.financials.investmentInstrument || m.company.shareType || '—'}
+                                        <td style={{ fontSize: 12 }} onClick={stop}>
+                                            <EditableCell value={m.financials.investmentEntity}
+                                                onSave={v => saveCompany(m.company.id, { investmentVehicle: v || null })} />
                                         </td>
-                                        <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{date(m.financials.entryDateISO)}</td>
-                                        <td style={{ fontSize: 12, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                            {money(m.financials.initialInvestment)}
+                                        <td style={{ fontSize: 12 }} onClick={stop}>
+                                            <EditableCell value={m.financials.investmentInstrument || m.company.shareType}
+                                                onSave={v => saveCompany(m.company.id, { investmentInstrument: v || null })} />
                                         </td>
-                                        <td style={{ fontSize: 12 }}>{m.company.portfolioStatus || '—'}</td>
-                                        <td style={{ fontSize: 12, textAlign: 'right' }}>{pct(m.financials.currentOwnership)}</td>
-                                        <td style={{ fontSize: 12 }}>
-                                            {(m.company as Company & { leadInvestor?: string }).leadInvestor || '—'}
+                                        <td style={{ fontSize: 12, whiteSpace: 'nowrap' }} onClick={stop}>
+                                            <EditableCell value={m.financials.entryDateISO?.slice(0, 10) ?? ''} kind="date"
+                                                display={date(m.financials.entryDateISO)}
+                                                onSave={v => saveCompany(m.company.id, { entryDate: v || null })} />
                                         </td>
-                                        <td style={{ fontSize: 12 }}>{m.company.companyRound || '—'}</td>
+                                        <td style={{ fontSize: 12, textAlign: 'right', whiteSpace: 'nowrap' }} onClick={stop}>
+                                            <EditableCell value={m.financials.initialInvestment} kind="money" align="right"
+                                                display={money(m.financials.initialInvestment)}
+                                                onSave={v => saveCompany(m.company.id, { initialInvestment: v === '' ? null : Number(v) })} />
+                                        </td>
+                                        <td style={{ fontSize: 12 }} onClick={stop}>
+                                            <EditableCell
+                                                value={m.company.portfolioStatus} kind="select"
+                                                options={['Active', 'Exited', 'Written Off', 'Ongoing Exit', 'Potential Write-off']
+                                                    .map(v => ({ value: v, label: v }))}
+                                                onSave={v => saveCompany(m.company.id, { portfolioStatus: v })} />
+                                        </td>
+                                        <td style={{ fontSize: 12, textAlign: 'right' }} onClick={stop}>
+                                            <EditableCell value={m.financials.currentOwnership} kind="number" align="right"
+                                                display={pct(m.financials.currentOwnership)}
+                                                onSave={v => saveCompany(m.company.id, { currentOwnership: v === '' ? null : Number(v) })} />
+                                        </td>
+                                        <td style={{ fontSize: 12 }} onClick={stop}>
+                                            <EditableCell value={(m.company as Company & { leadInvestor?: string }).leadInvestor ?? ''}
+                                                onSave={v => saveCompany(m.company.id, { leadInvestor: v || null })} />
+                                        </td>
+                                        <td style={{ fontSize: 12 }} onClick={stop}>
+                                            <EditableCell value={m.company.companyRound}
+                                                onSave={v => saveCompany(m.company.id, { companyRound: v })} />
+                                        </td>
                                         <td style={{ fontSize: 12 }}>
                                             {m.missingDocs.length === 0
                                                 ? <span style={{ color: '#047857' }}>complete</span>

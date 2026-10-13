@@ -2,11 +2,14 @@
 
 import React, { useMemo, useState } from 'react';
 import { Search, Download, X } from 'lucide-react';
-import { CATEGORY_LABELS, type LedgerCategory } from '@/lib/fund-ledger';
+import { CATEGORY_LABELS, LEDGER_CATEGORIES, type LedgerCategory } from '@/lib/fund-ledger';
+import EditableCell from '@/components/common/EditableCell';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 
 export interface StatementRow {
     id: string;
+    edited?: boolean;
+    original?: Record<string, unknown> | null;
     entity: string;
     bank: string;
     txn_date: string | null;
@@ -68,7 +71,27 @@ function downloadCsv(csv: string, filename: string) {
  * a statement filtered to a subset without saying so is how a total comes to
  * be quietly wrong.
  */
-export default function StatementView({ rows }: { rows: StatementRow[] }) {
+export default function StatementView({ rows, onChanged }: {
+    rows: StatementRow[];
+    onChanged?: () => void;
+}) {
+    // Every figure here came from a file, and a file can be wrong. An edit is
+    // recorded against the row so the next upload leaves it alone.
+    const edit = async (id: string, field: string, value: string) => {
+        await fetch('/api/fund/edit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ table: 'fund_transactions', id, field, value }),
+        });
+        onChanged?.();
+    };
+    const revert = async (id: string) => {
+        await fetch('/api/fund/edit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ table: 'fund_transactions', id, revert: true }),
+        });
+        onChanged?.();
+    };
+
     const [query, setQuery] = useState('');
     const [onlyInvestment, setOnlyInvestment] = useState(true);
     const [head, setHead] = useState('all');
@@ -181,34 +204,60 @@ export default function StatementView({ rows }: { rows: StatementRow[] }) {
                             <th>To</th><th>Year</th>
                             <th style={{ textAlign: 'right' }}>Net Amount</th>
                             <th>TXN Date</th><th>AC Name</th><th>Details</th>
-                            <th>Major Head</th><th>Dashboard</th>
+                            <th>Major Head</th><th>Dashboard</th><th>Category</th>
                         </tr>
                     </thead>
                     <tbody>
                         {visible.slice(0, 500).map(r => (
                             <tr key={r.id}>
-                                <td style={{ fontSize: 11.5 }}>{r.entity || '—'}</td>
-                                <td style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{r.financial_year || '—'}</td>
+                                <td style={{ fontSize: 11.5 }}>
+                                    <EditableCell value={r.entity} edited={r.edited}
+                                        onSave={v => edit(r.id, 'entity', v)} onRevert={() => revert(r.id)} />
+                                </td>
+                                <td style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                                    <EditableCell value={r.financial_year} onSave={v => edit(r.id, 'financial_year', v)} />
+                                </td>
                                 <td style={{
                                     fontSize: 11.5, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600,
                                     color: r.amount < 0 ? '#b91c1c' : '#047857',
                                 }}>
-                                    {money(r.amount_inr ?? r.amount)}
+                                    <EditableCell
+                                        value={r.amount} kind="money" align="right"
+                                        display={money(r.amount_inr ?? r.amount)}
+                                        onSave={v => edit(r.id, 'amount', v)}
+                                    />
                                 </td>
-                                <td style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{fmtDate(r.txn_date)}</td>
-                                <td style={{ fontSize: 11.5 }}>{r.ac_name || '—'}</td>
+                                <td style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                                    <EditableCell value={r.txn_date} kind="date" display={fmtDate(r.txn_date)}
+                                        onSave={v => edit(r.id, 'txn_date', v)} />
+                                </td>
                                 <td style={{ fontSize: 11.5 }}>
-                                    {r.description || '—'}
+                                    <EditableCell value={r.ac_name} onSave={v => edit(r.id, 'ac_name', v)} />
+                                </td>
+                                <td style={{ fontSize: 11.5 }}>
+                                    <EditableCell value={r.description} onSave={v => edit(r.id, 'description', v)} />
                                     {r.data_issues.length > 0 && (
                                         <div style={{ fontSize: 10, color: '#b45309' }}>{r.data_issues.join(', ')}</div>
                                     )}
                                 </td>
-                                <td style={{ fontSize: 11.5, fontWeight: 600 }}>{r.major_head || '—'}</td>
-                                <td style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{r.dashboard_head || '—'}</td>
+                                <td style={{ fontSize: 11.5, fontWeight: 600 }}>
+                                    <EditableCell value={r.major_head} onSave={v => edit(r.id, 'major_head', v)} />
+                                </td>
+                                <td style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                                    <EditableCell value={r.dashboard_head} onSave={v => edit(r.id, 'dashboard_head', v)} />
+                                </td>
+                                <td style={{ fontSize: 11.5 }}>
+                                    <EditableCell
+                                        value={r.category} kind="select"
+                                        options={LEDGER_CATEGORIES.map(c => ({ value: c, label: CATEGORY_LABELS[c] }))}
+                                        display={CATEGORY_LABELS[r.category]}
+                                        onSave={v => edit(r.id, 'category', v)}
+                                    />
+                                </td>
                             </tr>
                         ))}
                         {visible.length === 0 && (
-                            <tr><td colSpan={8} style={{ textAlign: 'center', padding: 20, fontSize: 13, color: 'var(--text-tertiary)' }}>
+                            <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, fontSize: 13, color: 'var(--text-tertiary)' }}>
                                 Nothing matches those filters.
                             </td></tr>
                         )}

@@ -21,6 +21,7 @@ import {
 } from '@/lib/fund-portfolio';
 import type { CellMatrix } from '@/lib/legal-import';
 import { toCsv, exportFilename } from '@/lib/csv-export';
+import EditableCell from '@/components/common/EditableCell';
 import MappingRules, { type RuleRow, type FundSettings } from '@/components/fund/MappingRules';
 import StatementView, { type StatementRow } from '@/components/fund/StatementView';
 import { loadFundRecord, saveFundRecord } from '@/lib/fund-data';
@@ -34,7 +35,7 @@ interface AccountRow {
     currency: string; opening_balance: number; stated_balance: number | null; stated_as_of: string | null;
 }
 interface TxnRow {
-    id: string; account_id: string | null; entity: string; bank: string; txn_date: string | null;
+    id: string; edited?: boolean; account_id: string | null; entity: string; bank: string; txn_date: string | null;
     description: string; amount: number; currency: string; amount_inr: number | null;
     category: LedgerCategory; category_source: string; data_issues: string[];
     source_file: string; source_sheet: string; source_row: number | null; counterparty: string;
@@ -176,6 +177,17 @@ export default function FundLedger() {
     // the drawer holds any set of rows rather than one category.
     const [drill, setDrill] = useState<{ title: string; rows: TxnRow[] } | null>(null);
     const [section, setSection] = useState<'overview' | 'statements' | 'upload' | 'mapping'>('overview');
+
+    // An account's name, bank, currency and opening balance are ours to set:
+    // the statement rarely says them, and a balance with no opening figure is
+    // only ever the movement since the first imported row.
+    const editAccount = async (id: string, field: string, value: string) => {
+        await fetch('/api/fund/edit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ table: 'fund_accounts', id, field, value }),
+        });
+        load();
+    };
 
     const load = useCallback(async () => {
         setLoading(true); setError(null);
@@ -369,7 +381,7 @@ export default function FundLedger() {
             <>
                 <SectionTabs section={section} setSection={setSection} />
                 <div style={{ padding: '18px 24px 40px' }}>
-                    <StatementView rows={filtered as unknown as StatementRow[]} />
+                    <StatementView rows={filtered as unknown as StatementRow[]} onChanged={load} />
                 </div>
             </>
         );
@@ -556,20 +568,49 @@ export default function FundLedger() {
                                             rows: filtered.filter(t => t.account_id === b.accountId),
                                         })}
                                     >
-                                        <td style={{ fontSize: 12, fontWeight: 600 }}>{b.entity}</td>
-                                        <td style={{ fontSize: 12 }}>{b.bank || '—'}</td>
-                                        <td style={{ fontSize: 12 }}>{b.accountLabel || '—'}</td>
-                                        <td style={{ fontSize: 12 }}>{b.currency}</td>
-                                        <td style={{ fontSize: 12, textAlign: 'right' }}>{plain(b.openingBalance, b.currency)}</td>
+                                        <td style={{ fontSize: 12, fontWeight: 600 }} onClick={e => e.stopPropagation()}>
+                                            <EditableCell value={b.entity} onSave={v => editAccount(b.accountId, 'entity', v)} />
+                                        </td>
+                                        <td style={{ fontSize: 12 }} onClick={e => e.stopPropagation()}>
+                                            <EditableCell value={b.bank} onSave={v => editAccount(b.accountId, 'bank', v)} />
+                                        </td>
+                                        <td style={{ fontSize: 12 }} onClick={e => e.stopPropagation()}>
+                                            <EditableCell value={b.accountLabel} onSave={v => editAccount(b.accountId, 'account_label', v)} />
+                                        </td>
+                                        <td style={{ fontSize: 12 }} onClick={e => e.stopPropagation()}>
+                                            <EditableCell
+                                                value={b.currency} kind="select"
+                                                options={['INR', 'AED', 'USD'].map(c => ({ value: c, label: c }))}
+                                                onSave={v => editAccount(b.accountId, 'currency', v)}
+                                            />
+                                        </td>
+                                        <td style={{ fontSize: 12, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                                            <EditableCell
+                                                value={b.openingBalance} kind="money" align="right"
+                                                display={plain(b.openingBalance, b.currency)}
+                                                title="The balance before the first imported transaction"
+                                                onSave={v => editAccount(b.accountId, 'opening_balance', v)}
+                                            />
+                                        </td>
                                         <td style={{ fontSize: 12, textAlign: 'right', color: '#047857' }}>{plain(b.totalInflows, b.currency)}</td>
                                         <td style={{ fontSize: 12, textAlign: 'right', color: '#b91c1c' }}>{plain(b.totalOutflows, b.currency)}</td>
                                         <td style={{ fontSize: 12, textAlign: 'right' }}>{b.adjustments ? plain(b.adjustments, b.currency) : '—'}</td>
                                         <td style={{ fontSize: 12, textAlign: 'right', fontWeight: 700 }}>{plain(b.closingBalance, b.currency)}</td>
-                                        <td style={{ fontSize: 11 }}>
-                                            {b.statedBalance === null ? <span style={{ color: 'var(--text-tertiary)' }}>not stated</span>
-                                                : b.discrepancy === 0 ? <span style={{ color: '#047857' }}>agrees</span>
-                                                    : <span style={{ color: '#b91c1c' }}>off by {plain(b.discrepancy!, b.currency)}</span>}
-                                            {b.statedAsOf && <div style={{ color: 'var(--text-tertiary)' }}>{fmtDate(b.statedAsOf)}</div>}
+                                        <td style={{ fontSize: 11 }} onClick={e => e.stopPropagation()}>
+                                            <EditableCell
+                                                value={b.statedBalance} kind="money" align="right"
+                                                title="What the bank itself says this account holds"
+                                                display={b.statedBalance === null
+                                                    ? <span style={{ color: 'var(--text-tertiary)' }}>not stated</span>
+                                                    : b.discrepancy === 0 ? <span style={{ color: '#047857' }}>agrees</span>
+                                                        : <span style={{ color: '#b91c1c' }}>off by {plain(b.discrepancy!, b.currency)}</span>}
+                                                onSave={v => editAccount(b.accountId, 'stated_balance', v)}
+                                            />
+                                            <div style={{ color: 'var(--text-tertiary)' }}>
+                                                <EditableCell value={b.statedAsOf} kind="date"
+                                                    display={b.statedAsOf ? fmtDate(b.statedAsOf) : 'as of…'}
+                                                    onSave={v => editAccount(b.accountId, 'stated_as_of', v)} />
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

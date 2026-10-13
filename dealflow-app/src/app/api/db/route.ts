@@ -17,7 +17,7 @@ const ALLOWED_TABLES = new Set([
     'legal_documents', 'investor_rights', 'legal_actions',
     'legal_document_history', 'investor_rights_history',
     'fund_accounts', 'fund_transactions', 'fund_adjustments', 'fund_imports',
-    'fund_mapping_rules', 'fund_settings', 'fund_portfolio_rows',
+    'fund_mapping_rules', 'fund_settings', 'fund_portfolio_rows', 'fund_year_overrides',
 ]);
 
 type Operation = 'select' | 'insert' | 'update' | 'delete' | 'upsert';
@@ -46,6 +46,7 @@ const TABLE_READ_PERMISSIONS: Record<string, string[]> = {
     fund_mapping_rules: ['fund'],
     fund_settings: ['fund'],
     fund_portfolio_rows: ['fund', 'portfolio'],
+    fund_year_overrides: ['fund'],
 };
 
 // Tables only an admin may write to. `profiles` carries `role` and
@@ -64,7 +65,7 @@ const APPEND_ONLY_TABLES = new Set([
 // names the route that does it properly. Applies to admins too: the rule is
 // about keeping the record, not about who is allowed to change it.
 // Upsert needs a primary key the caller supplies; these have one.
-const UPSERTABLE_TABLES = new Set(['fund_settings']);
+const UPSERTABLE_TABLES = new Set(['fund_settings', 'fund_year_overrides']);
 
 const HISTORY_TRACKED_TABLES: Record<string, string> = {
     legal_documents: '/api/legal/tracker',
