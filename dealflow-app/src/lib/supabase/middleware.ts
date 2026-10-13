@@ -151,7 +151,13 @@ export async function updateSession(request: NextRequest) {
     // /auth/callback and /book are reachable by anyone; the callback is what
     // establishes the session in the first place, and /book is the founder-
     // facing scheduling page.
-    if (pathname.startsWith('/auth/callback') || pathname === '/book' || pathname.startsWith('/book/')) {
+    // /privacy and /terms are public because Meta and Google both refuse to
+    // publish an app whose policy URL answers with a login page.
+    if (
+        pathname.startsWith('/auth/callback')
+        || pathname === '/book' || pathname.startsWith('/book/')
+        || pathname === '/privacy' || pathname === '/terms'
+    ) {
         return supabaseResponse;
     }
 
