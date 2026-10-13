@@ -26,6 +26,16 @@ interface IncomingRow {
     companyName?: string;
 }
 
+interface PortfolioIncoming {
+    kind: 'investment' | 'exit';
+    financialYear: string; fundType?: string; investedFrom?: string; company: string;
+    status?: string; stage?: string; investedOn?: string | null; amount: number;
+    soldOn?: string | null; consideration?: number | null; exitKind?: string;
+    currentValue?: number | null; postMoney?: number | null; equityPct?: number | null;
+    multiple?: number | null; writeoffYear?: string;
+    sourceSheet: string; sourceRow: number;
+}
+
 interface IncomingAdjustment {
     date: string | null; entity: string; category: string; amount: number;
     currency: string; reason: string; approvedBy: string; remarks: string;
@@ -54,8 +64,9 @@ export async function POST(request: NextRequest) {
     const rows: IncomingRow[] = Array.isArray(body.rows) ? body.rows : [];
     const adjustments: IncomingAdjustment[] = Array.isArray(body.adjustments) ? body.adjustments : [];
     const sheetSummary = body.sheetSummary && typeof body.sheetSummary === 'object' ? body.sheetSummary : {};
+    const portfolio: PortfolioIncoming[] = Array.isArray(body.portfolio) ? body.portfolio : [];
 
-    if (rows.length === 0 && adjustments.length === 0) {
+    if (rows.length === 0 && adjustments.length === 0 && portfolio.length === 0) {
         return NextResponse.json({ error: 'Nothing to import from that file.' }, { status: 400 });
     }
     if (rows.length > MAX_ROWS) {
@@ -171,6 +182,44 @@ export async function POST(request: NextRequest) {
         adjustmentsSaved = (data || []).length;
     }
 
+    // The investment and exit sheets. Same idempotency rule as the ledger:
+    // a re-upload must leave the portfolio exactly as it was.
+    let portfolioSaved = 0;
+    if (portfolio.length > 0) {
+        const { data, error } = await client.from('fund_portfolio_rows').upsert(
+            portfolio.map(p => ({
+                organization_id: ORGANIZATION_ID,
+                kind: p.kind,
+                financial_year: (p.financialYear || '').slice(0, 20),
+                fund_type: (p.fundType || '').slice(0, 40),
+                invested_from: (p.investedFrom || '').slice(0, 120),
+                company: (p.company || '').slice(0, 200),
+                status: (p.status || '').slice(0, 60),
+                stage: (p.stage || '').slice(0, 60),
+                invested_on: p.investedOn || null,
+                amount: Number(p.amount) || 0,
+                sold_on: p.soldOn || null,
+                consideration: p.consideration ?? null,
+                exit_kind: p.exitKind || null,
+                current_value: p.currentValue ?? null,
+                post_money: p.postMoney ?? null,
+                equity_pct: p.equityPct ?? null,
+                multiple: p.multiple ?? null,
+                writeoff_year: (p.writeoffYear || '').slice(0, 20),
+                source_file: fileName.slice(0, 200),
+                source_sheet: p.sourceSheet.slice(0, 120),
+                source_row: p.sourceRow,
+                import_key: `${fileName}::${p.sourceSheet}::${p.sourceRow}::${p.kind}`,
+                imported_by: auth.actor.userId,
+            })),
+            { onConflict: 'organization_id,import_key', ignoreDuplicates: true },
+        ).select('id');
+        if (error && !/relation .* does not exist|schema cache/i.test(error.message)) {
+            return NextResponse.json({ error: `Transactions imported, but the investment sheets failed: ${error.message}` }, { status: 500 });
+        }
+        portfolioSaved = (data || []).length;
+    }
+
     const flagged = rows.filter(r => (r.issues || []).length > 0).length;
     await client.from('fund_imports').insert({
         organization_id: ORGANIZATION_ID,
@@ -183,7 +232,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-        imported, duplicates, flagged, adjustments: adjustmentsSaved,
+        imported, duplicates, flagged, adjustments: adjustmentsSaved, portfolio: portfolioSaved,
         note: duplicates > 0
             ? `${duplicates} row${duplicates === 1 ? ' was' : 's were'} already imported and left untouched.`
             : null,

@@ -17,7 +17,7 @@ const ALLOWED_TABLES = new Set([
     'legal_documents', 'investor_rights', 'legal_actions',
     'legal_document_history', 'investor_rights_history',
     'fund_accounts', 'fund_transactions', 'fund_adjustments', 'fund_imports',
-    'fund_mapping_rules', 'fund_settings',
+    'fund_mapping_rules', 'fund_settings', 'fund_portfolio_rows',
 ]);
 
 type Operation = 'select' | 'insert' | 'update' | 'delete' | 'upsert';
@@ -45,6 +45,7 @@ const TABLE_READ_PERMISSIONS: Record<string, string[]> = {
     fund_imports: ['fund'],
     fund_mapping_rules: ['fund'],
     fund_settings: ['fund'],
+    fund_portfolio_rows: ['fund', 'portfolio'],
 };
 
 // Tables only an admin may write to. `profiles` carries `role` and

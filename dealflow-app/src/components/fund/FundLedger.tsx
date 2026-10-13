@@ -15,6 +15,7 @@ import {
     detectSheetKind, parseBankRows, parseAdjustmentRows, describeSheet,
     type ParsedLedgerRow, type ParsedAdjustment,
 } from '@/lib/master-import';
+import { parsePortfolioInvestments, parsePortfolioExits } from '@/lib/fund-portfolio';
 import type { CellMatrix } from '@/lib/legal-import';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 import MappingRules, { type RuleRow, type FundSettings } from '@/components/fund/MappingRules';
@@ -848,6 +849,7 @@ interface Prepared {
     fileName: string;
     rows: (ParsedLedgerRow & { sheetName: string })[];
     adjustments: ParsedAdjustment[];
+    portfolio: Record<string, unknown>[];
     summary: { sheet: string; description: string }[];
     rejected: { sheet: string; sourceRow: number; why: string }[];
 }
@@ -873,6 +875,7 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
             const knownCompanies = companies.map(c => c.companyName);
             const rows: (ParsedLedgerRow & { sheetName: string })[] = [];
             const adjustments: ParsedAdjustment[] = [];
+            const portfolio: Prepared['portfolio'] = [];
             const summary: Prepared['summary'] = [];
             const rejected: Prepared['rejected'] = [];
 
@@ -905,11 +908,38 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                     adjustments.push(...adjRows);
                     rejected.push(...adjRejected.map(r => ({ sheet: sheetName, ...r })));
                     summary.push({ sheet: sheetName, description: describeSheet(match, adjRows.length, adjRejected.length) });
+                } else if (match.kind === 'investment_master') {
+                    const rows = parsePortfolioInvestments(matrix, match.headerRow, match.headers);
+                    portfolio.push(...rows.map(r => ({
+                        kind: 'investment' as const,
+                        financialYear: r.financialYear, fundType: r.fundType,
+                        investedFrom: r.investedFrom, company: r.company, status: r.status,
+                        stage: r.stage, investedOn: r.investedOn, amount: r.amount,
+                        currentValue: r.currentValue, postMoney: r.postMoney,
+                        equityPct: r.totalEquityPct, multiple: r.multiple,
+                        writeoffYear: r.writeoffYear,
+                        sourceSheet: sheetName, sourceRow: r.sourceRow,
+                    })));
+                    summary.push({ sheet: sheetName, description: `Investments: ${rows.length} rows.` });
+                } else if (match.kind === 'exit_master') {
+                    const rows = parsePortfolioExits(matrix, match.headerRow, match.headers);
+                    portfolio.push(...rows.map(r => ({
+                        kind: 'exit' as const,
+                        financialYear: r.financialYear, company: r.company,
+                        investedFrom: r.investedFrom, investedOn: r.investedOn,
+                        amount: r.amount, soldOn: r.soldOn, consideration: r.consideration,
+                        exitKind: r.kind, multiple: r.multiple,
+                        sourceSheet: sheetName, sourceRow: r.sourceRow,
+                    })));
+                    summary.push({
+                        sheet: sheetName,
+                        description: `Exits and write-offs: ${rows.filter(r => r.kind === 'exit').length} exits, `
+                            + `${rows.filter(r => r.kind === 'writeoff').length} write-offs.`,
+                    });
                 } else {
-                    // Investment, exit, document and rights sheets are read and
-                    // reported, but not written from here: those records belong
-                    // to the companies and the legal tracker, and importing them
-                    // twice from two places is how they come to disagree.
+                    // Document and rights sheets are read and reported, but not
+                    // written from here: those belong to the legal tracker, and
+                    // importing them from two places is how they disagree.
                     summary.push({
                         sheet: sheetName,
                         description: match.kind
@@ -919,11 +949,11 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                 }
             }
 
-            if (rows.length === 0 && adjustments.length === 0) {
+            if (rows.length === 0 && adjustments.length === 0 && portfolio.length === 0) {
                 setProblem('No bank statement or adjustment sheet was recognised in that file. '
                     + 'A bank sheet needs a heading row with a date, a description and either a debit/credit pair or an amount.');
             } else {
-                setPrepared({ fileName: file.name, rows, adjustments, summary, rejected });
+                setPrepared({ fileName: file.name, rows, adjustments, portfolio, summary, rejected });
             }
         } catch (e) {
             setProblem(`Could not read that file: ${(e as Error).message}`);
@@ -942,6 +972,7 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                     fileName: prepared.fileName,
                     rows: prepared.rows,
                     adjustments: prepared.adjustments,
+                    portfolio: prepared.portfolio,
                     sheetSummary: Object.fromEntries(prepared.summary.map(s => [s.sheet, s.description])),
                 }),
             });
@@ -957,6 +988,7 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
             setResult(
                 `${j.imported} transaction${j.imported === 1 ? '' : 's'} imported`
                 + (j.adjustments ? `, ${j.adjustments} adjustment${j.adjustments === 1 ? '' : 's'}` : '')
+                + (j.portfolio ? `, ${j.portfolio} investment and exit row${j.portfolio === 1 ? '' : 's'}` : '')
                 + (j.flagged ? `, ${j.flagged} flagged for attention` : '')
                 + '.' + (j.note ? ` ${j.note}` : '')
                 + (trackerNote ? ` ${trackerNote}` : ''),
