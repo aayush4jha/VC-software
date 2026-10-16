@@ -11,7 +11,28 @@ const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 // just before it. Longer than this and it is treated as a new conversation.
 const FOLLOW_UP_WINDOW_MS = 30 * 60 * 1000;
 // Gemini reads PDFs and images inline; bigger files are filed but not read.
-const MAX_AI_BYTES = 15 * 1024 * 1024;
+// Base64 inflates by a third, so 15 MB became a ~20 MB request that could not
+// be read inside the function's budget. Anything larger is filed by filename.
+const MAX_AI_BYTES = 5 * 1024 * 1024;
+
+/** How long the deck-reading call may take before we give up on it. */
+const AI_BUDGET_MS = 30_000;
+
+/** The promise's value, or the fallback if it has not settled in time. */
+async function withBudget<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expiry = new Promise<T>(resolve => {
+        timer = setTimeout(() => {
+            console.warn(`[whatsapp] extraction exceeded ${ms}ms — falling back`);
+            resolve(fallback);
+        }, ms);
+    });
+    try {
+        return await Promise.race([work, expiry]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
 const CRORE = 10_000_000;
 
 interface Extracted {
@@ -164,10 +185,18 @@ export async function processWhatsAppMessage(db: SupabaseClient, m: InboundMessa
             const name = safeFileName(m.media.filename || `WhatsApp ${m.kind} ${new Date().toISOString().slice(0, 10)}${extensionFor(dl.mimeType)}`);
             const path = await storeFile(db, `whatsapp/${new Date().toISOString().slice(0, 7)}/${m.id}-${name}`, dl.buffer, dl.mimeType, 'whatsapp');
             file = { name, mimeType: dl.mimeType, size: dl.size, buffer: dl.buffer, path };
+            // Written now rather than at the end. A 12 MB deck once used the
+            // whole 60s budget on the Gemini call and the function was killed
+            // mid-flight — no error, no path, the file simply gone. Whatever
+            // happens after this line, the file is recoverable.
+            await setStatus({ file_name: name, storage_path: path });
         }
 
         // 4. What company is this?
-        const ai = await extractStartup(m.text, file?.name ?? null, file);
+        // Bounded, because the reply and the status write still have to happen
+        // inside the function's 60s. A deck too slow to read falls back to its
+        // filename, which is usually enough to name the company.
+        const ai = await withBudget(extractStartup(m.text, file?.name ?? null, file), AI_BUDGET_MS, EMPTY);
         const companyName = ai.companyName || (file ? companyNameFromDeckFilename(file.name) : null);
 
         const { data: profile } = await db.from('profiles').select('id, name').eq('id', userId).maybeSingle();
