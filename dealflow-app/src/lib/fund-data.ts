@@ -89,7 +89,8 @@ export function totalCommitted(record: FundRecord): Record<Currency, number> {
 
 // ─── Formatting ─────────────────────────────────────────
 
-export const CURRENCY_SYMBOL: Record<Currency, string> = { INR: '₹', AED: 'dh', USD: '$' };
+// 'dh' rendered as "dh0", which reads as a word rather than a currency.
+export const CURRENCY_SYMBOL: Record<Currency, string> = { INR: '₹', AED: 'AED ', USD: '$' };
 
 export function formatMoney(value: number, currency: Currency): string {
     const sign = value < 0 ? '-' : '';
@@ -108,6 +109,16 @@ export function yearMonthKey(dateIso: string): string {
 }
 
 // ─── Storage ────────────────────────────────────────────
+//
+// This record used to live only in localStorage, which meant each colleague
+// opened the Fund page and saw an empty default: the numbers existed solely in
+// the browser that had typed or imported them. It now belongs to the firm,
+// held in fund_records and reached through /api/fund/record.
+//
+// The accessors stay synchronous, because a dozen components call
+// loadFundRecord() during render. hydrateFundRecord() fills the cache once on
+// mount and fires the same 'fund-record-updated' event the components already
+// listen for, so they re-render with the real numbers a moment later.
 
 const STORAGE_KEY = 'dholakia.fund.v1';
 
@@ -115,37 +126,95 @@ function isBrowser() {
     return typeof window !== 'undefined';
 }
 
-export function loadFundRecord(): FundRecord {
-    if (!isBrowser()) return createDefaultFundRecord();
+/** Retired entity ids that must not come back from an old payload. */
+const RETIRED_ENTITY_IDS = new Set(['dmcc', 'dvfl', 'dvfz_aed', 'dvfz_usd']);
+
+function normalize(parsed: FundRecord): FundRecord {
+    if (!parsed.statements) parsed.statements = [];
+    if (!parsed.expenses) parsed.expenses = [];
+    if (!parsed.entities) parsed.entities = createDefaultFundRecord().entities;
+    parsed.entities = parsed.entities.filter(e => !RETIRED_ENTITY_IDS.has(e.id));
+    return parsed;
+}
+
+let cache: FundRecord | null = null;
+let hydrated = false;
+
+function readLocal(): FundRecord | null {
+    if (!isBrowser()) return null;
     try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-            const seed = createDefaultFundRecord();
-            saveFundRecord(seed);
-            return seed;
-        }
-        const parsed = JSON.parse(raw) as FundRecord;
-        // Backfill missing fields for forward-compat.
-        if (!parsed.statements) parsed.statements = [];
-        if (!parsed.expenses) parsed.expenses = [];
-        if (!parsed.entities) parsed.entities = createDefaultFundRecord().entities;
-        const RETIRED_ENTITY_IDS = new Set(['dmcc', 'dvfl', 'dvfz_aed', 'dvfz_usd']);
-        parsed.entities = parsed.entities.filter(e => !RETIRED_ENTITY_IDS.has(e.id));
-        return parsed;
+        return raw ? normalize(JSON.parse(raw) as FundRecord) : null;
     } catch {
-        return createDefaultFundRecord();
+        return null;
     }
 }
 
-export function saveFundRecord(record: FundRecord) {
-    if (!isBrowser()) return;
+function announce() {
+    if (isBrowser()) window.dispatchEvent(new CustomEvent('fund-record-updated'));
+}
+
+/**
+ * Fetch the firm's record. Called once when the Fund page mounts.
+ *
+ * On the very first run the server has nothing and this browser may hold the
+ * only copy — whatever the admin imported before this shipped — so that copy
+ * is pushed up rather than discarded. After that the server is the truth and
+ * the local copy is never read again.
+ */
+export async function hydrateFundRecord(): Promise<void> {
+    if (hydrated || !isBrowser()) return;
+    hydrated = true;
     try {
-        const toSave: FundRecord = { ...record, updatedAt: new Date().toISOString() };
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-        window.dispatchEvent(new CustomEvent('fund-record-updated'));
+        const res = await fetch('/api/fund/record');
+        if (!res.ok) return;
+        const { record } = await res.json() as { record: FundRecord | null };
+        if (record) {
+            cache = normalize(record);
+            announce();
+            return;
+        }
+        // Nothing on the server yet.
+        const local = readLocal();
+        const seed = local ?? createDefaultFundRecord();
+        cache = seed;
+        announce();
+        if (local) await push(local);
     } catch {
-        // Swallow — localStorage may be full or unavailable.
+        // Offline or unauthorised — the page keeps working on the default.
     }
+}
+
+async function push(record: FundRecord): Promise<void> {
+    try {
+        await fetch('/api/fund/record', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ record }),
+        });
+    } catch {
+        // A failed write leaves the cache ahead of the server; the next save
+        // sends the whole record again, so nothing is permanently lost.
+    }
+}
+
+export function loadFundRecord(): FundRecord {
+    // First read in the browser starts the fetch. Components already re-render
+    // on 'fund-record-updated', so none of them had to learn to await this.
+    if (isBrowser() && !hydrated) void hydrateFundRecord();
+    if (cache) return cache;
+    if (!isBrowser()) return createDefaultFundRecord();
+    // Before hydration completes, show the local copy if there is one so the
+    // admin's own page does not flash empty on the way to the real data.
+    cache = readLocal() ?? createDefaultFundRecord();
+    return cache;
+}
+
+export function saveFundRecord(record: FundRecord) {
+    const toSave: FundRecord = { ...record, updatedAt: new Date().toISOString() };
+    cache = toSave;
+    announce();
+    void push(toSave);
 }
 
 export function genId(prefix: string): string {

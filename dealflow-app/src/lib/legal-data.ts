@@ -459,6 +459,16 @@ export function createDefaultLegalRecord(companyId: string): LegalRecord {
 }
 
 // ─── Storage ──────────────────────────────────────
+//
+// These records used to live only in localStorage, so each colleague opened a
+// company's Legal page and saw a blank default — the rights grid, the stages
+// and the documents existed only in the browser that had entered them. They
+// now belong to the firm, in legal_records, reached through
+// /api/legal/records.
+//
+// loadAll() stays synchronous because the pages call it during render.
+// hydrateLegalRecords() fills the cache once and fires the
+// 'legal-records-updated' event the components already listen for.
 
 const STORAGE_KEY = 'dholakia.legal.v1';
 
@@ -466,25 +476,96 @@ function isBrowser() {
     return typeof window !== 'undefined';
 }
 
-function loadAll(): Record<string, LegalRecord> {
-    if (!isBrowser()) return {};
+type RecordMap = Record<string, LegalRecord>;
+
+let cache: RecordMap | null = null;
+let hydrated = false;
+// Companies edited before the server answered. Their local version wins on
+// merge, so a change made in the first second is not thrown away.
+const pending = new Set<string>();
+
+function readLocal(): RecordMap | null {
+    if (!isBrowser()) return null;
     try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
-        if (!raw) return {};
-        return JSON.parse(raw);
+        return raw ? JSON.parse(raw) as RecordMap : null;
     } catch {
-        return {};
+        return null;
     }
 }
 
-function saveAll(records: Record<string, LegalRecord>) {
-    if (!isBrowser()) return;
+function announce() {
+    if (isBrowser()) window.dispatchEvent(new CustomEvent('legal-records-updated'));
+}
+
+async function push(records: RecordMap): Promise<void> {
+    if (Object.keys(records).length === 0) return;
     try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-        window.dispatchEvent(new CustomEvent('legal-records-updated'));
+        await fetch('/api/legal/records', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records }),
+        });
     } catch {
-        // Swallow — localStorage may be full or unavailable.
+        // The cache stays ahead of the server; the next save resends.
     }
+}
+
+/**
+ * Fetch every company's legal record. Called when a Legal page mounts.
+ *
+ * On the first run after this shipped the server is empty and this browser may
+ * hold the only copy, so that copy is pushed up rather than lost.
+ */
+export async function hydrateLegalRecords(): Promise<void> {
+    if (hydrated || !isBrowser()) return;
+    hydrated = true;
+    try {
+        const res = await fetch('/api/legal/records');
+        if (!res.ok) return;
+        const { records } = await res.json() as { records: RecordMap };
+        const server = records || {};
+        const local = readLocal() || {};
+
+        // Server is the truth, except for companies this browser has already
+        // edited in this session, and except where the server has nothing at
+        // all for a company the browser knows about.
+        const merged: RecordMap = { ...local, ...server };
+        for (const id of pending) if (local[id]) merged[id] = local[id];
+
+        cache = merged;
+        announce();
+
+        const toPush: RecordMap = {};
+        for (const [id, rec] of Object.entries(merged)) {
+            if (!server[id] || pending.has(id)) toPush[id] = rec;
+        }
+        pending.clear();
+        await push(toPush);
+    } catch {
+        // Offline or unauthorised — the page works on whatever is cached.
+    }
+}
+
+function loadAll(): RecordMap {
+    // First read in the browser starts the fetch; see loadFundRecord.
+    if (isBrowser() && !hydrated) void hydrateLegalRecords();
+    if (cache) return cache;
+    if (!isBrowser()) return {};
+    cache = readLocal() ?? {};
+    return cache;
+}
+
+function saveAll(records: RecordMap) {
+    cache = records;
+    announce();
+    if (hydrated) void push(records);
+    // Before hydration, remember what changed so the merge keeps it.
+}
+
+/** Record that this company was edited, so hydration does not overwrite it. */
+function markPending(companyId: string) {
+    if (!hydrated) pending.add(companyId);
 }
 
 export function getLegalRecord(companyId: string): LegalRecord {
@@ -548,6 +629,7 @@ export function saveLegalRecord(record: LegalRecord): LegalRecord {
     const all = loadAll();
     const next = { ...record, updatedAt: new Date().toISOString() };
     all[record.companyId] = next;
+    markPending(record.companyId);
     saveAll(all);
     return next;
 }
