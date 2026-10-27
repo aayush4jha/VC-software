@@ -5,8 +5,8 @@ import { callGeminiMultimodal } from '@/lib/gemini';
 import { matchCompany } from '@/lib/email-company';
 import { classifyEmail, type EmailCategory } from '@/lib/email-triage';
 import { DRAFT_FORMAT, parseDraft, looksLikeCommentary, fallbackReply } from '@/lib/reply-draft';
+import { allCompanies } from '@/lib/server/all-companies';
 
-const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
 // Every email gets a draft, but a founder's pitch and a bank alert do not want
 // the same reply. This is what changes between them.
@@ -67,9 +67,11 @@ export async function POST(request: NextRequest) {
     if (url && key) {
         try {
             const db = createServiceClient(url, key);
-            const { data: companies } = await db.from('companies')
-                .select('id, company_name, founder_email, terminal_status, company_round, pipeline_stage_id, quick_summary')
-                .eq('organization_id', ORGANIZATION_ID);
+            const { data: companies } = await allCompanies<{
+                id: string; company_name: string; founder_email: string | null;
+                terminal_status: string | null; company_round: string | null;
+            }>(db,
+                'id, company_name, founder_email, terminal_status, company_round, pipeline_stage_id, quick_summary');
             const match = matchCompany(companies || [], {
                 companyName: String(body.derivedCompanyName || ''),
                 senderEmail,

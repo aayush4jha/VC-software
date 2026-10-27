@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireMember, forbidden } from '@/lib/api-auth';
 import { hasAnyPermission } from '@/lib/permissions';
+import { allCompanies } from '@/lib/server/all-companies';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -24,7 +25,11 @@ export async function GET(request: NextRequest) {
 
     // Fetch all data in parallel
     const [companiesRes, stagesRes, activityRes, profilesRes] = await Promise.all([
-        db.from('companies').select('id, company_name, analyst_id, pipeline_stage_id, priority_level, terminal_status, created_at, industry_id, company_round').eq('organization_id', ORGANIZATION_ID),
+        allCompanies<{
+            id: string; company_name: string; analyst_id: string | null; pipeline_stage_id: string;
+            priority_level: string; terminal_status: string | null; created_at: string;
+            industry_id: string | null; company_round: string;
+        }>(db, 'id, company_name, analyst_id, pipeline_stage_id, priority_level, terminal_status, created_at, industry_id, company_round'),
         db.from('pipeline_stages').select('id, name, color, order').eq('organization_id', ORGANIZATION_ID).order('order'),
         db.from('activity_logs').select('id, company_id, user_id, action, details, from_stage_id, to_stage_id, created_at').order('created_at', { ascending: false }).limit(2000),
         db.from('profiles').select('id, name, email, role').eq('organization_id', ORGANIZATION_ID),

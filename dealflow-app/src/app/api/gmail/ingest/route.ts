@@ -9,6 +9,7 @@ import { collectAttachments, extractBodyText, decodeEntities, type AttachmentPar
 import { saveEmailDocuments } from '@/lib/server/company-documents';
 import { fillCompanyBlanks } from '@/lib/server/company-fill';
 import { normalizeCompanyRound, normalizePriority, normalizeDealSourceType, normalizeShareType } from '@/lib/company-enums';
+import { allCompanies } from '@/lib/server/all-companies';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -224,10 +225,8 @@ export async function POST(request: NextRequest) {
         // Every company, for the dedup match below. Held in memory and appended
         // to as companies are created, so two emails about the same new startup
         // in one run club together rather than racing each other.
-        const { data: companyRows } = await db
-            .from('companies')
-            .select('id, company_name, founder_email')
-            .eq('organization_id', ORGANIZATION_ID);
+        const { data: companyRows } = await allCompanies<{ id: string; company_name: string; founder_email: string | null }>(
+            db, 'id, company_name, founder_email');
         const existingCompanies: { id: string; company_name: string; founder_email: string | null }[] =
             companyRows || [];
 

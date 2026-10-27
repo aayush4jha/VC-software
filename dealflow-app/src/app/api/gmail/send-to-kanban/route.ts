@@ -9,6 +9,7 @@ import { fillCompanyBlanks } from '@/lib/server/company-fill';
 import { getRouteUser } from '@/lib/auth-helpers';
 import { getAuthenticatedClientForUser } from '@/lib/google-tokens';
 import { callGeminiMultimodal, getGeminiApiKeys, type GeminiPart } from '@/lib/gemini';
+import { allCompanies } from '@/lib/server/all-companies';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -335,10 +336,8 @@ export async function POST(request: NextRequest) {
         // An email about a company we already track joins that record. Without
         // this, sending a second mail to the kanban created a near-duplicate
         // card beside the first.
-        const { data: companyRows } = await db
-            .from('companies')
-            .select('id, company_name, founder_email')
-            .eq('organization_id', ORGANIZATION_ID);
+        const { data: companyRows } = await allCompanies<{ id: string; company_name: string; founder_email: string | null }>(
+            db, 'id, company_name, founder_email');
         // forceNew is the escape hatch for when the match is wrong: the person
         // looking at the email overrules it, rather than having no way through.
         const match = body.forceNew === true

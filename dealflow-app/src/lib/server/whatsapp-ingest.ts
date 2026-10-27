@@ -5,6 +5,7 @@ import { isHelpCommand, WHATSAPP_HELP, type InboundMessage } from '@/lib/whatsap
 import { COMPANY_ROUNDS, normalizeCompanyRound } from '@/lib/company-enums';
 import { downloadWhatsAppMedia, sendWhatsAppText } from './whatsapp-api';
 import { safeFileName, storeFile } from './file-store';
+import { allCompanies } from '@/lib/server/all-companies';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 // A follow-up message ("this is StrainX, raising 5Cr") belongs to the deck sent
@@ -245,9 +246,11 @@ export async function processWhatsAppMessage(db: SupabaseClient, m: InboundMessa
         const waiting = (waitingRows || []) as { id: string; file_name: string | null; storage_path: string | null }[];
 
         // 7. Existing company (any spelling) or a new one.
-        const { data: companyRows } = await db.from('companies')
-            .select('id, company_name, founder_email, terminal_status, pipeline_stage_id')
-            .eq('organization_id', ORGANIZATION_ID);
+        const { data: companyRows } = await allCompanies<{
+            id: string; company_name: string; founder_email: string | null;
+            terminal_status: string | null; pipeline_stage_id: string | null;
+        }>(db,
+            'id, company_name, founder_email, terminal_status, pipeline_stage_id');
         const match = matchCompany(companyRows || [], {
             companyName, senderEmail: ai.founderEmail || '', senderName: m.profileName || '',
         });

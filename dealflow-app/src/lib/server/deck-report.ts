@@ -6,6 +6,7 @@ import { buildDeckReport, type DeckReportGroup, type PitchEmailRow, type Platfor
 import { REPLY_THRESHOLD_DAYS } from '@/lib/email-triage';
 import { collectAttachments, extractSenderInfo, isDeckFile, type AttachmentPart } from './gmail-parse';
 import { sendAsUser } from './gmail-send';
+import { allCompanies } from '@/lib/server/all-companies';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -138,9 +139,8 @@ export async function loadDeckReport(db: SupabaseClient, userId: string, sinceMs
         .gte('received_at', new Date(sinceMs).toISOString())
         .order('received_at', { ascending: false })
         .limit(1000);
-    const { data: companies } = await db.from('companies')
-        .select('id, company_name, founder_email, terminal_status, pipeline_stage_id')
-        .eq('organization_id', ORGANIZATION_ID);
+    const { data: companies } = await allCompanies<PlatformCompany>(db,
+        'id, company_name, founder_email, terminal_status, pipeline_stage_id');
     const { data: stages } = await db.from('pipeline_stages').select('id, name').eq('organization_id', ORGANIZATION_ID);
     const stageNames = Object.fromEntries((stages || []).map((s: { id: string; name: string }) => [s.id, s.name]));
     return buildDeckReport((rows || []) as PitchEmailRow[], (companies || []) as PlatformCompany[], stageNames);

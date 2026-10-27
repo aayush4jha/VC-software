@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireMember, forbidden } from '@/lib/api-auth';
 import { hasAnyPermission } from '@/lib/permissions';
+import { allCompanies } from '@/lib/server/all-companies';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
             .select('id, company_id, user_id, action, details, from_stage_id, to_stage_id, created_at')
             .order('created_at', { ascending: false })
             .limit(limit),
-        db.from('companies').select('id, company_name').eq('organization_id', ORGANIZATION_ID),
+        allCompanies(db, 'id, company_name'),
         db.from('profiles').select('id, name, role').eq('organization_id', ORGANIZATION_ID),
         db.from('pipeline_stages').select('id, name, color').eq('organization_id', ORGANIZATION_ID),
     ]);

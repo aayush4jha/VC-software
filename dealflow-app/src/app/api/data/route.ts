@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { allCompanies } from '@/lib/server/all-companies';
 import { requireMember } from '@/lib/api-auth';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
         { data: investmentVehicles, error: e11 },
         { data: investmentInstruments, error: e12 },
     ] = await Promise.all([
-        db.from('companies').select('*').eq('organization_id', ORGANIZATION_ID).order('created_at', { ascending: false }),
+        allCompanies(db),
         db.from('pipeline_stages').select('*').eq('organization_id', ORGANIZATION_ID).order('order'),
         db.from('industries').select('*').eq('organization_id', ORGANIZATION_ID).order('name'),
         db.from('deal_source_names').select('*').eq('organization_id', ORGANIZATION_ID).order('name'),
