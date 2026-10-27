@@ -500,6 +500,13 @@ export default function CompanyDetail() {
                                     <EditableField fieldKey="founderEmail" value={c.founderEmail} style={{ fontSize: 14, fontWeight: 500, color: 'var(--primary)' }} />
                                 </div>
                                 <div className="form-group">
+                                    <label className="form-label">Ingested Via (Gmail)</label>
+                                    {/* Set by the ingestion, not by hand: it records whose inbox the deal reached. */}
+                                    <div style={{ fontSize: 14, fontWeight: 500, color: c.ingestedByEmail ? undefined : 'var(--text-tertiary)' }}>
+                                        {c.ingestedByEmail || '—'}
+                                    </div>
+                                </div>
+                                <div className="form-group">
                                     <label className="form-label">Analyst</label>
                                     <DropdownField
                                         fieldKey="analystId"

@@ -162,6 +162,19 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No pipeline stages configured' }, { status: 400 });
         }
 
+        // Whose inbox the email came from. Asked of Gmail rather than taken from
+        // the login, since the connected Google account can differ from it.
+        let ingestedByEmail = user.email;
+        try {
+            const authResult = await getAuthenticatedClientForUser(userId);
+            if (authResult) {
+                const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
+                ingestedByEmail = (await gmail.users.getProfile({ userId: 'me' })).data.emailAddress || user.email;
+            }
+        } catch (err) {
+            console.error('[send-to-kanban] could not read the Gmail address:', (err as Error).message);
+        }
+
         // ─── Download attachments and re-analyze with Gemini multimodal ───
         let ai: ExtractedData = extracted || {
             companyName: null, founderName: null, founderEmail: null, companyRound: null,
@@ -336,6 +349,7 @@ export async function POST(request: NextRequest) {
             if (gmailMessageId) {
                 await db.from('ingested_emails').insert({
                     organization_id: ORGANIZATION_ID,
+                    ingested_by_email: ingestedByEmail,
                     gmail_message_id: gmailMessageId,
                     gmail_thread_id: gmailThreadId || null,
                     sender_name: founderName,
@@ -360,6 +374,11 @@ export async function POST(request: NextRequest) {
                 subIndustry: ai.subIndustry, summary: ai.summary,
             }, { userId, source: `email from ${founderEmail}`, label: 'send-to-kanban' });
 
+            // The first inbox it reached keeps the credit; later ones are on the
+            // ingested_emails rows.
+            await db.from('companies').update({ ingested_by_email: ingestedByEmail })
+                .eq('id', match.id).is('ingested_by_email', null);
+
             await db.from('activity_logs').insert({
                 company_id: match.id,
                 user_id: userId,
@@ -378,6 +397,7 @@ export async function POST(request: NextRequest) {
         // Build company insert
         const companyInsert: Record<string, unknown> = {
             organization_id: ORGANIZATION_ID,
+            ingested_by_email: ingestedByEmail,
             company_name: companyName,
             founder_name: founderName,
             founder_email: founderEmail,
@@ -428,6 +448,7 @@ export async function POST(request: NextRequest) {
         if (gmailMessageId) {
             await db.from('ingested_emails').insert({
                 organization_id: ORGANIZATION_ID,
+                ingested_by_email: ingestedByEmail,
                 gmail_message_id: gmailMessageId,
                 gmail_thread_id: gmailThreadId || null,
                 sender_name: founderName,

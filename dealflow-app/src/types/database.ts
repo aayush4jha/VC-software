@@ -156,6 +156,7 @@ export interface Company {
   stageDeadlines: Record<string, string>; // { stageId: ISO date }
   needsReview: boolean;
   ingestionSource: string | null;
+  ingestedByEmail: string | null; // the connected Gmail account the deal arrived in
   // AI fields
   quickSummary: string | null;
   deckAnalysis: DeckAnalysis | null;

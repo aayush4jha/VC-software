@@ -165,6 +165,15 @@ export async function POST(request: NextRequest) {
         const gmail = google.gmail({ version: 'v1', auth: authResult.oauth2Client });
         const db = createServiceClient(supabaseUrl, serviceRoleKey);
 
+        // Whose inbox this run reads. Asked of Gmail rather than taken from the
+        // login, since the connected Google account can differ from it.
+        let ingestedByEmail = user.email;
+        try {
+            ingestedByEmail = (await gmail.users.getProfile({ userId: 'me' })).data.emailAddress || user.email;
+        } catch (err) {
+            console.error('[gmail/ingest] could not read the Gmail address:', (err as Error).message);
+        }
+
         // Get the first pipeline stage by order
         const { data: stages } = await db
             .from('pipeline_stages')
@@ -265,6 +274,7 @@ export async function POST(request: NextRequest) {
                 if (!isRelevant) {
                     await db.from('ingested_emails').insert({
                         organization_id: ORGANIZATION_ID,
+                        ingested_by_email: ingestedByEmail,
                         gmail_message_id: msg.id,
                         gmail_thread_id: msg.threadId || null,
                         sender_name: senderName,
@@ -304,6 +314,7 @@ export async function POST(request: NextRequest) {
                 if (match) {
                     await db.from('ingested_emails').insert({
                         organization_id: ORGANIZATION_ID,
+                        ingested_by_email: ingestedByEmail,
                         gmail_message_id: msg.id,
                         gmail_thread_id: msg.threadId || null,
                         sender_name: founderName,
@@ -338,6 +349,11 @@ export async function POST(request: NextRequest) {
                         subIndustry: ai.subIndustry, summary: ai.summary,
                     }, { userId, source: `email from ${senderEmail}`, label: 'gmail/ingest' });
 
+                    // The first inbox it reached keeps the credit; later ones are
+                    // on the ingested_emails rows.
+                    await db.from('companies').update({ ingested_by_email: ingestedByEmail })
+                        .eq('id', match.id).is('ingested_by_email', null);
+
                     await db.from('activity_logs').insert({
                         company_id: match.id,
                         user_id: userId,
@@ -364,6 +380,7 @@ export async function POST(request: NextRequest) {
 
                 const companyInsert: Record<string, unknown> = {
                     organization_id: ORGANIZATION_ID,
+                    ingested_by_email: ingestedByEmail,
                     company_name: companyName,
                     founder_name: founderName,
                     founder_email: senderEmail,
@@ -401,6 +418,7 @@ export async function POST(request: NextRequest) {
                 if (companyError) {
                     await db.from('ingested_emails').insert({
                         organization_id: ORGANIZATION_ID,
+                        ingested_by_email: ingestedByEmail,
                         gmail_message_id: msg.id,
                         gmail_thread_id: msg.threadId || null,
                         sender_name: founderName,
@@ -432,6 +450,7 @@ export async function POST(request: NextRequest) {
                 // Record in ingested_emails
                 await db.from('ingested_emails').insert({
                     organization_id: ORGANIZATION_ID,
+                    ingested_by_email: ingestedByEmail,
                     gmail_message_id: msg.id,
                     gmail_thread_id: msg.threadId || null,
                     sender_name: founderName,
@@ -481,6 +500,7 @@ export async function POST(request: NextRequest) {
                 try {
                     await db.from('ingested_emails').insert({
                         organization_id: ORGANIZATION_ID,
+                        ingested_by_email: ingestedByEmail,
                         gmail_message_id: msg.id,
                         sender_name: '',
                         sender_email: '',
