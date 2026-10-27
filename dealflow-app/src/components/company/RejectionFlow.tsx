@@ -1,23 +1,23 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Send, Sparkles, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Send, Mail, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { CommunicationMethod } from '@/types/database';
 import { useEscapeKey } from '@/lib/useEscapeKey';
+import { fillTemplate, REJECTION_TEMPLATE } from '@/lib/reply-templates';
 
 const communicationMethods: CommunicationMethod[] = [
     'Email', 'Verbal', 'WhatsApp', 'Call', 'Not Yet Communicated'
 ];
 
 export default function RejectionFlow() {
-    const { showRejectionFlow, setShowRejectionFlow, selectedCompany, rejectionReasonCategories, getStageById, getIndustryById, rejectCompany, user } = useAppContext();
+    const { showRejectionFlow, setShowRejectionFlow, selectedCompany, rejectionReasonCategories, getStageById, rejectCompany, user } = useAppContext();
     const [step, setStep] = useState(1);
     const [selectedReasons, setSelectedReasons] = useState<Record<string, string[]>>({});
     const [commMethod, setCommMethod] = useState<CommunicationMethod>('Not Yet Communicated');
     const [recipientEmail, setRecipientEmail] = useState('');
     const [emailDraft, setEmailDraft] = useState('');
-    const [generatingDraft, setGeneratingDraft] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [sendStatus, setSendStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [statusMessage, setStatusMessage] = useState('');
@@ -27,7 +27,6 @@ export default function RejectionFlow() {
     if (!showRejectionFlow || !selectedCompany) return null;
 
     const stage = getStageById(selectedCompany.pipelineStageId);
-    const industry = getIndustryById(selectedCompany.industryId);
 
     const toggleSubReason = (categoryId: string, subReasonId: string) => {
         const current = selectedReasons[categoryId] || [];
@@ -39,52 +38,14 @@ export default function RejectionFlow() {
 
     const totalSelected = Object.values(selectedReasons).reduce((sum, arr) => sum + arr.length, 0);
 
-    const getReasonNames = () => {
-        return Object.entries(selectedReasons)
-            .filter(([, subs]) => subs.length > 0)
-            .map(([catId]) => {
-                const cat = rejectionReasonCategories.find(c => c.id === catId);
-                return cat?.name;
-            })
-            .filter(Boolean) as string[];
-    };
-
-    const generateEmailDraft = async () => {
-        setGeneratingDraft(true);
+    // The firm sends one rejection, word for word; only the names change.
+    const prepareEmailDraft = () => {
         setRecipientEmail(selectedCompany.founderEmail);
-
-        try {
-            const res = await fetch('/api/ai/rejection-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    companyName: selectedCompany.companyName,
-                    founderName: selectedCompany.founderName,
-                    rejectionReasons: getReasonNames(),
-                    rejectionStage: stage?.name,
-                    industry: industry?.name,
-                }),
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                setEmailDraft(data.emailDraft);
-            } else {
-                // Fallback to template if AI fails
-                const reasons = getReasonNames().join(', ');
-                setEmailDraft(
-                    `Dear ${selectedCompany.founderName},\n\nThank you for sharing ${selectedCompany.companyName}'s journey with us at Dholakia Ventures. We truly appreciate you taking the time to walk us through your vision and progress.\n\nAfter careful consideration by our investment team, we've decided not to proceed with an investment at this time. Our assessment highlighted areas related to ${reasons.toLowerCase()} that don't align with our current investment thesis and criteria.\n\nThis decision does not diminish the value of what you're building. We recognize the hard work and dedication behind ${selectedCompany.companyName}, and we encourage you to continue pursuing your vision.\n\nWe'd love to stay connected and revisit this conversation as your company reaches new milestones. Please don't hesitate to reach out if there are significant developments or if you're raising a future round.\n\nWishing you and the ${selectedCompany.companyName} team all the best.\n\nWarm regards,\nDholakia Ventures`
-                );
-            }
-        } catch {
-            // Fallback to template
-            const reasons = getReasonNames().join(', ');
-            setEmailDraft(
-                `Dear ${selectedCompany.founderName},\n\nThank you for sharing ${selectedCompany.companyName}'s journey with us at Dholakia Ventures. We truly appreciate you taking the time to walk us through your vision and progress.\n\nAfter careful consideration by our investment team, we've decided not to proceed with an investment at this time. Our assessment highlighted areas related to ${reasons.toLowerCase()} that don't align with our current investment thesis and criteria.\n\nWe'd love to stay connected and revisit this conversation as your company reaches new milestones.\n\nWarm regards,\nDholakia Ventures`
-            );
-        }
-
-        setGeneratingDraft(false);
+        setEmailDraft(fillTemplate(REJECTION_TEMPLATE, {
+            senderName: selectedCompany.founderName,
+            companyName: selectedCompany.companyName,
+            signOffName: user?.name,
+        }));
         setStep(3);
     };
 
@@ -219,8 +180,8 @@ export default function RejectionFlow() {
                     {step === 3 && (
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                                <Sparkles size={16} style={{ color: 'var(--primary)' }} />
-                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>AI-Generated Draft</span>
+                                <Mail size={16} style={{ color: 'var(--primary)' }} />
+                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>Rejection Email</span>
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Recipient Email</label>
@@ -273,19 +234,17 @@ export default function RejectionFlow() {
                         </button>
                     )}
                     {step === 2 && (
-                        <button className="btn btn-primary" disabled={generatingDraft} onClick={async () => {
+                        <button className="btn btn-primary" onClick={async () => {
                             if (commMethod === 'Email') {
-                                await generateEmailDraft();
+                                prepareEmailDraft();
                             } else {
                                 const reasons = Object.entries(selectedReasons).filter(([, subs]) => subs.length > 0).map(([catId, subIds]) => ({ categoryId: catId, subReasonIds: subIds }));
                                 await rejectCompany(selectedCompany.id, reasons, commMethod);
                                 handleClose();
                             }
                         }}>
-                            {generatingDraft ? (
-                                <><Loader2 size={14} className="spin" /> Generating Draft...</>
-                            ) : commMethod === 'Email' ? (
-                                <><Sparkles size={14} /> Generate AI Draft</>
+                            {commMethod === 'Email' ? (
+                                <><Mail size={14} /> Prepare Email</>
                             ) : 'Confirm Rejection'}
                         </button>
                     )}

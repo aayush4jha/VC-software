@@ -18,7 +18,25 @@ export interface ReplyTemplate {
     /** Which inbox categories offer it first. Empty means every category. */
     categories: EmailCategory[];
     body: string;
+    /** The line before the name at the end. "Best," when not set. */
+    signOff?: string;
 }
+
+/**
+ * The firm's one rejection, word for word as the team wrote it. The Reject
+ * flow on a company sends this, and the Email Workspace offers it as a reply.
+ */
+export const REJECTION_TEMPLATE: ReplyTemplate = {
+    id: 'deal-pass',
+    label: 'Pass — track for later',
+    categories: ['Deals'],
+    signOff: 'Best Regards',
+    body: `Hi {{first_name}},
+
+Thank you for sharing the latest deck of {{company_name}} company.
+
+At this stage, we would like to stay on the sidelines and track the company's progress for potential alignment in later rounds. We appreciate you taking the time to share this opportunity with us.`,
+};
 
 export const REPLY_TEMPLATES: ReplyTemplate[] = [
     {
@@ -43,6 +61,7 @@ Thanks for reaching out. Could you send across the deck and a short note on what
 
 I will come back to you once I have been through it.`,
     },
+    REJECTION_TEMPLATE,
     {
         id: 'deal-propose-call',
         label: 'Propose a call',
@@ -52,30 +71,6 @@ I will come back to you once I have been through it.`,
 Thanks for sending this over — worth a conversation.
 
 Send me a few times that suit you over the next week and I will get it in the calendar.`,
-    },
-    {
-        id: 'deal-pass-stage',
-        label: 'Pass — too early',
-        categories: ['Deals'],
-        body: `Hi {{first_name}},
-
-Thanks for sharing {{company_name}} with us, and for the time you took to put this together.
-
-It is earlier than where we usually come in, so we will pass for now. Do come back to us once you have a few more quarters of revenue behind you — I would be glad to look again.
-
-Wishing you the best with the raise.`,
-    },
-    {
-        id: 'deal-pass-thesis',
-        label: 'Pass — outside our thesis',
-        categories: ['Deals'],
-        body: `Hi {{first_name}},
-
-Thank you for sending this across, and for thinking of us.
-
-It sits outside what we are focused on at the moment, so we will pass — nothing to do with how the business is built. I hope that is a quick and useful no rather than a long maybe.
-
-All the best with the round.`,
     },
     {
         id: 'deal-revert-later',
@@ -193,12 +188,13 @@ export function fillTemplate(template: ReplyTemplate | string, context: Template
     } else {
         // Drop the phrase the placeholder was carrying, not just the name.
         out = out
-            .replace(/\s*(?:at|with|for|of)\s+\{\{\s*company_name\s*\}\}/gi, '')
+            .replace(/\s*(?:at|with|for|of)\s+\{\{\s*company_name\s*\}\}(?:\s+company\b)?/gi, '')
             .replace(/\{\{\s*company_name\s*\}\}/gi, 'this');
     }
 
     const sign = (context.signOffName || '').trim();
-    return `${out.trim()}\n\nBest,${sign ? `\n${sign}` : ''}`;
+    const close = typeof template === 'string' ? 'Best,' : template.signOff || 'Best,';
+    return `${out.trim()}\n\n${close}${sign ? `\n${sign}` : ''}`;
 }
 
 /**

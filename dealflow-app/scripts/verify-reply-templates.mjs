@@ -3,7 +3,7 @@
 // The point of a template is that it can be sent as it stands. So: no blank
 // left where a name should be, no stray placeholder, and a sign-off every time.
 
-import { REPLY_TEMPLATES, fillTemplate, templatesFor }
+import { REPLY_TEMPLATES, REJECTION_TEMPLATE, fillTemplate, templatesFor }
     from '../.templates-test/reply-templates.mjs';
 
 let pass = 0, fail = 0;
@@ -39,10 +39,24 @@ for (const t of REPLY_TEMPLATES) {
     const out = fillTemplate(t, { senderName: 'Ravi Mehta', companyName: 'Acme', signOffName: 'Aayush' });
     const bare = fillTemplate(t, {});
     const ok = !/\{\{/.test(out) && !/\{\{/.test(bare)
-        && out.startsWith('Hi ') && out.includes('Best,')
+        && out.startsWith('Hi ') && out.endsWith(`${t.signOff || 'Best,'}\nAayush`)
         && !/\s[.,]/.test(bare.replace(/\n/g, ' ').replace(/  +/g, ' '));
     check(`${t.id} survives both a full and an empty context`, ok, true);
 }
+
+console.log('— the rejection —');
+const rejection = fillTemplate(REJECTION_TEMPLATE, { senderName: 'Ravi Mehta', companyName: 'Snaplearn', signOffName: 'Yash Goyal' });
+check('is the team\'s text, filled in', rejection, `Hi Ravi,
+
+Thank you for sharing the latest deck of Snaplearn company.
+
+At this stage, we would like to stay on the sidelines and track the company's progress for potential alignment in later rounds. We appreciate you taking the time to share this opportunity with us.
+
+Best Regards
+Yash Goyal`);
+check('with no company, the sentence still reads',
+    fillTemplate(REJECTION_TEMPLATE, {}).split('\n')[2], 'Thank you for sharing the latest deck.');
+check('is offered for deals', templatesFor('Deals').includes(REJECTION_TEMPLATE), true);
 
 console.log('— the set itself —');
 check('ids are unique', new Set(REPLY_TEMPLATES.map(t => t.id)).size, REPLY_TEMPLATES.length);
