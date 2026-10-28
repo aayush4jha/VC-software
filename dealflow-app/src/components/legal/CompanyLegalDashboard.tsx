@@ -13,6 +13,7 @@ import {
 } from '@/lib/sha-grid';
 import { toCsv, exportFilename } from '@/lib/csv-export';
 import EditableCell from '@/components/common/EditableCell';
+import { syncRightsFromGrid } from '@/lib/legal-data';
 import type { CellMatrix } from '@/lib/legal-import';
 
 interface StoredGrid {
@@ -132,6 +133,10 @@ export default function CompanyLegalDashboard({ companyId, companyName, onImport
             setNeedsMigration(false);
             setStored(j.current || null);
             setHistory(j.history || []);
+            // The Rights tab is filled from the same sheet. Done on load rather
+            // than only on upload, so a grid uploaded before this existed, or
+            // from someone else's browser, reaches it too.
+            if (j.current) void syncRightsFromGrid(companyId, j.current);
         } catch (e) {
             setProblem((e as Error).message);
         } finally {

@@ -224,7 +224,14 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                         </tr>
                     </thead>
                     <tbody>
-                        {RIGHT_DEFINITIONS.map((def, idx) => {
+                        {[
+                            ...RIGHT_DEFINITIONS,
+                            // Rights the uploaded SHA grid has that the list above does not.
+                            ...record.rights.filter(r => r.name && !RIGHT_DEFINITIONS.some(d => d.id === r.rightId)).map(r => ({
+                                id: r.rightId, name: r.name!, category: 'From SHA grid',
+                                description: 'Added from the uploaded SHA grid.', triggersWhen: '—', whoBenefits: '—', negotiationNote: '—',
+                            })),
+                        ].map((def, idx) => {
                             const row = record.rights.find(r => r.rightId === def.id);
                             if (!row) return null;
                             const critical = isRightCritical(def.id);
@@ -279,6 +286,8 @@ export default function RightsMatrix({ record, onUpdate }: Props) {
                                                         <option value="">—</option>
                                                         <option value="Yes">Yes</option>
                                                         <option value="No">No</option>
+                                                        {/* What the SHA grid says, when it says more than Yes or No. */}
+                                                        {value && value !== 'Yes' && value !== 'No' && <option value={value}>{value}</option>}
                                                     </select>
                                                 </td>
                                             );

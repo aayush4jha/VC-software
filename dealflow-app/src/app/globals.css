@@ -4837,6 +4837,13 @@ textarea.inline-input {
 .doc-section:last-child {
   border-bottom: none;
 }
+.doc-checklist { display: flex; flex-direction: column; border: 1px solid var(--border-light); border-radius: var(--radius-md); overflow: hidden; }
+.doc-check-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 14px; color: var(--text-primary); cursor: pointer; border-bottom: 1px solid var(--border-light); }
+.doc-check-row:last-child { border-bottom: none; }
+.doc-check-row:hover { background: var(--bg-tertiary); }
+.doc-check-row input { width: 16px; height: 16px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+.doc-check-name.received { color: var(--text-tertiary); text-decoration: line-through; }
+
 .doc-list {
   display: flex;
   flex-direction: column;

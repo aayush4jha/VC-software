@@ -3,6 +3,9 @@
 
 // ─── Types ────────────────────────────────────────
 
+import { trackerKeyFor, type ShaGrid, type GridRight } from './sha-grid';
+import { normalizeLabel } from './legal-import';
+
 export type LegalStageId =
     | 'term_sheet_reviewed'
     | 'terms_negotiation'
@@ -43,6 +46,8 @@ export interface RightRow {
     shaStatus: Record<string, RightPresence | null>; // keyed by SHA version id (derived from shaRemarks)
     shaRemarks: Record<string, string>; // free text per SHA version
     extra?: Record<string, string>;
+    /** A right the uploaded SHA grid has and RIGHT_DEFINITIONS does not: its name as the sheet writes it. */
+    name?: string;
 }
 
 export interface SHAVersion {
@@ -114,6 +119,8 @@ export interface LegalRecord {
     postInvestment: PostInvestmentData;
     shaSections: SHASection[];
     documents: LegalDocument[];
+    /** Which uploaded SHA grid (and corrections) the Rights tab was last filled from. */
+    gridSync?: string;
     createdAt: string;
     updatedAt: string;
 }
@@ -517,8 +524,17 @@ async function push(records: RecordMap): Promise<void> {
  * On the first run after this shipped the server is empty and this browser may
  * hold the only copy, so that copy is pushed up rather than lost.
  */
-export async function hydrateLegalRecords(): Promise<void> {
-    if (hydrated || !isBrowser()) return;
+let hydration: Promise<void> | null = null;
+
+export function hydrateLegalRecords(): Promise<void> {
+    if (!isBrowser()) return Promise.resolve();
+    // Every caller gets the same fetch, so one that has to act on the
+    // server's copy can wait for it rather than for whoever started it.
+    hydration ??= fetchLegalRecords();
+    return hydration;
+}
+
+async function fetchLegalRecords(): Promise<void> {
     hydrated = true;
     try {
         const res = await fetch('/api/legal/records');
@@ -670,8 +686,7 @@ export function getMissingMustHaveRights(record: LegalRecord): { rightId: string
         if (!isMustHaveForAnyTier) return;
         const status = presenceForVersion(row, current);
         if (status !== 'present') {
-            const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
-            if (def) missing.push({ rightId: row.rightId, rightName: def.name });
+            missing.push({ rightId: row.rightId, rightName: rightName(row) });
         }
     });
 
@@ -733,20 +748,168 @@ export function detectRightsChanges(
     return record.rights.map(row => {
         const from = presenceForVersion(row, fromVersionId);
         const to = presenceForVersion(row, toVersionId);
-        const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
         let change: 'ADDED' | 'REMOVED' | 'MODIFIED' | 'UNCHANGED' = 'UNCHANGED';
         if (from !== 'present' && to === 'present') change = 'ADDED';
         else if (from === 'present' && to !== 'present') change = 'REMOVED';
         else if (from !== to) change = 'MODIFIED';
         return {
             rightId: row.rightId,
-            rightName: def?.name || row.rightId,
+            rightName: rightName(row),
             from,
             to,
             change,
             remark: row.shaRemarks[toVersionId] || '',
         };
     });
+}
+
+/** What a right is called: its definition's name, or the sheet's for one only the sheet has. */
+export function rightName(row: RightRow): string {
+    return RIGHT_DEFINITIONS.find(d => d.id === row.rightId)?.name || row.name || row.rightId;
+}
+
+// ─── From the uploaded SHA grid ───────────────────
+//
+// The SHA Grid tab shows the sheet as uploaded; the Rights tab is the same
+// rights laid out against what we need. An upload fills the Rights tab too, so
+// the two tabs do not say different things about the same company.
+
+/** Rights the tracker has no slot for but the Rights tab does. Exact names first. */
+const RIGHTS_TAB_SYNONYMS: Record<string, string[]> = {
+    founder_exit_rofr: ['rofr', 'right first refusal', 'founder exit rofr'],
+    founder_vesting: ['founder vesting', 'vesting'],
+    esop_safeguard: ['esop safeguard', 'esop'],
+    mfn: ['mfn', 'most favoured nation', 'most favored nation', 'more favoured terms', 'more favored terms'],
+};
+
+/** Where a right in the sheet goes on the Rights tab; a right the tab does not list gets a row of its own. */
+export function rightIdForSheetRight(name: string): string {
+    const norm = normalizeLabel(name);
+    for (const [id, names] of Object.entries(RIGHTS_TAB_SYNONYMS)) {
+        if (names.includes(norm)) return id;
+    }
+    const tracked = trackerKeyFor(name);
+    if (tracked) return tracked === 'exit_rights' ? 'minimum_exit_irr' : tracked;
+    for (const [id, names] of Object.entries(RIGHTS_TAB_SYNONYMS)) {
+        if (names.some(n => norm.includes(n))) return id;
+    }
+    return `sheet_${norm.replace(/\s+/g, '_') || 'right'}`;
+}
+
+/** The Rights tab's investor tier a sheet column belongs to, if any. */
+function tierForColumn(label: string): InvestorTier | null {
+    const norm = normalizeLabel(label);
+    if (/\blead\b/.test(norm)) return 'lead';
+    if (/\blarge\b/.test(norm)) return 'large';
+    if (/\bangel\b/.test(norm)) return 'angel';
+    if (/\binvestor\b/.test(norm)) return 'investor';
+    return null;
+}
+
+const GRID_VERSION = 'grid_';
+
+/**
+ * The record with its Rights tab filled from an uploaded SHA grid.
+ *
+ * Each of the sheet's SHA/amendment columns becomes an SHA version column,
+ * replacing the columns the previous upload made; each Lead / Large / Angel /
+ * Investor column fills that tier; remarks come across. A right the tab does
+ * not list is added under the sheet's name. Versions someone added by hand,
+ * and rights the sheet does not mention, are left as they are.
+ *
+ * overrides are the corrections made on the SHA Grid tab, keyed
+ * "<right name>::<column key>", and win over the sheet as they do there.
+ */
+export function applyShaGrid(record: LegalRecord, grid: ShaGrid, overrides: Record<string, string> = {}): LegalRecord {
+    const cell = (right: GridRight, columnKey: string) =>
+        (overrides[`${right.name}::${columnKey}`] ?? right.cells[columnKey]?.value ?? '').trim();
+    const versionCols = grid.columns.filter(c => c.kind === 'version');
+    const tierCols = grid.columns
+        .filter(c => c.kind === 'tier')
+        .map(c => ({ key: c.key, tier: tierForColumn(c.label) }))
+        .filter((c): c is { key: string; tier: InvestorTier } => c.tier !== null);
+
+    const withoutGridVersions = <T,>(byVersion: Record<string, T>) =>
+        Object.fromEntries(Object.entries(byVersion).filter(([id]) => !id.startsWith(GRID_VERSION))) as Record<string, T>;
+
+    // Versions: the sheet's, after any added by hand or with something
+    // written in them. The three placeholder versions every record starts
+    // with go, unless someone used them.
+    const used = (id: string) => record.rights.some(r => (r.shaRemarks[id] || '').trim());
+    const kept = record.shaVersions.filter(v => !v.id.startsWith(GRID_VERSION) && (v.id.startsWith('custom_') || used(v.id)));
+    const fromSheet: SHAVersion[] = versionCols.map(c => ({
+        id: `${GRID_VERSION}${c.key}`,
+        label: c.subLabel ? `${c.label} · ${c.subLabel}` : c.label,
+        date: '',
+    }));
+    let shaVersions = [...kept, ...fromSheet];
+    if (shaVersions.length === 0) shaVersions = record.shaVersions.filter(v => !v.id.startsWith(GRID_VERSION));
+    if (shaVersions.length === 0) shaVersions = [...DEFAULT_SHA_VERSIONS];
+
+    // The sheet appends a column per amendment, so the rightmost one with
+    // anything in it is the SHA in force.
+    const filled = [...versionCols].reverse().find(c => grid.rights.some(r => cell(r, c.key)));
+    const currentSHAVersion = filled ? `${GRID_VERSION}${filled.key}`
+        : shaVersions.some(v => v.id === record.currentSHAVersion) ? record.currentSHAVersion
+        : shaVersions[shaVersions.length - 1].id;
+
+    const rights = record.rights.map(r => ({
+        ...r, shaStatus: withoutGridVersions(r.shaStatus), shaRemarks: withoutGridVersions(r.shaRemarks),
+    }));
+    const seen = new Set<string>();
+    for (const right of grid.rights) {
+        const id = rightIdForSheetRight(right.name);
+        if (seen.has(id)) continue;
+        seen.add(id);
+
+        let row = rights.find(r => r.rightId === id);
+        if (!row) {
+            row = {
+                ...createDefaultRightRow(id),
+                // Whether we need a right we have never listed is for the
+                // team to say, not to be assumed into a "critical" alert.
+                requiredBy: { lead: 'situational', large: 'situational', angel: 'situational', investor: 'situational' },
+                name: right.name,
+            };
+            rights.push(row);
+        }
+        for (const v of versionCols) {
+            const text = cell(right, v.key);
+            row.shaRemarks[`${GRID_VERSION}${v.key}`] = text;
+            row.shaStatus[`${GRID_VERSION}${v.key}`] = inferPresenceFromText(text);
+        }
+        // Two columns for one tier: the first with anything in it.
+        const byTier: Partial<Record<InvestorTier, string>> = {};
+        for (const t of tierCols) byTier[t.tier] = byTier[t.tier] || cell(right, t.key);
+        row.requiredByText = { ...row.requiredByText, ...byTier };
+        if (right.remarks.trim()) row.remarks = right.remarks.trim();
+    }
+
+    return { ...record, shaVersions, currentSHAVersion, rights };
+}
+
+/** A short fingerprint, so an unchanged grid is not applied twice. */
+function fingerprint(text: string): string {
+    let h = 0;
+    for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+}
+
+/**
+ * Fills the company's Rights tab from its newest uploaded grid, once per
+ * upload (and again after a correction on the SHA Grid tab). Waits for the
+ * server's copy of the record first: filling the browser's possibly stale one
+ * would push it back over everyone else's.
+ */
+export async function syncRightsFromGrid(
+    companyId: string,
+    stored: { id: string; grid: ShaGrid; overrides?: Record<string, string> },
+): Promise<void> {
+    if (!stored?.grid?.rights?.length) return;
+    await hydrateLegalRecords();
+    const marker = `${stored.id}:${fingerprint(JSON.stringify(stored.overrides ?? {}))}`;
+    if (getLegalRecord(companyId).gridSync === marker) return;
+    updateLegalRecord(companyId, r => ({ ...applyShaGrid(r, stored.grid, stored.overrides), gridSync: marker }));
 }
 
 // ─── Subscribe to storage updates ─────────────────

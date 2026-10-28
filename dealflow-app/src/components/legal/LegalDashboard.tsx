@@ -13,7 +13,7 @@ import { getCompanyFinancials } from '@/lib/company-financials';
 import {
     type LegalRecord,
     type InvestorTier,
-    RIGHT_DEFINITIONS,
+    rightName,
     INVESTOR_TIERS,
     presenceForVersion,
     inferPresenceFromText,
@@ -114,8 +114,6 @@ export default function LegalDashboard({ company, record }: Props) {
     const rightsWeHave = useMemo(() => {
         const items: { id: string; name: string; remark: string }[] = [];
         record.rights.forEach(row => {
-            const def = RIGHT_DEFINITIONS.find(d => d.id === row.rightId);
-            if (!def) return;
 
             const shaRemark = (row.shaRemarks[record.currentSHAVersion] || '').trim();
             const shaPresent = presenceForVersion(row, record.currentSHAVersion) === 'present';
@@ -133,7 +131,7 @@ export default function LegalDashboard({ company, record }: Props) {
                 // tier was marked Yes so the user can trace the source.
                 const remark = shaRemark
                     || (tierYes ? `${INVESTOR_TIERS.find(t => t.id === tierYes.tier)?.label}: ${tierYes.value}` : '');
-                items.push({ id: def.id, name: def.name, remark });
+                items.push({ id: row.rightId, name: rightName(row), remark });
             }
         });
         return items;
