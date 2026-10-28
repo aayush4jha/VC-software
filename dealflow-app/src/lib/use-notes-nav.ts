@@ -3,7 +3,8 @@
 import { useCallback } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-export type NotesPage = 'notes' | 'brief' | 'detailed';
+/** 'notes' for the Notes window, else the key of a page beneath it ('brief', 'detailed', or a new page's id). */
+export type NotesPage = string;
 
 /**
  * Opens and closes a company's notes dialog, over whatever page you are on.
@@ -42,6 +43,6 @@ export function useNotesInUrl(): { companyId: string | null; page: NotesPage } {
     const page = params.get('notesPage');
     return {
         companyId: params.get('notes'),
-        page: page === 'brief' || page === 'detailed' ? page : 'notes',
+        page: page && /^[\w-]{1,64}$/.test(page) ? page : 'notes',
     };
 }

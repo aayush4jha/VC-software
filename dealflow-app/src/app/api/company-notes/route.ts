@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireMember } from '@/lib/api-auth';
-import { NOTE_KINDS, notesDb, missingTable, NEEDS_MIGRATION, actorName, ORGANIZATION_ID } from '@/lib/server/company-notes';
+import { listSubpages, isLivePage, notesDb, missingTable, NEEDS_MIGRATION, actorName, ORGANIZATION_ID } from '@/lib/server/company-notes';
 
 /**
- * GET ?companyId= — the company's three note pages and its comment thread.
- * A page nobody has written yet comes back empty, not missing.
+ * GET ?companyId= — the company's Notes page, the pages beneath it (the list,
+ * and each one's text), and its comment thread. A page nobody has written yet
+ * comes back empty, not missing.
  */
 export async function GET(request: NextRequest) {
     const auth = await requireMember(request);
@@ -15,20 +16,22 @@ export async function GET(request: NextRequest) {
     const companyId = new URL(request.url).searchParams.get('companyId');
     if (!companyId) return NextResponse.json({ error: 'Missing companyId' }, { status: 400 });
 
-    const [pages, comments] = await Promise.all([
+    const [pages, comments, list] = await Promise.all([
         db.from('company_note_pages').select('kind, content, updated_by_name, updated_at').eq('company_id', companyId),
         db.from('company_note_comments').select('id, author_id, author_name, body, attachments, created_at')
             .eq('company_id', companyId).order('created_at'),
+        listSubpages(db, companyId),
     ]);
-    const error = pages.error || comments.error;
+    const error = pages.error?.message || comments.error?.message || list.error;
     if (error) {
-        if (missingTable(error.message)) return NextResponse.json(NEEDS_MIGRATION);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        if (missingTable(error)) return NextResponse.json(NEEDS_MIGRATION);
+        return NextResponse.json({ error }, { status: 500 });
     }
 
     const byKind = Object.fromEntries((pages.data || []).map(p => [p.kind, p]));
     return NextResponse.json({
-        pages: Object.fromEntries(NOTE_KINDS.map(kind => [kind, {
+        subpages: list.subpages,
+        pages: Object.fromEntries(['notes', ...list.subpages.map(p => p.key)].map(kind => [kind, {
             content: byKind[kind]?.content ?? null,
             updatedByName: byKind[kind]?.updated_by_name ?? null,
             updatedAt: byKind[kind]?.updated_at ?? null,
@@ -55,8 +58,11 @@ export async function PUT(request: NextRequest) {
     if (!db) return NextResponse.json({ error: 'Server config missing' }, { status: 500 });
 
     const { companyId, kind, content, baseUpdatedAt, force } = await request.json();
-    if (!companyId || !NOTE_KINDS.includes(kind) || typeof content !== 'object' || content === null) {
+    if (!companyId || typeof kind !== 'string' || typeof content !== 'object' || content === null) {
         return NextResponse.json({ error: 'companyId, kind and content are required' }, { status: 400 });
+    }
+    if (!(await isLivePage(db, companyId, kind))) {
+        return NextResponse.json({ error: 'This page has been deleted' }, { status: 404 });
     }
 
     const { data: current, error: readError } = await db.from('company_note_pages')

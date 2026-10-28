@@ -97,14 +97,14 @@ function B({ on, title, onClick, disabled, children }: {
 }
 
 /**
- * One note page — Notes, Brief or Detailed Note — edited in place and saved as
+ * One note page — Notes, or a page beneath it — edited in place and saved as
  * you go. A second before the last keystroke the page is sent; if someone else
  * saved it in the meantime, the save is refused and both versions are offered
  * rather than one quietly replacing the other.
  */
 export default function NoteEditor({ companyId, kind, initial, placeholder }: {
     companyId: string;
-    kind: 'notes' | 'brief' | 'detailed';
+    kind: string;
     initial: NotePageData;
     placeholder: string;
 }) {

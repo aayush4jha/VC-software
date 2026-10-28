@@ -1,18 +1,24 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronRight, FileText, Paperclip, Send, Trash2, Loader2, X, MessageSquare } from 'lucide-react';
+import { ChevronRight, FileText, Paperclip, Send, Trash2, Loader2, X, MessageSquare, Pencil, Plus } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { uploadCompanyFile, noteFileUrl, formatBytes, type UploadedFile } from '@/lib/upload-company-file';
 import { useNotesInUrl, useOpenNotes } from '@/lib/use-notes-nav';
 import NoteEditor, { type NotePageData } from './NoteEditor';
 
-export type NoteKind = 'notes' | 'brief' | 'detailed';
+/** What an empty page suggests writing. Brief and Detailed have their own. */
+const PLACEHOLDERS: Record<string, string> = {
+    brief: 'A short brief: what they do, the round, and why it is interesting or not…',
+    detailed: 'The full note: executive summary, traction, fundraise, team, risks… Add tables, images and files from the toolbar.',
+};
+const DEFAULT_PLACEHOLDER = 'Write here — tables, images and files from the toolbar, or paste and drop them in…';
 
-export const SUB_PAGES: { kind: Exclude<NoteKind, 'notes'>; title: string; placeholder: string }[] = [
-    { kind: 'brief', title: 'Brief', placeholder: 'A short brief: what they do, the round, and why it is interesting or not…' },
-    { kind: 'detailed', title: 'Detailed Note', placeholder: 'The full note: executive summary, traction, fundraise, team, risks… Add tables, images and files from the toolbar.' },
-];
+/** A page beneath the Notes window: Brief, Detailed Note, or one the team added. */
+interface Subpage {
+    key: string;
+    title: string;
+}
 
 interface Comment {
     id: string;
@@ -24,7 +30,9 @@ interface Comment {
 }
 
 interface NotesData {
-    pages: Record<NoteKind, NotePageData>;
+    /** Keyed by 'notes' or a subpage's key. */
+    pages: Record<string, NotePageData>;
+    subpages: Subpage[];
     comments: Comment[];
 }
 
@@ -33,7 +41,7 @@ interface NotesData {
  * opened on what was loaded before its last save would take its own save for
  * someone else's and report a conflict.
  */
-function useNotes(companyId: string, page: NoteKind) {
+function useNotes(companyId: string, page: string) {
     const [data, setData] = useState<NotesData | null>(null);
     const [error, setError] = useState<string | null>(null);
     useEffect(() => {
@@ -42,7 +50,7 @@ function useNotes(companyId: string, page: NoteKind) {
             .then(r => r.json())
             .then(j => {
                 if (cancelled) return;
-                if (j.pages) setData({ pages: j.pages, comments: j.comments || [] });
+                if (j.pages) setData({ pages: j.pages, subpages: j.subpages || [], comments: j.comments || [] });
                 else setError(j.error || 'Could not load the notes');
             })
             .catch(err => { if (!cancelled) setError((err as Error).message); });
@@ -97,7 +105,7 @@ export function NotesDialog() {
     // Keyed so moving between pages starts each one fresh.
     return nav.page === 'notes'
         ? <NotesHome key={`${nav.companyId}-notes`} companyId={nav.companyId} />
-        : <NoteSubPage key={`${nav.companyId}-${nav.page}`} companyId={nav.companyId} kind={nav.page} />;
+        : <NoteSubPage key={`${nav.companyId}-${nav.page}`} companyId={nav.companyId} pageKey={nav.page} />;
 }
 
 function useCompany(companyId: string) {
@@ -115,7 +123,7 @@ function Status({ loading, error, data, needsCompany }: { loading: boolean; erro
     return null;
 }
 
-/** The Notes window: the company at a glance, its comments, its two pages, and free notes. */
+/** The Notes window: the company at a glance, its comments, its pages, and free notes. */
 function NotesHome({ companyId }: { companyId: string }) {
     const { company, user, loading } = useCompany(companyId);
     const { data, error, setData } = useNotes(companyId, 'notes');
@@ -152,20 +160,12 @@ function NotesHome({ companyId }: { companyId: string }) {
                 onChange={comments => setData(d => d && { ...d, comments })}
             />
 
-            <div className="notes-subpages">
-                {SUB_PAGES.map(p => {
-                    const page = data.pages[p.kind];
-                    return (
-                        <button type="button" key={p.kind} onClick={() => nav.open(companyId, p.kind)} className="notes-subpage-link">
-                            <FileText size={17} />
-                            <span className="notes-subpage-title">{p.title}</span>
-                            <span className="notes-subpage-meta">
-                                {page.updatedAt ? `Edited ${when(page.updatedAt)}${page.updatedByName ? ` by ${page.updatedByName}` : ''}` : 'Empty'}
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
+            <Subpages
+                companyId={companyId}
+                subpages={data.subpages}
+                pages={data.pages}
+                onChange={subpages => setData(d => d && { ...d, subpages })}
+            />
 
             <NoteEditor companyId={companyId} kind="notes" initial={data.pages.notes}
                 placeholder="Notes on this company — tables, images and files from the toolbar, or paste and drop them in…" />
@@ -173,27 +173,156 @@ function NotesHome({ companyId }: { companyId: string }) {
     );
 }
 
-/** Brief or Detailed Note: one document, the whole window. */
-function NoteSubPage({ companyId, kind }: { companyId: string; kind: Exclude<NoteKind, 'notes'> }) {
+/** A page beneath Notes — Brief, Detailed Note or one of the team's: one document, the whole window. */
+function NoteSubPage({ companyId, pageKey }: { companyId: string; pageKey: string }) {
     const { company, loading } = useCompany(companyId);
-    const { data, error } = useNotes(companyId, kind);
-    const page = SUB_PAGES.find(p => p.kind === kind)!;
+    const { data, error } = useNotes(companyId, pageKey);
+    const page = data?.subpages.find(p => p.key === pageKey);
     const nav = useOpenNotes();
 
     const crumbs = [
         { label: company?.companyName || 'Company', onClick: () => nav.open(companyId) },
         { label: 'Notes', onClick: () => nav.open(companyId) },
-        { label: page.title },
+        { label: page?.title || 'Page' },
     ];
     const status = <Status loading={loading} error={error} data={data} needsCompany={!loading && !company} />;
     if (!company || !data) return <NotesFrame crumbs={crumbs} onClose={nav.close}>{status}</NotesFrame>;
+    if (!page) {
+        return (
+            <NotesFrame crumbs={crumbs} onClose={nav.close}>
+                <div className="notes-message">This page has been deleted.</div>
+            </NotesFrame>
+        );
+    }
 
     return (
         <NotesFrame crumbs={crumbs} onClose={nav.close}>
             <h1 className="notes-title">{page.title}</h1>
             <div className="notes-subtitle">{company.companyName}</div>
-            <NoteEditor companyId={companyId} kind={kind} initial={data.pages[kind]} placeholder={page.placeholder} />
+            <NoteEditor companyId={companyId} kind={pageKey} initial={data.pages[pageKey]}
+                placeholder={PLACEHOLDERS[pageKey] || DEFAULT_PLACEHOLDER} />
         </NotesFrame>
+    );
+}
+
+/**
+ * The pages beneath Notes, each opening on its own, with a way to add one and
+ * to rename or delete any of them — Brief and Detailed included.
+ */
+function Subpages({ companyId, subpages, pages, onChange }: {
+    companyId: string;
+    subpages: Subpage[];
+    pages: Record<string, NotePageData>;
+    onChange: (subpages: Subpage[]) => void;
+}) {
+    const nav = useOpenNotes();
+    const [renaming, setRenaming] = useState<string | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const call = async (method: string, body?: object, query?: string) => {
+        setBusy(true);
+        setError(null);
+        const res = await fetch(`/api/company-notes/subpages${query ? `?${query}` : ''}`, {
+            method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body),
+        });
+        const j = await res.json().catch(() => ({}));
+        setBusy(false);
+        if (!res.ok) { setError(j.error || `Could not save (HTTP ${res.status})`); return null; }
+        return j;
+    };
+
+    const create = async (title: string) => {
+        setCreating(false);
+        const j = await call('POST', { companyId, title });
+        if (!j?.subpage) return;
+        onChange([...subpages, j.subpage]);
+        nav.open(companyId, j.subpage.key);
+    };
+
+    const rename = async (p: Subpage, title: string) => {
+        setRenaming(null);
+        if (title === p.title) return;
+        const j = await call('PATCH', { companyId, key: p.key, title });
+        if (j?.subpage) onChange(subpages.map(x => x.key === p.key ? j.subpage : x));
+    };
+
+    const remove = async (p: Subpage) => {
+        if (!window.confirm(`Delete "${p.title}" and everything written in it? This cannot be undone.`)) return;
+        const j = await call('DELETE', undefined, new URLSearchParams({ companyId, key: p.key }).toString());
+        if (j) onChange(subpages.filter(x => x.key !== p.key));
+    };
+
+    return (
+        <div className="notes-subpages">
+            {subpages.map(p => {
+                if (renaming === p.key) {
+                    return <TitleInput key={p.key} initial={p.title} onDone={t => rename(p, t)} onCancel={() => setRenaming(null)} />;
+                }
+                const page = pages[p.key];
+                return (
+                    <div key={p.key} className="notes-subpage-row">
+                        <button type="button" onClick={() => nav.open(companyId, p.key)} className="notes-subpage-link">
+                            <FileText size={17} />
+                            <span className="notes-subpage-title">{p.title}</span>
+                            <span className="notes-subpage-meta">
+                                {page?.updatedAt ? `Edited ${when(page.updatedAt)}${page.updatedByName ? ` by ${page.updatedByName}` : ''}` : 'Empty'}
+                            </span>
+                        </button>
+                        <button type="button" className="notes-subpage-action" title="Rename" aria-label={`Rename ${p.title}`}
+                            disabled={busy} onClick={() => setRenaming(p.key)}>
+                            <Pencil size={14} />
+                        </button>
+                        <button type="button" className="notes-subpage-action notes-subpage-delete" title="Delete" aria-label={`Delete ${p.title}`}
+                            disabled={busy} onClick={() => remove(p)}>
+                            <Trash2 size={14} />
+                        </button>
+                    </div>
+                );
+            })}
+            {creating
+                ? <TitleInput initial="" placeholder="Name the new page, then press Enter" onDone={create} onCancel={() => setCreating(false)} />
+                : (
+                    <button type="button" className="notes-subpage-new" disabled={busy} onClick={() => setCreating(true)}>
+                        {busy ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} New page
+                    </button>
+                )}
+            {error && <div className="notes-subpage-error">{error}</div>}
+        </div>
+    );
+}
+
+/** A page name being typed: Enter or clicking away keeps it, Escape (or leaving it blank) drops it. */
+function TitleInput({ initial, placeholder, onDone, onCancel }: {
+    initial: string;
+    placeholder?: string;
+    onDone: (title: string) => void;
+    onCancel: () => void;
+}) {
+    const [value, setValue] = useState(initial);
+    // Enter unmounts the input, which blurs it: without this it would finish twice.
+    const finished = useRef(false);
+    const finish = (keep: boolean) => {
+        if (finished.current) return;
+        finished.current = true;
+        const title = value.trim();
+        if (keep && title) onDone(title); else onCancel();
+    };
+    return (
+        <div className="notes-subpage-row notes-subpage-editing">
+            <FileText size={17} />
+            <input
+                autoFocus value={value} placeholder={placeholder} maxLength={120}
+                onChange={e => setValue(e.target.value)}
+                onFocus={e => e.target.select()}
+                onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+                }}
+                onBlur={() => finish(true)}
+            />
+        </div>
     );
 }
 
