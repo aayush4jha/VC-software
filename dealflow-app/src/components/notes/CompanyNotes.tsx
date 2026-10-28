@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, ChevronRight, FileText, Paperclip, Send, Trash2, Loader2, X, MessageSquare } from 'lucide-react';
+import { ChevronRight, FileText, Paperclip, Send, Trash2, Loader2, X, MessageSquare } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { uploadCompanyFile, noteFileUrl, formatBytes, type UploadedFile } from '@/lib/upload-company-file';
+import { useNotesInUrl, useOpenNotes } from '@/lib/use-notes-nav';
 import NoteEditor, { type NotePageData } from './NoteEditor';
 
 export type NoteKind = 'notes' | 'brief' | 'detailed';
@@ -28,8 +28,12 @@ interface NotesData {
     comments: Comment[];
 }
 
-/** Loads a company's pages and comments once; the editors and thread own them after that. */
-function useNotes(companyId: string) {
+/**
+ * Loads a company's pages and comments. Again on every page change: an editor
+ * opened on what was loaded before its last save would take its own save for
+ * someone else's and report a conflict.
+ */
+function useNotes(companyId: string, page: NoteKind) {
     const [data, setData] = useState<NotesData | null>(null);
     const [error, setError] = useState<string | null>(null);
     useEffect(() => {
@@ -43,7 +47,7 @@ function useNotes(companyId: string) {
             })
             .catch(err => { if (!cancelled) setError((err as Error).message); });
         return () => { cancelled = true; };
-    }, [companyId]);
+    }, [companyId, page]);
     return { data, error, setData };
 }
 
@@ -53,31 +57,47 @@ function when(iso: string | null): string {
 }
 
 /**
- * The full-screen frame: no sidebar, a way back, and where you are. Notes are
- * read and written at length, so they get the whole window.
+ * The dialog: large, over the page you were on, which stays where you left it.
+ * Closing it — the cross, the backdrop or Back — saves what is pending first
+ * (the editor flushes on unmount).
  */
-function NotesShell({ crumbs, children }: {
-    crumbs: { label: string; href?: string }[];
+function NotesFrame({ crumbs, onClose, children }: {
+    crumbs: { label: string; onClick?: () => void }[];
+    onClose: () => void;
     children: React.ReactNode;
 }) {
     return (
-        <div className="notes-shell">
-            <header className="notes-topbar">
-                <Link href="/dealflow" className="notes-back"><ArrowLeft size={15} /> Deal Flow</Link>
-                <nav className="notes-crumbs" aria-label="Breadcrumb">
-                    {crumbs.map((c, i) => (
-                        <React.Fragment key={i}>
-                            {i > 0 && <ChevronRight size={13} />}
-                            {c.href ? <Link href={c.href}>{c.label}</Link> : <span>{c.label}</span>}
-                        </React.Fragment>
-                    ))}
-                </nav>
-                <span style={{ flex: 1 }} />
-                <span className="notes-topbar-hint">Saves automatically</span>
-            </header>
-            <main className="notes-page">{children}</main>
+        <div className="notes-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="notes-dialog" role="dialog" aria-modal="true" aria-label="Company notes">
+                <header className="notes-topbar">
+                    <nav className="notes-crumbs" aria-label="Breadcrumb">
+                        {crumbs.map((c, i) => (
+                            <React.Fragment key={i}>
+                                {i > 0 && <ChevronRight size={13} />}
+                                {c.onClick ? <button type="button" onClick={c.onClick}>{c.label}</button> : <span>{c.label}</span>}
+                            </React.Fragment>
+                        ))}
+                    </nav>
+                    <span style={{ flex: 1 }} />
+                    <span className="notes-topbar-hint">Saves automatically</span>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close notes" title="Close">
+                        <X size={18} />
+                    </button>
+                </header>
+                <div className="notes-page">{children}</div>
+            </div>
         </div>
     );
+}
+
+/** The dialog for the company and page in the address bar, or nothing. */
+export function NotesDialog() {
+    const nav = useNotesInUrl();
+    if (!nav.companyId) return null;
+    // Keyed so moving between pages starts each one fresh.
+    return nav.page === 'notes'
+        ? <NotesHome key={`${nav.companyId}-notes`} companyId={nav.companyId} />
+        : <NoteSubPage key={`${nav.companyId}-${nav.page}`} companyId={nav.companyId} kind={nav.page} />;
 }
 
 function useCompany(companyId: string) {
@@ -96,14 +116,14 @@ function Status({ loading, error, data, needsCompany }: { loading: boolean; erro
 }
 
 /** The Notes window: the company at a glance, its comments, its two pages, and free notes. */
-export function NotesHome({ companyId }: { companyId: string }) {
+function NotesHome({ companyId }: { companyId: string }) {
     const { company, user, loading } = useCompany(companyId);
-    const { data, error, setData } = useNotes(companyId);
+    const { data, error, setData } = useNotes(companyId, 'notes');
     const { getStageById, getIndustryById, getUserById } = useAppContext();
-    const base = `/dealflow/notes/${companyId}`;
+    const nav = useOpenNotes();
 
     const status = <Status loading={loading} error={error} data={data} needsCompany={!loading && !company} />;
-    if (!company || !data) return <NotesShell crumbs={[{ label: 'Notes' }]}>{status}</NotesShell>;
+    if (!company || !data) return <NotesFrame crumbs={[{ label: 'Notes' }]} onClose={nav.close}>{status}</NotesFrame>;
 
     const stage = getStageById(company.pipelineStageId);
     const analyst = company.analystId ? getUserById(company.analystId) : null;
@@ -116,7 +136,7 @@ export function NotesHome({ companyId }: { companyId: string }) {
     ];
 
     return (
-        <NotesShell crumbs={[{ label: company.companyName }, { label: 'Notes' }]}>
+        <NotesFrame crumbs={[{ label: company.companyName }, { label: 'Notes' }]} onClose={nav.close}>
             <h1 className="notes-title">{company.companyName}</h1>
             <dl className="notes-properties">
                 {properties.map(([k, v]) => (
@@ -136,40 +156,44 @@ export function NotesHome({ companyId }: { companyId: string }) {
                 {SUB_PAGES.map(p => {
                     const page = data.pages[p.kind];
                     return (
-                        <Link key={p.kind} href={`${base}/${p.kind}`} className="notes-subpage-link">
+                        <button type="button" key={p.kind} onClick={() => nav.open(companyId, p.kind)} className="notes-subpage-link">
                             <FileText size={17} />
                             <span className="notes-subpage-title">{p.title}</span>
                             <span className="notes-subpage-meta">
                                 {page.updatedAt ? `Edited ${when(page.updatedAt)}${page.updatedByName ? ` by ${page.updatedByName}` : ''}` : 'Empty'}
                             </span>
-                        </Link>
+                        </button>
                     );
                 })}
             </div>
 
             <NoteEditor companyId={companyId} kind="notes" initial={data.pages.notes}
                 placeholder="Notes on this company — tables, images and files from the toolbar, or paste and drop them in…" />
-        </NotesShell>
+        </NotesFrame>
     );
 }
 
 /** Brief or Detailed Note: one document, the whole window. */
-export function NoteSubPage({ companyId, kind }: { companyId: string; kind: Exclude<NoteKind, 'notes'> }) {
+function NoteSubPage({ companyId, kind }: { companyId: string; kind: Exclude<NoteKind, 'notes'> }) {
     const { company, loading } = useCompany(companyId);
-    const { data, error } = useNotes(companyId);
+    const { data, error } = useNotes(companyId, kind);
     const page = SUB_PAGES.find(p => p.kind === kind)!;
-    const base = `/dealflow/notes/${companyId}`;
+    const nav = useOpenNotes();
 
-    const crumbs = [{ label: company?.companyName || 'Company', href: base }, { label: page.title }];
+    const crumbs = [
+        { label: company?.companyName || 'Company', onClick: () => nav.open(companyId) },
+        { label: 'Notes', onClick: () => nav.open(companyId) },
+        { label: page.title },
+    ];
     const status = <Status loading={loading} error={error} data={data} needsCompany={!loading && !company} />;
-    if (!company || !data) return <NotesShell crumbs={crumbs}>{status}</NotesShell>;
+    if (!company || !data) return <NotesFrame crumbs={crumbs} onClose={nav.close}>{status}</NotesFrame>;
 
     return (
-        <NotesShell crumbs={crumbs}>
+        <NotesFrame crumbs={crumbs} onClose={nav.close}>
             <h1 className="notes-title">{page.title}</h1>
             <div className="notes-subtitle">{company.companyName}</div>
             <NoteEditor companyId={companyId} kind={kind} initial={data.pages[kind]} placeholder={page.placeholder} />
-        </NotesShell>
+        </NotesFrame>
     );
 }
 

@@ -57,6 +57,12 @@ const FileAttachment = Node.create({
 
 const IMAGE = /^image\/(png|jpe?g|gif|webp)$/;
 
+const NOTHING_ACTIVE = {
+    bold: false, italic: false, underline: false, strike: false, h1: false, h2: false, h3: false,
+    bullet: false, ordered: false, task: false, quote: false, code: false, link: false, table: false,
+    canUndo: false, canRedo: false,
+};
+
 export interface NotePageData {
     content: JSONContent | null;
     updatedAt: string | null;
@@ -224,7 +230,11 @@ export default function NoteEditor({ companyId, kind, initial, placeholder }: {
         };
     }, [save]);
 
-    const active = useEditorState({
+    // useEditorState only produces a snapshot on the editor's first
+    // transaction, so it is null until then. Waiting on it before rendering
+    // the editor meant there could never be a transaction: the page sat on
+    // "Loading editor…" for good. The toolbar starts with nothing lit instead.
+    const editorState = useEditorState({
         editor,
         selector: ({ editor: e }) => e ? {
             bold: e.isActive('bold'), italic: e.isActive('italic'), underline: e.isActive('underline'),
@@ -235,6 +245,7 @@ export default function NoteEditor({ companyId, kind, initial, placeholder }: {
             canUndo: e.can().undo(), canRedo: e.can().redo(),
         } : null,
     });
+    const active = editorState ?? NOTHING_ACTIVE;
 
     const takeTheirs = () => {
         if (state.kind !== 'conflict' || !editor) return;
@@ -255,7 +266,7 @@ export default function NoteEditor({ companyId, kind, initial, placeholder }: {
         else editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
     };
 
-    if (!editor || !active) return <div className="note-loading">Loading editor…</div>;
+    if (!editor) return <div className="note-loading">Loading editor…</div>;
 
     const c = () => editor.chain().focus();
 

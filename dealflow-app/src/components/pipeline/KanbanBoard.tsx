@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText, Clock, Flag, NotebookPen } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useOpenNotes } from '@/lib/use-notes-nav';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import { Company, PipelineStage, RejectionRecord } from '@/types/database';
@@ -53,10 +53,10 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
         setShowCompanyForm(true);
     };
 
-    const router = useRouter();
+    const notesNav = useOpenNotes();
     const handleOpenNotes = (e: React.MouseEvent) => {
         e.stopPropagation();
-        router.push(`/dealflow/notes/${company.id}`);
+        notesNav.open(company.id);
     };
 
     const handleScheduleCall = (e: React.MouseEvent) => {

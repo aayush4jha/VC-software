@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { NotesDialog } from "@/components/notes/CompanyNotes";
 import UpdateBanner from '@/components/layout/UpdateBanner';
 import "./globals.css";
 import { AppProvider } from "@/lib/context";
@@ -18,6 +20,10 @@ export default function RootLayout({
       <body>
         <AppProvider>
           {children}
+          {/* A company's notes open as a dialog over any page (?notes=<id>). */}
+          <Suspense fallback={null}>
+            <NotesDialog />
+          </Suspense>
           <UpdateBanner />
         </AppProvider>
       </body>
