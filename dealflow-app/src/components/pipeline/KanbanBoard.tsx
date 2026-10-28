@@ -6,6 +6,7 @@ import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import { Company, PipelineStage, RejectionRecord } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { STATUS_COLUMNS } from '@/lib/status-columns';
 
 function CompanyKanbanCard({ company, index }: { company: Company; index: number }) {
     const { setSelectedCompany, setEditingCompany, setShowCompanyForm, setShowCalendarInvite, setShowEmailCompose, getUserById, getIndustryById, getStageById, deleteCompany, setTerminalStatus, deckEmailLinks, updateCompany } = useAppContext();
@@ -328,7 +329,7 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
     );
 }
 
-function RejectedCompanyCard({ company, rejectionRecord }: { company: Company; rejectionRecord?: RejectionRecord }) {
+function StatusCompanyCard({ company, color, rejectionRecord }: { company: Company; color: string; rejectionRecord?: RejectionRecord }) {
     const { setSelectedCompany, getUserById, getIndustryById, rejectionReasonCategories } = useAppContext();
     const analyst = company.analystId ? getUserById(company.analystId) : null;
     const industry = getIndustryById(company.industryId);
@@ -356,7 +357,7 @@ function RejectedCompanyCard({ company, rejectionRecord }: { company: Company; r
         <div
             className="kanban-card"
             onClick={() => setSelectedCompany(company)}
-            style={{ borderLeft: '3px solid #ef4444' }}
+            style={{ borderLeft: `3px solid ${color}` }}
         >
             <div className="kanban-card-header">
                 <span className="kanban-card-name">{company.companyName}</span>
@@ -408,13 +409,13 @@ function RejectedCompanyCard({ company, rejectionRecord }: { company: Company; r
 export default function KanbanBoard() {
     const { searchQuery, activeFilters, companies, pipelineStages, getIndustryById, moveCompanyStage, rejectionRecords } = useAppContext();
 
-    // Rejected companies for the Rejected column
     // When a company joined the board. entry_date is the portfolio's idea of
     // "when", so created_at is what orders the pipeline.
     const entered = (c: Company) => new Date(c.createdAt || 0).getTime();
 
-    const rejectedCompanies = companies.filter(c => {
-        if (c.terminalStatus !== 'Rejected') return false;
+    // Companies off the pipeline, for the status columns beside the stages.
+    const statusCompanies = companies.filter(c => {
+        if (!c.terminalStatus) return false;
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             const industry = getIndustryById(c.industryId);
@@ -479,7 +480,6 @@ export default function KanbanBoard() {
     };
 
     const stageFilter = activeFilters.stage || [];
-    const showRejectedColumn = stageFilter.length === 0 || stageFilter.includes('__rejected__');
 
     return (
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -536,30 +536,36 @@ export default function KanbanBoard() {
                     );
                 })}
 
-                {/* Rejected Companies Column */}
-                {showRejectedColumn && <div className="kanban-column">
-                    <div className="kanban-column-header">
-                        <div className="kanban-column-title">
-                            <span className="kanban-column-dot" style={{ background: '#ef4444' }} />
-                            Rejected
-                        </div>
-                        <span className="kanban-column-count">{rejectedCompanies.length}</span>
-                    </div>
-                    <div className="kanban-column-body" style={{ minHeight: 80 }}>
-                        {rejectedCompanies.map((company) => (
-                            <RejectedCompanyCard
-                                key={company.id}
-                                company={company}
-                                rejectionRecord={rejectionRecordMap.get(company.id)}
-                            />
-                        ))}
-                        {rejectedCompanies.length === 0 && (
-                            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
-                                No rejected companies
+                {/* Status columns: companies off the pipeline, by status */}
+                {STATUS_COLUMNS.filter(col => stageFilter.length === 0 || stageFilter.includes(col.key)).map(col => {
+                    const inColumn = statusCompanies.filter(c => c.terminalStatus && col.statuses.includes(c.terminalStatus));
+                    return (
+                        <div key={col.key} className="kanban-column">
+                            <div className="kanban-column-header">
+                                <div className="kanban-column-title">
+                                    <span className="kanban-column-dot" style={{ background: col.color }} />
+                                    {col.title}
+                                </div>
+                                <span className="kanban-column-count">{inColumn.length}</span>
                             </div>
-                        )}
-                    </div>
-                </div>}
+                            <div className="kanban-column-body" style={{ minHeight: 80 }}>
+                                {inColumn.map(company => (
+                                    <StatusCompanyCard
+                                        key={company.id}
+                                        company={company}
+                                        color={col.color}
+                                        rejectionRecord={rejectionRecordMap.get(company.id)}
+                                    />
+                                ))}
+                                {inColumn.length === 0 && (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
+                                        No companies
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </DragDropContext>
     );

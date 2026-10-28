@@ -28,7 +28,7 @@ const col = (r, name) => String(r[name] ?? '').replace(/\s+/g, ' ').trim();
 
 // ── Decisions agreed with the team ───────────────────────────────────────
 // Notion "Deal Status" → where the company lands. `terminal` takes it off the active board.
-function placement(status, round) {
+function placement(status) {
     switch (status) {
         case 'Thesis Check': return { stage: 'Thesis Check' };
         case 'Initial Screening': return { stage: 'Initial Screening' };
@@ -39,10 +39,10 @@ function placement(status, round) {
         case 'Rejected': return { stage: 'Thesis Check', terminal: 'Rejected' };
         case 'Awaiting Response/Blocker': return { stage: 'Thesis Check', terminal: 'Awaiting Response' };
         case 'Next Round Evaluation': return { stage: 'Thesis Check', terminal: 'Next Round Analysis' };
-        // Still live until someone sends the rejection; screened if it had a round, else not yet.
-        case 'To be Rejected': return { stage: round ? 'Initial Screening' : 'Thesis Check', tag: 'to-be-rejected' };
-        case 'Priority': return { stage: 'Thesis Check', tag: 'priority', priority: 'High' };
-        case 'Whatsapp Deals': return { stage: 'Thesis Check', tag: 'whatsapp-deal' };
+        // Columns of their own on the board, named as in Notion.
+        case 'To be Rejected': return { stage: 'To be Rejected', tag: 'to-be-rejected' };
+        case 'Priority': return { stage: 'Priority', tag: 'priority', priority: 'High' };
+        case 'Whatsapp Deals': return { stage: 'Whatsapp Deals', tag: 'whatsapp-deal' };
         case '': return { stage: 'Thesis Check', tag: 'no-status' };
         default: return null;
     }
@@ -137,7 +137,7 @@ for (const [key, r] of [...chosen].reverse()) {
 
     const status = col(r, 'Deal Status');
     const roundText = col(r, 'Round Stage');
-    const place = placement(status, roundText);
+    const place = placement(status);
     if (!place) { report.unknownStatus[status] = (report.unknownStatus[status] || 0) + 1; continue; }
     const label = place.terminal ? `${place.terminal} (off board)` : `${place.stage}${place.tag ? ` · ${place.tag}` : ''}`;
     report.byPlacement[label] = (report.byPlacement[label] || 0) + 1;

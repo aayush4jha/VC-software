@@ -5,6 +5,7 @@ import { ChevronDown, X, Save, BookmarkCheck, Download, Trash2 } from 'lucide-re
 import { useAppContext } from '@/lib/context';
 import { CompanyRound, DealSourceType, PriorityLevel, TerminalStatus } from '@/types/database';
 import { formatCurrency, getDaysInPipeline, getStageDeadline, isStageOverdue } from '@/lib/context';
+import { STATUS_COLUMNS } from '@/lib/status-columns';
 
 const priorities: PriorityLevel[] = ['High', 'Medium', 'Low'];
 const rounds: CompanyRound[] = ['Pre-Seed', 'Seed', 'Pre-Series A', 'Series A', 'Pre-Series B', 'Series B', 'Growth Stage', 'Pre-IPO', 'IPO'];
@@ -245,7 +246,7 @@ export default function FilterBar() {
             <FilterDropdown
                 label="Stage"
                 filterKey="stage"
-                options={[...pipelineStages.map(s => ({ value: s.id, label: s.name })), { value: '__rejected__', label: 'Rejected' }]}
+                options={[...pipelineStages.map(s => ({ value: s.id, label: s.name })), ...STATUS_COLUMNS.map(c => ({ value: c.key, label: c.title }))]}
             />
             <FilterDropdown
                 label="Deal Source Type"
