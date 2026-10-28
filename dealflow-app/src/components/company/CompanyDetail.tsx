@@ -5,8 +5,9 @@ import {
     X, ChevronRight, ChevronDown, Calendar, Mail, ExternalLink,
     AlertTriangle, MessageSquare, Sparkles, Send, Check, Phone,
     XCircle, ArrowRight, Loader2, Link2, RotateCcw,
-    FileText, FileSearch, Download, FileDown, Video,
+    FileText, FileSearch, Download, FileDown, Video, NotebookPen,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useAppContext } from '@/lib/context';
 import { bytesToBase64, inlineUploadError } from '@/lib/file-encode';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
@@ -346,6 +347,9 @@ export default function CompanyDetail() {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <Link href={`/dealflow/notes/${c.id}`} className="btn btn-secondary btn-sm" title="Notes, Brief and Detailed Note">
+                            <NotebookPen size={14} /> Notes
+                        </Link>
                         <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCompany(null)}>
                             <X size={18} />
                         </button>

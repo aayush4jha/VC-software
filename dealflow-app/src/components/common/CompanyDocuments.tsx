@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { FileText, Paperclip, ExternalLink, Upload, Trash2, Loader2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { uploadCompanyFile, formatBytes } from '@/lib/upload-company-file';
 
 // What the server keeps (src/lib/server/file-store.ts); checked there too.
 const ACCEPT = '.pdf,.ppt,.pptx,.key,.odp,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.zip';
@@ -20,13 +20,6 @@ interface CompanyDocument {
     receivedAt: string | null;
     senderEmail: string | null;
     subject: string | null;
-}
-
-function formatSize(bytes: number | null): string {
-    if (!bytes || bytes <= 0) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function formatDate(iso: string | null): string {
@@ -75,24 +68,13 @@ export default function CompanyDocuments({ companyId }: { companyId: string }) {
     const uploadFiles = async (files: File[]) => {
         if (files.length === 0 || progress) return;
         const failed: string[] = [];
-        const storage = createClient().storage.from('company-documents');
         for (const [i, file] of files.entries()) {
             setProgress(files.length > 1 ? `Uploading ${i + 1} of ${files.length}: ${file.name}` : `Uploading ${file.name}`);
             try {
-                const ticket = await fetch('/api/company-documents/upload', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ companyId, fileName: file.name, size: file.size }),
-                }).then(r => r.json());
-                if (!ticket.path) throw new Error(ticket.error || 'could not start the upload');
-
-                const { error } = await storage.uploadToSignedUrl(ticket.path, ticket.token, file, {
-                    contentType: file.type || 'application/octet-stream',
-                });
-                if (error) throw new Error(error.message);
-
+                const up = await uploadCompanyFile(companyId, file);
                 const saved = await fetch('/api/company-documents', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ companyId, path: ticket.path, fileName: file.name, mimeType: file.type, size: file.size }),
+                    body: JSON.stringify({ companyId, path: up.path, fileName: up.name, mimeType: up.mimeType, size: up.size }),
                 }).then(r => r.json());
                 if (!saved.id) throw new Error(saved.error || 'could not save it to the company');
             } catch (err) {
@@ -178,7 +160,7 @@ export default function CompanyDocuments({ companyId }: { companyId: string }) {
                             : d.gmailMessageId
                                 ? `/api/gmail/attachment?messageId=${encodeURIComponent(d.gmailMessageId)}&filename=${encodeURIComponent(d.fileName)}`
                                 : null;
-                        const meta = [SOURCE_LABEL[d.source] || d.source, formatSize(d.sizeBytes), formatDate(d.receivedAt), d.senderEmail]
+                        const meta = [SOURCE_LABEL[d.source] || d.source, formatBytes(d.sizeBytes), formatDate(d.receivedAt), d.senderEmail]
                             .filter(Boolean).join(' · ');
                         return (
                             <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

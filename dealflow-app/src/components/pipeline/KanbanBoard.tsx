@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText, Clock, Flag } from 'lucide-react';
+import { Pencil, Video, Mail, Trash2, Briefcase, XCircle, FileText, Clock, Flag, NotebookPen } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/lib/context';
 import { formatCurrency, getDaysInPipeline, getStageDeadline } from '@/lib/context';
 import { Company, PipelineStage, RejectionRecord } from '@/types/database';
@@ -50,6 +51,12 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
         e.stopPropagation();
         setEditingCompany(company);
         setShowCompanyForm(true);
+    };
+
+    const router = useRouter();
+    const handleOpenNotes = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        router.push(`/dealflow/notes/${company.id}`);
     };
 
     const handleScheduleCall = (e: React.MouseEvent) => {
@@ -220,6 +227,14 @@ function CompanyKanbanCard({ company, index }: { company: Company; index: number
                             <span className="kanban-card-days">{days}d</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button
+                                className="kanban-card-edit-btn"
+                                onClick={handleOpenNotes}
+                                title="Notes"
+                                style={{ color: '#6366f1' }}
+                            >
+                                <NotebookPen size={12} />
+                            </button>
                             <button
                                 className="kanban-card-edit-btn"
                                 onClick={handleSendEmail}
