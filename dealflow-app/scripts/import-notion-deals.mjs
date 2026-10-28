@@ -98,12 +98,21 @@ const nameKey = s => s.normalize('NFKC').toLowerCase()
 const isJunk = name => !name || /^https?:\/\/app\.notion\.com/i.test(name) || /^no name$/i.test(name);
 
 // ── Platform data ─────────────────────────────────────────────────────────
-const [{ data: stages }, { data: profiles }, { data: industries }, { data: existing }] = await Promise.all([
+const [{ data: stages }, { data: profiles }, { data: industries }] = await Promise.all([
     db.from('pipeline_stages').select('id, name').eq('organization_id', ORGANIZATION_ID),
     db.from('profiles').select('id, name'),
     db.from('industries').select('id, name').eq('organization_id', ORGANIZATION_ID),
-    db.from('companies').select('company_name').eq('organization_id', ORGANIZATION_ID),
 ]);
+// A page at a time: Supabase stops at 1,000 rows without saying so, and a
+// re-run that saw only the newest 1,000 would import everything older again.
+const existing = [];
+for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from('companies').select('company_name')
+        .eq('organization_id', ORGANIZATION_ID).order('id').range(from, from + 999);
+    if (error) { console.error(error.message); process.exit(1); }
+    existing.push(...data);
+    if (data.length < 1000) break;
+}
 const stageId = Object.fromEntries(stages.map(s => [s.name, s.id]));
 const industryId = Object.fromEntries(industries.map(i => [i.name, i.id]));
 // Analysts by first name; only those who have a platform account can be assigned.
