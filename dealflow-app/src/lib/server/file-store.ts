@@ -9,6 +9,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const COMPANY_DOCS_BUCKET = 'company-documents';
 
+/** Where the Fund page's uploaded workbooks are kept, in the same private bucket. */
+export const FUND_FILES_FOLDER = 'fund/imports/';
+
 /** Bigger than this is left in Gmail rather than copied. */
 export const MAX_STORED_FILE_BYTES = 25 * 1024 * 1024;
 

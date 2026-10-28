@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireMember } from '@/lib/api-auth';
 import { LEDGER_CATEGORIES } from '@/lib/fund-ledger';
+import { FUND_FILES_FOLDER } from '@/lib/server/file-store';
 
 const ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001';
 const MAX_ROWS = 20000;
@@ -61,6 +62,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const fileName = String(body.fileName || 'upload.xlsx');
+    // The workbook itself, already in storage (see /api/fund/files), for the Upload history.
+    const filePath = typeof body.filePath === 'string' && body.filePath.startsWith(FUND_FILES_FOLDER)
+        && !body.filePath.includes('..') ? body.filePath : null;
     const rows: IncomingRow[] = Array.isArray(body.rows) ? body.rows : [];
     const adjustments: IncomingAdjustment[] = Array.isArray(body.adjustments) ? body.adjustments : [];
     const sheetSummary = body.sheetSummary && typeof body.sheetSummary === 'object' ? body.sheetSummary : {};
@@ -251,7 +255,7 @@ export async function POST(request: NextRequest) {
     // no other sheet does — a market value for a past year, most of all — and
     // the tracker lays them over what it computes.
     const flagged = rows.filter(r => (r.issues || []).length > 0).length;
-    await client.from('fund_imports').insert({
+    const importRecord = {
         organization_id: ORGANIZATION_ID,
         file_name: fileName.slice(0, 200),
         sheet_summary: dashboard ? { ...sheetSummary, __dashboard: dashboard } : sheetSummary,
@@ -259,7 +263,17 @@ export async function POST(request: NextRequest) {
         rows_skipped: duplicates,
         rows_flagged: flagged,
         imported_by: auth.actor.userId,
+    };
+    const { data: me } = await client.from('profiles').select('name').eq('id', auth.actor.userId).maybeSingle();
+    const { error: recordErr } = await client.from('fund_imports').insert({
+        ...importRecord,
+        file_path: filePath,
+        file_size: filePath ? Number(body.fileSize) || null : null,
+        imported_by_name: me?.name || auth.actor.email || null,
     });
+    // Before supabase/fund-import-files.sql has run there are no file
+    // columns; the upload is still recorded, just without its file.
+    if (recordErr && /column/i.test(recordErr.message)) await client.from('fund_imports').insert(importRecord);
 
     return NextResponse.json({
         imported, duplicates, flagged, adjustments: adjustmentsSaved, portfolio: portfolioSaved,

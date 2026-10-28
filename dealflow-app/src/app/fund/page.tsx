@@ -8,8 +8,9 @@ import TopHeader from '@/components/layout/TopHeader';
 import FundDashboard from '@/components/fund/FundDashboard';
 import Sheet1Tracker from '@/components/fund/Sheet1Tracker';
 import FundLedger from '@/components/fund/FundLedger';
+import FundUploads from '@/components/fund/FundUploads';
 
-type FundView = 'ledger' | 'tracker' | 'legacy';
+type FundView = 'ledger' | 'tracker' | 'legacy' | 'uploads';
 
 /**
  * Two views of the fund.
@@ -26,6 +27,7 @@ export default function FundPage() {
         { key: 'ledger', label: 'Fund Ledger' },
         { key: 'tracker', label: 'Manual Tracker' },
         { key: 'legacy', label: 'Entities & expenses' },
+        { key: 'uploads', label: 'Upload history' },
     ];
 
     return (
@@ -38,7 +40,9 @@ export default function FundPage() {
                         ? 'Balances, inflows and outflows from the bank ledger'
                         : view === 'tracker'
                             ? 'Fund deployed by year, and balances by entity'
-                            : 'Entity cards and expense bifurcation'}
+                            : view === 'uploads'
+                                ? 'Every file uploaded here, to open or download'
+                                : 'Entity cards and expense bifurcation'}
                 />
                 <div className="page-content" style={{ padding: 0 }}>
                     <div style={{
@@ -65,6 +69,7 @@ export default function FundPage() {
 
                     {view === 'ledger' && <FundLedger />}
                     {view === 'tracker' && <Sheet1Tracker />}
+                    {view === 'uploads' && <FundUploads />}
                     {view === 'legacy' && (
                         <div style={{ padding: '18px 24px 40px' }}><FundDashboard /></div>
                     )}

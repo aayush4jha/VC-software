@@ -21,6 +21,7 @@ import {
 } from '@/lib/fund-portfolio';
 import type { CellMatrix } from '@/lib/legal-import';
 import { toCsv, exportFilename } from '@/lib/csv-export';
+import { createClient } from '@/lib/supabase/client';
 import EditableCell from '@/components/common/EditableCell';
 import MappingRules, { type RuleRow, type FundSettings } from '@/components/fund/MappingRules';
 import StatementView, { type StatementRow } from '@/components/fund/StatementView';
@@ -904,8 +905,23 @@ function DrillDown({ title, rows, onClose }: {
 
 // ─── F. The single master upload ──────────────────────────────────────────
 
+/** Puts the workbook in storage, straight from the browser, and returns where it went. */
+async function keepFundFile(file: File): Promise<string> {
+    const ticket = await fetch('/api/fund/files', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, size: file.size }),
+    }).then(r => r.json());
+    if (!ticket.path) throw new Error(ticket.error || 'could not start the upload');
+    const { error } = await createClient().storage.from('company-documents')
+        .uploadToSignedUrl(ticket.path, ticket.token, file, { contentType: file.type || 'application/octet-stream' });
+    if (error) throw new Error(error.message);
+    return ticket.path;
+}
+
 interface Prepared {
     fileName: string;
+    /** Kept so the workbook itself can be stored with the import, for the Upload history. */
+    file: File;
     rows: (ParsedLedgerRow & { sheetName: string })[];
     adjustments: ParsedAdjustment[];
     portfolio: Record<string, unknown>[];
@@ -1034,7 +1050,7 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                 setProblem('No bank statement or adjustment sheet was recognised in that file. '
                     + 'A bank sheet needs a heading row with a date, a description and either a debit/credit pair or an amount.');
             } else {
-                setPrepared({ fileName: file.name, rows, adjustments, portfolio, dashboard, summary, rejected });
+                setPrepared({ fileName: file.name, file, rows, adjustments, portfolio, dashboard, summary, rejected });
             }
         } catch (e) {
             setProblem(`Could not read that file: ${(e as Error).message}`);
@@ -1047,10 +1063,22 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
         if (!prepared) return;
         setImporting(true); setProblem(null);
         try {
+            // The file goes to storage first, so the Upload history can open
+            // it later. Not being able to keep it does not stop the import.
+            let filePath: string | null = null;
+            let fileNote = '';
+            try {
+                filePath = await keepFundFile(prepared.file);
+            } catch (e) {
+                fileNote = ` The file itself could not be kept for the Upload history (${(e as Error).message}).`;
+            }
+
             const res = await fetch('/api/fund/import', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     fileName: prepared.fileName,
+                    filePath,
+                    fileSize: prepared.file.size,
                     rows: prepared.rows,
                     adjustments: prepared.adjustments,
                     portfolio: prepared.portfolio,
@@ -1073,7 +1101,8 @@ function MasterUpload({ companies, entities, rules, fxRate, onImported }: {
                 + (j.portfolio ? `, ${j.portfolio} investment and exit row${j.portfolio === 1 ? '' : 's'}` : '')
                 + (j.flagged ? `, ${j.flagged} flagged for attention` : '')
                 + '.' + (j.note ? ` ${j.note}` : '')
-                + (trackerNote ? ` ${trackerNote}` : ''),
+                + (trackerNote ? ` ${trackerNote}` : '')
+                + fileNote,
             );
             setPrepared(null);
             onImported();
