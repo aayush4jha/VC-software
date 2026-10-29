@@ -76,6 +76,8 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
     '/admin': ['admin'],
     '/settings': ['settings'],
     '/dealflow': ['dealflow'],
+    // Funds the team is tracking; it sits under Deal Flow and opens with it.
+    '/fund-house': ['dealflow'],
     '/portfolio': ['portfolio'],
     // Legal grew out of Portfolio and has since gained its own key; either
     // one opens it, so neither an old nor a new grant locks anyone out.

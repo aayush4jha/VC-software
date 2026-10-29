@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    Home, LayoutGrid, Briefcase, Users, Mail, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield, BarChart3, Activity, FileText, Newspaper, Scale, Wallet, PiggyBank,
+    Home, LayoutGrid, Briefcase, Users, Mail, Settings, LogOut, ChevronsLeft, ChevronsRight, Shield, BarChart3, Activity, FileText, Newspaper, Scale, Wallet, PiggyBank, Landmark,
 } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import type { PagePermission } from '@/types/database';
@@ -16,6 +16,7 @@ import { hasAnyPermission, hasPermission } from '@/lib/permissions';
 const navItems: { label: string; href: string; icon: React.ElementType; permissions: PagePermission[] }[] = [
     { label: 'Dashboard', href: '/', icon: Home, permissions: ['dashboard'] },
     { label: 'Deal Flow', href: '/dealflow', icon: LayoutGrid, permissions: ['dealflow'] },
+    { label: 'Fund House', href: '/fund-house', icon: Landmark, permissions: ['dealflow'] },
     { label: 'Portfolio', href: '/portfolio', icon: Briefcase, permissions: ['portfolio'] },
     { label: 'Legal', href: '/legal', icon: Scale, permissions: ['legal', 'portfolio'] },
     { label: 'Fund', href: '/fund', icon: Wallet, permissions: ['fund'] },
