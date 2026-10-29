@@ -421,7 +421,8 @@ function StatusCompanyCard({ company, color, rejectionRecord }: { company: Compa
     );
 }
 
-export default function KanbanBoard() {
+/** hiddenColumns: stage ids and status-column keys this person has hidden (see ColumnPicker). */
+export default function KanbanBoard({ hiddenColumns = [] }: { hiddenColumns?: string[] }) {
     const { searchQuery, activeFilters, companies, pipelineStages, getIndustryById, moveCompanyStage, rejectionRecords } = useAppContext();
 
     // When a company joined the board. entry_date is the portfolio's idea of
@@ -499,7 +500,7 @@ export default function KanbanBoard() {
     return (
         <DragDropContext onDragEnd={handleDragEnd}>
             <div className="kanban-board">
-                {pipelineStages.filter(stage => stageFilter.length === 0 || stageFilter.includes(stage.id)).map((stage) => {
+                {pipelineStages.filter(stage => (stageFilter.length === 0 || stageFilter.includes(stage.id)) && !hiddenColumns.includes(stage.id)).map((stage) => {
                     const stageCompanies = filteredCompanies
                         .filter(c => c.pipelineStageId === stage.id)
                         .sort((a, b) => {
@@ -552,7 +553,7 @@ export default function KanbanBoard() {
                 })}
 
                 {/* Status columns: companies off the pipeline, by status */}
-                {STATUS_COLUMNS.filter(col => stageFilter.length === 0 || stageFilter.includes(col.key)).map(col => {
+                {STATUS_COLUMNS.filter(col => (stageFilter.length === 0 || stageFilter.includes(col.key)) && !hiddenColumns.includes(col.key)).map(col => {
                     const inColumn = statusCompanies.filter(c => c.terminalStatus && col.statuses.includes(c.terminalStatus));
                     return (
                         <div key={col.key} className="kanban-column">

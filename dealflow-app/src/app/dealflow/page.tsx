@@ -9,6 +9,7 @@ import TopHeader from '@/components/layout/TopHeader';
 import KanbanBoard from '@/components/pipeline/KanbanBoard';
 import TableView from '@/components/pipeline/TableView';
 import FilterBar from '@/components/pipeline/FilterBar';
+import ColumnPicker, { useHiddenColumns } from '@/components/pipeline/ColumnPicker';
 import CompanyDetail from '@/components/company/CompanyDetail';
 import RejectionFlow from '@/components/company/RejectionFlow';
 import EmailCompose from '@/components/integrations/EmailCompose';
@@ -19,6 +20,7 @@ import { useAppContext } from '@/lib/context';
 function DealflowContent() {
     const { viewMode, setViewMode, setShowCompanyForm, companies } = useAppContext();
     const activeCount = companies.filter(c => !c.terminalStatus).length;
+    const columns = useHiddenColumns();
 
     return (
         <>
@@ -40,6 +42,7 @@ function DealflowContent() {
                                 <List size={14} /> Table
                             </button>
                         </div>
+                        {viewMode === 'kanban' && <ColumnPicker hidden={columns.hidden} onChange={columns.setHidden} />}
                     </div>
                     <div className="toolbar-right">
                         <button className="btn btn-primary" onClick={() => setShowCompanyForm(true)}>
@@ -50,7 +53,7 @@ function DealflowContent() {
 
                 <FilterBar />
 
-                {viewMode === 'kanban' ? <KanbanBoard /> : <TableView />}
+                {viewMode === 'kanban' ? <KanbanBoard hiddenColumns={columns.hidden} /> : <TableView />}
             </div>
         </>
     );
