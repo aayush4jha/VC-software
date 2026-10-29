@@ -348,9 +348,6 @@ export default function CompanyDetail() {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => notesNav.open(c.id)} title="Notes, Brief and Detailed Note">
-                            <NotebookPen size={14} /> Notes
-                        </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCompany(null)}>
                             <X size={18} />
                         </button>
@@ -1734,6 +1731,19 @@ export default function CompanyDetail() {
                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                     >
                         <XCircle size={14} /> Reject
+                    </button>
+
+                    {/* Notes */}
+                    <button
+                        className="btn btn-sm"
+                        onClick={() => notesNav.open(c.id)}
+                        title="Notes, Brief and Detailed Note"
+                        style={{
+                            background: '#8b5cf6', color: '#fff',
+                            display: 'flex', alignItems: 'center', gap: 6,
+                        }}
+                    >
+                        <NotebookPen size={14} /> Notes
                     </button>
 
                     {/* Move Stage Dropdown */}
