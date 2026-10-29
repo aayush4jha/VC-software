@@ -157,6 +157,7 @@ export interface Company {
   needsReview: boolean;
   ingestionSource: string | null;
   ingestedByEmail: string | null; // the connected Gmail account the deal arrived in
+  stockQuoteUrl?: string | null;  // Google Finance quote link, for a listed company's live price
   // AI fields
   quickSummary: string | null;
   deckAnalysis: DeckAnalysis | null;

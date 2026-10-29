@@ -6401,3 +6401,46 @@ textarea.inline-input {
 .fund-house-delete:hover { color: var(--danger); }
 .fund-house-empty { padding: 28px !important; text-align: center; font-size: 13px; color: var(--text-tertiary); }
 .fund-house-empty button { border: none; background: none; padding: 0; font: inherit; color: var(--primary); cursor: pointer; }
+
+/* ─── Portfolio · Listed holdings (live share prices) ───────────────────── */
+.listed-holdings { margin-bottom: 20px; padding: 16px 18px; border: 1px solid var(--border-light); border-radius: var(--radius-lg); background: var(--bg-secondary); }
+.listed-holdings-head { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.listed-holdings-head > div:first-child { flex: 1; min-width: 200px; }
+.listed-holdings-head h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; font-size: 15px; font-weight: 700; }
+.listed-holdings-head p { margin: 0; font-size: 12px; color: var(--text-tertiary); }
+.listed-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 0 rgba(16,185,129,.5); animation: listedPulse 2s infinite; }
+@keyframes listedPulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.5); } 70% { box-shadow: 0 0 0 7px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
+.listed-holdings-totals { display: flex; gap: 22px; }
+.listed-holdings-totals div { display: flex; flex-direction: column; }
+.listed-holdings-totals span { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: .4px; }
+.listed-holdings-totals strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.listed-holdings .up { color: #059669; }
+.listed-holdings .down { color: #dc2626; }
+.listed-holdings-empty { font-size: 13px; color: var(--text-tertiary); }
+.listed-holdings-empty button { border: none; background: none; padding: 0; font: inherit; color: var(--primary); cursor: pointer; }
+.listed-holdings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.stock-card { padding: 14px 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-primary); }
+.stock-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.stock-card-head strong { font-size: 14px; }
+.stock-card-symbol { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-decoration: none; padding: 2px 7px; border-radius: 999px; background: var(--bg-tertiary); }
+a.stock-card-symbol:hover { color: var(--primary); }
+.stock-card-price { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.stock-card-price > span:first-child { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stock-card-change { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stock-card-status { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--text-tertiary); }
+.stock-card-market { padding: 1px 6px; border-radius: 4px; background: var(--bg-tertiary); font-weight: 600; }
+.stock-card-market.live { background: rgba(16,185,129,.12); color: #059669; }
+.stock-card-range { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; color: var(--text-secondary); }
+.stock-card-holding { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-light); display: flex; flex-direction: column; gap: 4px; }
+.stock-card-holding div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.stock-card-holding span { color: var(--text-tertiary); }
+.stock-card-holding strong { font-variant-numeric: tabular-nums; }
+.stock-card-wait { display: flex; align-items: center; gap: 6px; padding: 14px 0; font-size: 12px; color: var(--text-tertiary); }
+.listed-manage-add { display: grid; grid-template-columns: 180px 1fr auto; gap: 8px; align-items: center; }
+.listed-manage-problem { margin-top: 8px; font-size: 12px; color: var(--danger); }
+.listed-manage-list { margin-top: 16px; display: flex; flex-direction: column; border: 1px solid var(--border-light); border-radius: var(--radius-md); }
+.listed-manage-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border-light); font-size: 13px; }
+.listed-manage-row:last-child { border-bottom: none; }
+.listed-manage-row strong { flex: 1; }
+.listed-manage-row a { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--text-secondary); }
+@media (max-width: 640px) { .listed-manage-add { grid-template-columns: 1fr; } .listed-holdings-totals { gap: 14px; } }

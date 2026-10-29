@@ -9,6 +9,7 @@ import TopHeader from '@/components/layout/TopHeader';
 import PortfolioCompanyDetail from '@/components/company/PortfolioCompanyDetail';
 import CompanyForm from '@/components/company/CompanyForm';
 import PortfolioCompanyForm from '@/components/company/PortfolioCompanyForm';
+import ListedHoldings from '@/components/portfolio/ListedHoldings';
 import { useAppContext } from '@/lib/context';
 import {
     getPortfolioStage,
@@ -360,6 +361,8 @@ function PortfolioContent() {
         <>
             <TopHeader title="Portfolio Companies" subtitle={`${filtered.length} companies`} />
             <div className="page-content">
+                <ListedHoldings />
+
                 {/* Toolbar */}
                 <div className="toolbar">
                     <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
