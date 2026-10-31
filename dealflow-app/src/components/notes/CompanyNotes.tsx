@@ -136,7 +136,14 @@ function NotesHome({ companyId }: { companyId: string }) {
 
     const stage = getStageById(company.pipelineStageId);
     const analyst = company.analystId ? getUserById(company.analystId) : null;
-    const properties: [string, string][] = [
+    // A fund shows its Fund House columns; a company, where it stands in the pipeline.
+    const properties: [string, string][] = company.board === 'fund_house' ? [
+        ['House', company.fundHouseName || '—'],
+        ['Fund Manager', company.founderName || '—'],
+        ['Stage', company.fundStage || '—'],
+        ['Size', company.fundSize || '—'],
+        ['Commitment', company.fundCommitment || '—'],
+    ] : [
         ['Status', company.terminalStatus || stage?.name || '—'],
         ['Round', company.companyRound],
         ['Industry', getIndustryById(company.industryId)?.name || company.subIndustry || '—'],

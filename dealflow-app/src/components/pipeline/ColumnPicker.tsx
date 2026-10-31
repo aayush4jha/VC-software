@@ -5,24 +5,25 @@ import { Columns3, Eye, EyeOff } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
 import { STATUS_COLUMNS } from '@/lib/status-columns';
 
+const STORAGE_KEY = 'dealflow.hiddenColumns';
+
 /**
  * Which board columns this person has hidden: stage ids and status-column
  * keys. Kept in their own browser — it is how they like the board laid out,
- * not something everyone else should see change. Each board keeps its own,
- * under storageKey.
+ * not something everyone else should see change.
  */
-export function useHiddenColumns(storageKey: string) {
+export function useHiddenColumns() {
     const [hidden, setHidden] = useState<string[]>([]);
     useEffect(() => {
         try {
-            const saved = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
+            const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]');
             // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the browser after mount, so the server render matches
             if (Array.isArray(saved)) setHidden(saved.filter(x => typeof x === 'string'));
         } catch { /* no saved choice, or storage blocked: everything shows */ }
-    }, [storageKey]);
+    }, []);
     const save = (next: string[]) => {
         setHidden(next);
-        try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* kept for this visit only */ }
+        try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* kept for this visit only */ }
     };
     return { hidden, setHidden: save };
 }

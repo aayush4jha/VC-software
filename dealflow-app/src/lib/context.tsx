@@ -93,6 +93,10 @@ function mapCompany(r: any): Company {
         numShares: r.num_shares != null ? Number(r.num_shares) : null,
         stockQuoteUrl: r.stock_quote_url ?? null,
         board: r.board === 'fund_house' ? 'fund_house' : 'dealflow',
+        fundHouseName: r.fund_house_name ?? '',
+        fundStage: r.fund_stage ?? '',
+        fundSize: r.fund_size ?? '',
+        fundCommitment: r.fund_commitment ?? '',
         totalShares: r.total_shares != null ? Number(r.total_shares) : null,
         entryPreMoneyValuation: r.entry_pre_money_valuation ?? null,
         entryPostMoneyValuation: r.entry_post_money_valuation ?? null,
@@ -311,8 +315,8 @@ interface AppContextType {
     // Data
     users: User[];
     companies: Company[];           // every company but the funds on Fund House
-    fundHouseCompanies: Company[];  // those funds; FundHouseScope shows them as `companies`
-    fundHouseReady: boolean;        // false until supabase/company-board.sql is run
+    fundHouseCompanies: Company[];  // those funds
+    fundHouseReady: boolean;        // false until supabase/company-board.sql and fund-house-fields.sql are run
     pipelineStages: PipelineStage[];
     industries: Industry[];
     dealSourceNames: DealSourceName[];
@@ -530,9 +534,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const json = await res.json();
 
             setCompanies((json.companies || []).map(mapCompany));
-            // Rows come back with every column, so a missing `board` means the
+            // Rows come back with every column, so a missing one means its
             // migration has not been run.
-            setFundHouseReady(!json.companies?.length || 'board' in json.companies[0]);
+            setFundHouseReady(!json.companies?.length || ('board' in json.companies[0] && 'fund_stage' in json.companies[0]));
             setPipelineStages((json.stages || []).map(mapStage));
             setIndustries((json.industries || []).map((r: any) => ({ id: r.id, name: r.name })));
             setDealSourceNames((json.sources || []).map((r: any) => ({ id: r.id, name: r.name })));
@@ -713,10 +717,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const getIndustryById = useCallback((id: string) => industries.find(i => i.id === id), [industries]);
     const getStageById = useCallback((id: string) => pipelineStages.find(s => s.id === id), [pipelineStages]);
     const getDealSourceNameById = useCallback((id: string) => dealSourceNames.find(d => d.id === id), [dealSourceNames]);
-    // Funds share the companies table but none of Deal Flow's lists: every page
-    // reads `companies`, which leaves them out, and FundHouseScope swaps in
-    // `fundHouseCompanies` for the Fund House page. The mutations below work on
-    // the full list, so they reach both.
+    // Funds share the companies table — so they have Notes — but none of Deal
+    // Flow's lists: every page reads `companies`, which leaves them out, and
+    // the Fund House page reads `fundHouseCompanies`. The mutations below work
+    // on the full list, so they reach both.
     const [dealflowCompanies, fundHouseCompanies] = useMemo(() => [
         companies.filter(c => !isOnFundHouse(c.board, c.terminalStatus)),
         companies.filter(c => isOnFundHouse(c.board, c.terminalStatus)),
@@ -892,7 +896,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // Dedicated business-event date for the entry round. Distinct
             // from created_at, which stays a pure audit timestamp.
             ...(data.entryDate ? { entry_date: data.entryDate } : {}),
+            // A fund on the Fund House page, and its columns there.
             ...(data.board ? { board: data.board } : {}),
+            ...(data.fundHouseName != null ? { fund_house_name: data.fundHouseName } : {}),
+            ...(data.fundStage != null ? { fund_stage: data.fundStage } : {}),
+            ...(data.fundSize != null ? { fund_size: data.fundSize } : {}),
+            ...(data.fundCommitment != null ? { fund_commitment: data.fundCommitment } : {}),
         };
 
         let { data: row, error } = await apiDb({
@@ -960,6 +969,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         'subIndustry', 'shareType', 'totalFundRaise', 'valuation', 'googleDriveLink',
         'customTags', 'terminalStatus', 'needsReview', 'pipelineStageId', 'slaDeadline',
         'hqLocation', 'hqCity', 'notes', 'portfolioStatus', 'initialInvestment', 'entryValuation',
+        'fundHouseName', 'fundStage', 'fundSize', 'fundCommitment',
     ]);
 
     // The bulk load leaves out the large AI blobs (deck analysis, transcript,
@@ -1021,6 +1031,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             investmentInstrument: 'investment_instrument',
             syndicateName: 'syndicate_name',
             currentStage: 'current_stage',
+            fundHouseName: 'fund_house_name', fundStage: 'fund_stage', fundSize: 'fund_size', fundCommitment: 'fund_commitment',
         };
         // Postgres BIGINT-bound camelCase keys — round any decimals.
         // noOfShares is intentionally absent: it's a NUMERIC column holding
@@ -2122,19 +2133,4 @@ export function useAppContext() {
     const ctx = useContext(AppContext);
     if (!ctx) throw new Error('useAppContext must be used within AppProvider');
     return ctx;
-}
-
-/**
- * The Fund House page: the board, table, detail panel and form beneath this
- * see the funds as `companies`, and anything added here is filed as a fund.
- */
-export function FundHouseScope({ children }: { children: ReactNode }) {
-    const ctx = useAppContext();
-    const { fundHouseCompanies, createCompany } = ctx;
-    const value = useMemo<AppContextType>(() => ({
-        ...ctx,
-        companies: fundHouseCompanies,
-        createCompany: (data: Record<string, unknown>) => createCompany({ ...data, board: 'fund_house' }),
-    }), [ctx, fundHouseCompanies, createCompany]);
-    return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

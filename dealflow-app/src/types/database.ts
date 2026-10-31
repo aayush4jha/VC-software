@@ -162,6 +162,11 @@ export interface Company {
   ingestedByEmail: string | null; // the connected Gmail account the deal arrived in
   stockQuoteUrl?: string | null;  // Google Finance quote link, for a listed company's live price
   board?: CompanyBoard;           // the page it sits on; see isOnFundHouse
+  // A fund's Fund House columns, kept as written. Fund is companyName, Fund Manager founderName.
+  fundHouseName?: string;
+  fundStage?: string;
+  fundSize?: string;
+  fundCommitment?: string;
   // AI fields
   quickSummary: string | null;
   deckAnalysis: DeckAnalysis | null;

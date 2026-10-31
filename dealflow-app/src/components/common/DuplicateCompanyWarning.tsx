@@ -4,7 +4,6 @@ import React from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { useAppContext } from '@/lib/context';
-import { isOnFundHouse } from '@/lib/company-board';
 import type { SimilarCompany, SimilarityReason } from '@/lib/company-dedupe';
 import type { Company } from '@/types/database';
 
@@ -41,19 +40,17 @@ export default function DuplicateCompanyWarning({
     const whereIs = (c: Company): string => {
         if (c.terminalStatus === 'Portfolio') return 'Portfolio';
         if (c.terminalStatus) return c.terminalStatus;
-        const board = isOnFundHouse(c.board, c.terminalStatus) ? 'Fund House' : 'Deal Flow';
         const stage = pipelineStages.find(s => s.id === c.pipelineStageId)?.name;
-        return stage ? `${board} · ${stage}` : board;
+        return stage ? `Deal Flow · ${stage}` : 'Deal Flow';
     };
 
-    // Portfolio companies open in the portfolio panel; funds on Fund House;
-    // everything else in the deal-flow panel. Selection lives in app context,
-    // so it survives the route change and the panel opens on arrival.
+    // Portfolio companies open in the portfolio panel; everything else in the
+    // deal-flow panel. Selection lives in app context, so it survives the route
+    // change and the panel opens on arrival.
     const open = (c: Company) => {
         onBeforeOpen();
         setSelectedCompany(c);
-        const target = c.terminalStatus === 'Portfolio' ? '/portfolio'
-            : isOnFundHouse(c.board, c.terminalStatus) ? '/fund-house' : '/dealflow';
+        const target = c.terminalStatus === 'Portfolio' ? '/portfolio' : '/dealflow';
         if (pathname !== target) router.push(target);
     };
 
