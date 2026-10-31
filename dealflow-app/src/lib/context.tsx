@@ -12,6 +12,7 @@ import type {
     PagePermission, FollowOnRound, CompanyScore, CompanyFeedback, CompanyNote,
 } from '@/types/database';
 import { defaultPermissionsForRole } from '@/lib/permissions';
+import { isOnFundHouse } from '@/lib/company-board';
 
 // ──────────────────────────────────────────────────
 // DB → TypeScript Mappers
@@ -91,6 +92,7 @@ function mapCompany(r: any): Company {
         sharePrice: r.share_price != null ? Number(r.share_price) : null,
         numShares: r.num_shares != null ? Number(r.num_shares) : null,
         stockQuoteUrl: r.stock_quote_url ?? null,
+        board: r.board === 'fund_house' ? 'fund_house' : 'dealflow',
         totalShares: r.total_shares != null ? Number(r.total_shares) : null,
         entryPreMoneyValuation: r.entry_pre_money_valuation ?? null,
         entryPostMoneyValuation: r.entry_post_money_valuation ?? null,
@@ -308,7 +310,9 @@ interface AppContextType {
 
     // Data
     users: User[];
-    companies: Company[];
+    companies: Company[];           // every company but the funds on Fund House
+    fundHouseCompanies: Company[];  // those funds; FundHouseScope shows them as `companies`
+    fundHouseReady: boolean;        // false until supabase/company-board.sql is run
     pipelineStages: PipelineStage[];
     industries: Industry[];
     dealSourceNames: DealSourceName[];
@@ -464,6 +468,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Data state
     const [users, setUsers] = useState<User[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
+    const [fundHouseReady, setFundHouseReady] = useState(true);
     const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
     const [industries, setIndustries] = useState<Industry[]>([]);
     const [dealSourceNames, setDealSourceNames] = useState<DealSourceName[]>([]);
@@ -525,6 +530,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const json = await res.json();
 
             setCompanies((json.companies || []).map(mapCompany));
+            // Rows come back with every column, so a missing `board` means the
+            // migration has not been run.
+            setFundHouseReady(!json.companies?.length || 'board' in json.companies[0]);
             setPipelineStages((json.stages || []).map(mapStage));
             setIndustries((json.industries || []).map((r: any) => ({ id: r.id, name: r.name })));
             setDealSourceNames((json.sources || []).map((r: any) => ({ id: r.id, name: r.name })));
@@ -705,8 +713,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const getIndustryById = useCallback((id: string) => industries.find(i => i.id === id), [industries]);
     const getStageById = useCallback((id: string) => pipelineStages.find(s => s.id === id), [pipelineStages]);
     const getDealSourceNameById = useCallback((id: string) => dealSourceNames.find(d => d.id === id), [dealSourceNames]);
-    const getCompaniesByStage = useCallback((stageId: string) => companies.filter(c => c.pipelineStageId === stageId && !c.terminalStatus), [companies]);
-    const getUnassignedCompanies = useCallback(() => companies.filter(c => c.analystId === null && !c.terminalStatus), [companies]);
+    // Funds share the companies table but none of Deal Flow's lists: every page
+    // reads `companies`, which leaves them out, and FundHouseScope swaps in
+    // `fundHouseCompanies` for the Fund House page. The mutations below work on
+    // the full list, so they reach both.
+    const [dealflowCompanies, fundHouseCompanies] = useMemo(() => [
+        companies.filter(c => !isOnFundHouse(c.board, c.terminalStatus)),
+        companies.filter(c => isOnFundHouse(c.board, c.terminalStatus)),
+    ], [companies]);
+
+    const getCompaniesByStage = useCallback((stageId: string) => dealflowCompanies.filter(c => c.pipelineStageId === stageId && !c.terminalStatus), [dealflowCompanies]);
+    const getUnassignedCompanies = useCallback(() => dealflowCompanies.filter(c => c.analystId === null && !c.terminalStatus), [dealflowCompanies]);
     const getUnreadNotifications = useCallback(() => notifications.filter(n => !n.read), [notifications]);
 
     // ─── Async data fetchers ────────────────────────
@@ -875,6 +892,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // Dedicated business-event date for the entry round. Distinct
             // from created_at, which stays a pure audit timestamp.
             ...(data.entryDate ? { entry_date: data.entryDate } : {}),
+            ...(data.board ? { board: data.board } : {}),
         };
 
         let { data: row, error } = await apiDb({
@@ -888,7 +906,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // undefined, and the retry never actually fired. Postgrest names one
         // column per error, hence the loop.
         for (let attempt = 0; attempt < 8 && error && isMissingColumnError({ message: error }); attempt++) {
-            const missing = extractMissingColumns({ message: error }).filter(col => col in insertPayload);
+            // Never board: without it a fund would land on Deal Flow.
+            const missing = extractMissingColumns({ message: error }).filter(col => col in insertPayload && col !== 'board');
             if (missing.length === 0) break;
             for (const col of missing) delete insertPayload[col];
             console.warn(`Retrying create company without missing column(s): ${missing.join(', ')}`);
@@ -903,6 +922,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         if (user) {
             const isPortfolio = data.terminalStatus === 'Portfolio';
+            const board = data.board === 'fund_house' ? 'Fund House' : 'the pipeline';
             await apiDb({
                 table: 'activity_logs', operation: 'insert',
                 data: {
@@ -910,7 +930,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     action: isPortfolio ? 'terminal_status_set' : 'created',
                     details: isPortfolio
                         ? `Added ${company.companyName} directly to Portfolio`
-                        : `Added ${company.companyName} to pipeline`,
+                        : `Added ${company.companyName} to ${board}`,
                 },
             });
 
@@ -922,7 +942,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     title: isPortfolio ? 'Portfolio Company' : 'New Company',
                     message: isPortfolio
                         ? `${company.companyName} has been added to Portfolio`
-                        : `${company.companyName} has been added to the pipeline`,
+                        : `${company.companyName} has been added to ${board}`,
                     company_id: company.id,
                 }));
             if (notifInserts.length > 0) {
@@ -2033,7 +2053,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // ─── Context Value ──────────────────────────────
     const value = useMemo<AppContextType>(() => ({
         user, isLoading, signOut,
-        users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, rejectionRecords, notifications,
+        users, companies: dealflowCompanies, fundHouseCompanies, fundHouseReady,
+        pipelineStages, industries, dealSourceNames, rejectionReasonCategories, rejectionRecords, notifications,
         savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
@@ -2068,7 +2089,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         activeFilters, setActiveFilters,
     }), [
         user, isLoading, signOut,
-        users, companies, pipelineStages, industries, dealSourceNames, rejectionReasonCategories, rejectionRecords, notifications,
+        users, dealflowCompanies, fundHouseCompanies, fundHouseReady,
+        pipelineStages, industries, dealSourceNames, rejectionReasonCategories, rejectionRecords, notifications,
         savedViews,
         getUserById, getIndustryById, getStageById, getDealSourceNameById,
         getCompaniesByStage, getUnassignedCompanies, getUnreadNotifications,
@@ -2100,4 +2122,19 @@ export function useAppContext() {
     const ctx = useContext(AppContext);
     if (!ctx) throw new Error('useAppContext must be used within AppProvider');
     return ctx;
+}
+
+/**
+ * The Fund House page: the board, table, detail panel and form beneath this
+ * see the funds as `companies`, and anything added here is filed as a fund.
+ */
+export function FundHouseScope({ children }: { children: ReactNode }) {
+    const ctx = useAppContext();
+    const { fundHouseCompanies, createCompany } = ctx;
+    const value = useMemo<AppContextType>(() => ({
+        ...ctx,
+        companies: fundHouseCompanies,
+        createCompany: (data: Record<string, unknown>) => createCompany({ ...data, board: 'fund_house' }),
+    }), [ctx, fundHouseCompanies, createCompany]);
+    return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

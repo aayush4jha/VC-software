@@ -109,8 +109,9 @@ export function NotesDialog() {
 }
 
 function useCompany(companyId: string) {
-    const { companies, user, isLoading } = useAppContext();
-    const company = companies.find(c => c.id === companyId) || null;
+    const { companies, fundHouseCompanies, user, isLoading } = useAppContext();
+    // The dialog sits above every page, so it looks among the funds too.
+    const company = companies.find(c => c.id === companyId) || fundHouseCompanies.find(c => c.id === companyId) || null;
     // Companies load after sign-in; until some have, "not found" would be a lie.
     const loading = isLoading || (!company && companies.length === 0);
     return { company, user, loading };

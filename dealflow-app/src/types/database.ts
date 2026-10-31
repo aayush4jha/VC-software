@@ -81,6 +81,9 @@ export type TerminalStatus =
   | 'Blocker'
   | 'Next Round Analysis';
 
+// Deal Flow's companies, or the funds on the Fund House page.
+export type CompanyBoard = 'dealflow' | 'fund_house';
+
 export interface PipelineStage {
   id: string;
   name: string;
@@ -158,6 +161,7 @@ export interface Company {
   ingestionSource: string | null;
   ingestedByEmail: string | null; // the connected Gmail account the deal arrived in
   stockQuoteUrl?: string | null;  // Google Finance quote link, for a listed company's live price
+  board?: CompanyBoard;           // the page it sits on; see isOnFundHouse
   // AI fields
   quickSummary: string | null;
   deckAnalysis: DeckAnalysis | null;
